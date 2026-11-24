@@ -225,6 +225,36 @@ press2(*COMBO)
 check("with a custom home combo, the old one does nothing and the new one works",
       fired == ["home", "close"])
 
+# 9a1c. Bluetooth pairing through BlueZ (a fake org.bluez on the session bus)
+from htpc.backends.linux import bluetooth as lbt  # noqa: E402
+bt = lbt.BluezBluetooth(bus="SESSION")
+check("bluetooth: the adapter is found", bt.available())
+bt.start_search()
+check("bluetooth: searching powers the adapter on and starts discovery",
+      fakes.bluez["adapter"] == {"Powered": True, "Discovering": True})
+found = {d.address: d for d in bt.devices()}
+check("bluetooth: gamepads are told apart by icon, device class or name",
+      found["AA:AA:AA:AA:AA:AA"].gamepad and found["DD:DD:DD:DD:DD:DD"].gamepad
+      and not found["BB:BB:BB:BB:BB:BB"].gamepad and not found["CC:CC:CC:CC:CC:CC"].has_name)
+bt.pair("AA:AA:AA:AA:AA:AA")
+xbox = fakes.bluez["devices"]["AA:AA:AA:AA:AA:AA"]
+check("bluetooth: pairing pairs, trusts and connects",
+      xbox["Paired"] and xbox["Trusted"] and xbox["Connected"])
+check("bluetooth: paired and connected ones come first", bt.devices()[0].address == "AA:AA:AA:AA:AA:AA")
+fakes.bluez["fail_pair"].add("DD:DD:DD:DD:DD:DD")
+try:
+    bt.pair("DD:DD:DD:DD:DD:DD")
+    pair_error = None
+except Exception as e:  # noqa: BLE001
+    pair_error = e
+check("bluetooth: a failed pairing raises", pair_error is not None
+      and not fakes.bluez["devices"]["DD:DD:DD:DD:DD:DD"].get("Trusted"))
+bt.forget("AA:AA:AA:AA:AA:AA")
+check("bluetooth: forget removes the device", "AA:AA:AA:AA:AA:AA" not in fakes.bluez["devices"])
+bt.stop_search()
+check("bluetooth: stop ends discovery", fakes.bluez["adapter"]["Discovering"] is False)
+check("bluetooth: the default backend has none", not __import__("htpc.backends.base", fromlist=["x"]).Bluetooth().available())
+
 # 9a2. X and Y by gamepad: Xbox-style drivers send them swapped by position
 from htpc.backends.linux import gamepads as lg  # noqa: E402
 pads = EvdevGamepads()

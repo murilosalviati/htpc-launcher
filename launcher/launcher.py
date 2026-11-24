@@ -282,6 +282,7 @@ class Launcher(EditorMixin, SettingsMixin):
         self.windows = backend.window_control()
         self.apps = backend.apps()
         self.system = backend.system()
+        self.bluetooth = backend.bluetooth()
         self.app_icons_dir = paths.app_icons_dir()
 
         # Background color: its own CSS provider, above launcher.css, so it can change live.

@@ -7,6 +7,7 @@
   gamepads  evdev
   apps      .desktop files (system, user, Flatpak) through Gio
   system    systemd for restart/shut down, Flatpak and signals to force-close
+  bluetooth BlueZ over the system D-Bus, to pair gamepads
 
 Needs python3-jeepney and python3-evdev; the app catalog also needs python3-gi.
 """
@@ -40,3 +41,7 @@ class LinuxBackend(Backend):
     def system(self):
         from .system import LinuxSystem
         return LinuxSystem()
+
+    def bluetooth(self):
+        from .bluetooth import BluezBluetooth
+        return BluezBluetooth()

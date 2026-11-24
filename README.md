@@ -27,7 +27,8 @@ What changed in each version is in [CHANGELOG.md](CHANGELOG.md).
 - **Resume, never duplicate:** selecting an app that is already running brings its existing window back instead of starting a second copy.
 - **Home + LB + RB** (PlayStation: PS + L1 + R1; Nintendo: Home + L + R): pauses the video that is playing, if any, and returns to the launcher. The app keeps running behind it. The guide button alone is left to the apps, so Steam can open its menu with it.
 - **Start + Select + LB + RB:** closes the focused app and returns to the launcher. For game streaming apps like Moonlight, the first press ends the stream (Moonlight's own shortcut) and a second press within 15 seconds closes the app.
-- **Both shortcuts can be changed** in Settings → Gamepad shortcuts: pick one and hold the new buttons together for 2 seconds.
+- **Both shortcuts can be changed** in Settings → Gamepads: pick one and hold the new buttons together for 2 seconds.
+- **Pair Bluetooth gamepads** from Settings → Gamepads → Pair a gamepad: put the gamepad in pairing mode, pick it from the list, done. It is trusted, so next time it reconnects by itself. Paired gamepads can be forgotten from the same list. Needs a Bluetooth adapter (BlueZ); without one the screen says how to use a cable or the gamepad's own USB receiver instead.
 - **Settings** (the gear in the footer): apps, background color, weather location, temperature unit (°C or °F) and language, all from the couch. Settings also has a button to close the launcher; the "back to the launcher" shortcut opens it again.
 - **Weather:** type a Brazilian CEP or a city name; the launcher finds the place, asks you to confirm it, and shows the conditions, updated every 30 minutes, with a moon instead of the sun at night. It uses [Open-Meteo](https://open-meteo.com/) and [ViaCEP](https://viacep.com.br/), which are free and need no account. Leave the location empty to hide it.
 - **Edit mode** (Settings → Apps): add, edit and remove shortcuts.
@@ -88,7 +89,7 @@ launcher/install.sh          # starts by itself on the next login; to start it n
 
 With auto-login, logging out may not log you back in; `sudo systemctl restart gdm` does, but it closes every open app.
 
-Steam keeps its guide button: pressing it alone opens Steam's menu, and the launcher only reacts to Home + LB + RB. Steam also uses some guide-button chords of its own (Guide + RB takes a screenshot in Big Picture, for example); if one gets in the way, pick another combo in Settings → Gamepad shortcuts.
+Steam keeps its guide button: pressing it alone opens Steam's menu, and the launcher only reacts to Home + LB + RB. Steam also uses some guide-button chords of its own (Guide + RB takes a screenshot in Big Picture, for example); if one gets in the way, pick another combo in Settings → Gamepads.
 
 To use your own icons, put PNG files in an `app-icons/` folder at the root of the repository before running `launcher/install.sh`, or copy them straight to `~/.local/share/htpc-launcher/app-icons/`. That folder is in `.gitignore`.
 

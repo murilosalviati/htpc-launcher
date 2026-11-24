@@ -882,7 +882,7 @@ def sc1():
     check("Settings has a gamepad shortcuts row", l.settings_fields["shortcuts"].value.get_label() == "Home + LB + RB")
     l.press()
     f = l.shortcut_fields
-    check("it opens the shortcuts menu", list(f) == ["home", "close", "reset"]
+    check("it opens the shortcuts menu", list(f) == ["pairing", "home", "close", "reset"]
           and f["close"].value.get_label() == "Start + Select + LB + RB")
     f["home"].grab_focus()
     l.press()
@@ -931,6 +931,100 @@ def sc4():
     l.shortcut_fields["reset"].grab_focus()
     l.press()
     check("restore the defaults", "shortcuts" not in l.cfg and "Home + LB + RB" in l.hint.get_label())
+    while l.overlays:
+        l.pop_overlay()
+    l.tiles[0].grab_focus()
+
+
+# ---------------- pairing gamepads (fake BlueZ) ----------------
+
+@step(300)
+def bt1():
+    l = L()
+    from htpc.backends.base import Bluetooth
+    while l.overlays:
+        l.pop_overlay()
+    l.bluetooth = Bluetooth()   # no adapter
+    l.open_shortcuts(focus="pairing")
+    check("Settings → Gamepads starts with 'Pair a gamepad'", list(l.shortcut_fields)[0] == "pairing")
+    l.press()
+
+
+@step(400)
+def bt2():
+    l = L()
+    check("without an adapter it says what to do instead",
+          l.t("pairing_no_adapter") in label_texts(l.overlays[-1]["backdrop"]))
+    l.pop_overlay()
+    from htpc.backends.linux.bluetooth import BluezBluetooth
+    fakes.bluez["devices"].clear()
+    fakes.bluez["fail_pair"].clear()
+    fakes.bluez["adapter"].update(Powered=False, Discovering=False)
+    l.bluetooth = BluezBluetooth(bus="SESSION")
+    l.PAIRING_REFRESH_MS = 200
+    l.shortcut_fields["pairing"].grab_focus()
+    l.press()
+
+
+@step(900)
+def bt3():
+    l = L()
+    names = label_texts(l.overlays[-1]["backdrop"])
+    check("with an adapter: it searches and lists only gamepads with a name",
+          fakes.bluez["adapter"]["Discovering"] and "Xbox Wireless Controller" in names
+          and "Wireless Controller" in names and "JBL" not in names and "CC-CC" not in names)
+    screenshot(l.win, "17-pairing")
+    rows = l.pairing["rows"]
+    check("the gamepads are navigable rows, Close last", len(rows) == 3 and rows[-1][0] is l.pairing["close"])
+    target = next(r[0] for r in rows if getattr(r[0], "bt_address", "") == "AA:AA:AA:AA:AA:AA")
+    target.grab_focus()
+    l.press()
+
+
+@step(900)
+def bt4():
+    l = L()
+    check("pairing a gamepad: paired, trusted, connected, and it says so",
+          fakes.bluez["devices"]["AA:AA:AA:AA:AA:AA"].get("Trusted")
+          and l.t("pairing_done", name="Xbox Wireless Controller") in label_texts(l.overlays[-1]["backdrop"]))
+    l.pop_overlay()
+
+
+@step(700)
+def bt5():
+    l = L()
+    row = next(r[0] for r in l.pairing["rows"] if getattr(r[0], "bt_address", "") == "AA:AA:AA:AA:AA:AA")
+    check("the list now shows it as connected", row.value.get_label() == l.t("pairing_connected"))
+    fakes.bluez["fail_pair"].add("DD:DD:DD:DD:DD:DD")
+    next(r[0] for r in l.pairing["rows"] if getattr(r[0], "bt_address", "") == "DD:DD:DD:DD:DD:DD").grab_focus()
+    l.press()
+
+
+@step(900)
+def bt6():
+    l = L()
+    check("a failed pairing says so", "Wireless Controller" in label_texts(l.overlays[-1]["backdrop"])
+          and not fakes.bluez["devices"]["DD:DD:DD:DD:DD:DD"].get("Paired"))
+    l.pop_overlay()
+    row = next(r[0] for r in l.pairing["rows"] if getattr(r[0], "bt_address", "") == "AA:AA:AA:AA:AA:AA")
+    row.grab_focus()
+    l.press()       # a paired one: asks to forget it
+    l.overlays[-1]["rows"][0][1].grab_focus()
+    l.press()       # Forget
+
+
+@step(700)
+def bt7():
+    l = L()
+    check("forgetting removes it", "AA:AA:AA:AA:AA:AA" not in fakes.bluez["devices"])
+    l.back()        # B closes the pairing screen
+    check("closing the screen stops the search", l.pairing is None)
+
+
+@step(500)
+def bt8():
+    l = L()
+    check("discovery is off after closing", fakes.bluez["adapter"]["Discovering"] is False)
     while l.overlays:
         l.pop_overlay()
     l.tiles[0].grab_focus()

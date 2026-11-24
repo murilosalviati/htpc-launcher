@@ -10,7 +10,8 @@
   * Temperature: °C or °F, switched with Ⓐ;
   * Language: rebuilds the screen in the chosen language right away;
   * On-screen notices: turns the gamepad, battery and internet notices on or off;
-  * Gamepad shortcuts: the combos that bring the launcher back and close the
+  * Gamepads: pairing over Bluetooth (or what to do without an adapter;
+    paired gamepads can be forgotten from the same list) and the combos that bring the launcher back and close the
     app, recorded by holding the buttons (read by the controller service from
     the same apps.json);
   * Home Assistant: its own menu with the address and webhook id (typed on the
@@ -119,6 +120,155 @@ class SettingsMixin:
         self.save_config()
         self.refresh_settings()
 
+    # --- pairing gamepads over Bluetooth -------------------------------------------------
+
+    PAIRING_REFRESH_MS = 2000
+    PAIRING_ROWS = 6
+
+    def _bt(self, job, done):
+        """Run a Bluetooth call off the UI thread; done(result or exception) on the main loop."""
+        def work():
+            try:
+                result = job()
+            except Exception as e:  # noqa: BLE001 - shown to the user
+                result = e
+            GLib.idle_add(lambda: (done(result), False)[1])
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def open_pairing(self):
+        def started(result):
+            if result is False:
+                self._message(self.t("pairing_no_adapter"), self.t("pairing_no_adapter_text"))
+            elif isinstance(result, Exception):
+                self._message(self.t("pairing_error", error=self._reason(result)))
+            else:
+                self._show_pairing()
+
+        def start():
+            if not self.bluetooth.available():
+                return False
+            self.bluetooth.start_search()
+            return True
+
+        self._bt(start, started)
+
+    def _show_pairing(self):
+        box = self.dialog_box(self.t("pairing_title"), self.t("pairing_how"))
+        box.add_css_class("editor")
+        box.add_css_class("settings")
+        box.set_spacing(16)
+        status = Gtk.Label(label=self.t("pairing_searching"))
+        status.add_css_class("dialog-text")
+        box.append(status)
+        listing = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        box.append(listing)
+        close = self.dialog_button(self.t("close"), self.pop_overlay)
+        close_box = Gtk.Box(spacing=20, halign=Gtk.Align.CENTER)
+        close_box.add_css_class("editor-buttons")
+        close_box.append(close)
+        box.append(close_box)
+        rows = [[close]]
+        p = self.pairing = {"listing": listing, "rows": rows, "close": close, "shown": None,
+                            "timer": 0, "busy": False, "box": box}
+
+        def stop():
+            if p["timer"]:
+                GLib.source_remove(p["timer"])
+                p["timer"] = 0
+            if self.pairing is p:
+                self.pairing = None
+            threading.Thread(target=self.bluetooth.stop_search, daemon=True).start()
+
+        self.push_overlay(box, rows, focus=close, cancel=stop)
+        p["overlay"] = self.overlays[-1]
+        close.connect("clicked", lambda _b: stop())
+        self._pairing_refresh()
+        p["timer"] = GLib.timeout_add(self.PAIRING_REFRESH_MS, self._pairing_refresh)
+
+    def _pairing_refresh(self):
+        p = getattr(self, "pairing", None)
+        if p is None:
+            return False
+        if not p["busy"]:
+            self._bt(self.bluetooth.devices, lambda result: self._pairing_list(p, result))
+        return True
+
+    def _pairing_list(self, p, result):
+        if self.pairing is not p or isinstance(result, Exception):
+            return
+        pads = [d for d in result if d.gamepad and (d.paired or d.has_name)][:self.PAIRING_ROWS]
+        shown = [(d.address, d.name, d.paired, d.connected) for d in pads]
+        if shown == p["shown"]:
+            return
+        p["shown"] = shown
+        focused = self.win.get_focus()
+        focused_address = getattr(focused, "bt_address", None)
+        listing = p["listing"]
+        child = listing.get_first_child()
+        while child is not None:
+            listing.remove(child)
+            child = listing.get_first_child()
+        new_rows, focus = [], None
+        for d in pads:
+            if d.paired:
+                state = self.t("pairing_connected" if d.connected else "pairing_paired")
+                action = (lambda d=d: self._pairing_forget(d))
+            else:
+                state = self.t("pairing_found")
+                action = (lambda d=d: self._pairing_pair(d))
+            b = self._field(d.name, action, title_width=380)
+            b.value.set_label(state)
+            b.bt_address = d.address
+            listing.append(b)
+            new_rows.append([b])
+            if d.address == focused_address:
+                focus = b
+        p["rows"][:] = new_rows + [[p["close"]]]
+        if not self.overlays or self.overlays[-1] is not p.get("overlay"):
+            return   # a message is on top: leave its focus alone
+        if focus is not None:
+            focus.grab_focus()
+        elif focused_address is not None or focused is None or focused.get_root() is None:
+            (new_rows[0][0] if new_rows else p["close"]).grab_focus()
+
+    def _pairing_pair(self, device):
+        p = self.pairing
+        if p is None or p["busy"]:
+            return
+        p["busy"] = True
+        box = self.dialog_box(self.t("pairing_busy", name=device.name))
+        waiting = {"gone": False}
+        self.push_overlay(box, [[]], cancel=lambda: waiting.update(gone=True))
+        top = self.overlays[-1]
+
+        def done(result):
+            p["busy"] = False
+            if not waiting["gone"] and self.overlays and self.overlays[-1] is top:
+                self.pop_overlay()   # "Pairing…"
+            p["shown"] = None    # redraw the list with the new state
+            if isinstance(result, Exception):
+                self._message(self.t("pairing_failed", name=device.name, error=self._reason(result)))
+            else:
+                self._message(self.t("pairing_done", name=device.name))
+
+        self._bt(lambda: self.bluetooth.pair(device.address), done)
+
+    def _pairing_forget(self, device):
+        def forget():
+            p = self.pairing
+            if p is not None:
+                p["shown"] = None
+
+            def done(result):
+                if isinstance(result, Exception):
+                    self._message(self.t("pairing_error", error=self._reason(result)))
+
+            self._bt(lambda: self.bluetooth.forget(device.address), done)
+
+        self.confirm(self.t("pairing_forget_title", name=device.name), self.t("pairing_forget_text"),
+                     self.t("pairing_forget"), forget)
+
     # --- gamepad shortcuts --------------------------------------------------------------
 
     RECORD_HOLD_MS = 2000     # hold the buttons this long to record them
@@ -130,6 +280,7 @@ class SettingsMixin:
         box.add_css_class("settings")
         box.set_spacing(16)
         f = self.shortcut_fields = {
+            "pairing": self._field(self.t("settings_pairing"), self.open_pairing, title_width=300),
             "home": self._field(self.t("shortcut_home"), lambda: self.record_shortcut("home"), title_width=300),
             "close": self._field(self.t("shortcut_close"), lambda: self.record_shortcut("close"), title_width=300),
             "reset": self._field(self.t("shortcuts_reset"), self._reset_shortcuts, title_width=300),
@@ -148,6 +299,7 @@ class SettingsMixin:
         current = shortcuts.combos(self.cfg)
         f = getattr(self, "shortcut_fields", None)
         if f:
+            f["pairing"].value.set_label(self.t("pairing_value"))
             f["home"].value.set_label(shortcuts.combo_label(current["home"]))
             f["close"].value.set_label(shortcuts.combo_label(current["close"]))
             d = shortcuts.DEFAULT_COMBOS

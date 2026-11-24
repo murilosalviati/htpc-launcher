@@ -199,6 +199,45 @@ class System(ABC):
         return None
 
 
+@dataclass
+class BluetoothDevice:
+    address: str
+    name: str
+    paired: bool = False
+    connected: bool = False
+    gamepad: bool = False       # looks like a gamepad (icon, device class or name)
+    path: str = ""              # OS-specific handle
+    has_name: bool = True       # False while only the address is known
+
+
+class Bluetooth:
+    """Pairing gamepads. The default is "no Bluetooth here"; backends override it.
+    Every call may block (run them off the UI thread) and may raise on errors."""
+
+    def available(self):
+        """Is there a Bluetooth adapter?"""
+        return False
+
+    def start_search(self):
+        """Power the adapter on and start looking for devices in pairing mode."""
+        raise RuntimeError("no Bluetooth")
+
+    def stop_search(self):
+        """Stop looking (also called when the pairing screen closes)."""
+
+    def devices(self):
+        """[BluetoothDevice]: known and found devices, connected and paired first."""
+        return []
+
+    def pair(self, address):
+        """Pair, trust (so it reconnects by itself) and connect."""
+        raise RuntimeError("no Bluetooth")
+
+    def forget(self, address):
+        """Remove a paired device."""
+        raise RuntimeError("no Bluetooth")
+
+
 class Backend(ABC):
     name = "?"
 
@@ -222,3 +261,7 @@ class Backend(ABC):
     @abstractmethod
     def system(self):
         """A System."""
+
+    def bluetooth(self):
+        """A Bluetooth (by default: none)."""
+        return Bluetooth()
