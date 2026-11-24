@@ -1,7 +1,7 @@
 {
   "uuid": "htpc-launcher@htpc",
   "name": "HTPC Launcher Bridge",
-  "description": "Expõe via D-Bus o controle de janelas para o launcher do HTPC: saber se um app está aberto, trazer a janela dele para a frente, fechar e voltar ao launcher.",
+  "description": "Exposes window control over D-Bus for the HTPC launcher: check whether an app is running, raise its window, close it and return to the launcher.",
   "shell-version": ["47", "48", "49", "50", "51"],
   "version": 2
 }

@@ -1,17 +1,16 @@
 // HTPC Launcher Bridge
 //
-// No Wayland um programa comum não pode trazer janelas para a frente nem
-// saber qual janela está em foco. A extensão roda dentro do próprio GNOME
-// Shell, então pode — e oferece isso ao launcher e ao serviço do controle
-// pelo D-Bus de sessão:
+// On Wayland a regular program cannot raise windows or find out which window
+// has focus. This extension runs inside GNOME Shell itself, so it can, and it
+// offers that to the launcher and the controller service on the session bus:
 //
-//   nome:    org.htpc.Launcher
-//   objeto:  /org/htpc/Launcher
+//   name:    org.htpc.Launcher
+//   object:  /org/htpc/Launcher
 //
-// Um "appId" pode ser qualquer um destes (sem diferenciar maiúsculas):
-//   - id do .desktop sem a extensão   (org.jellyfin.JellyfinDesktop)
-//   - id do Flatpak                   (rocks.shy.VacuumTube)
-//   - WM_CLASS da janela               (steam)
+// An "appId" can be any of these (case-insensitive):
+//   - the .desktop id without the extension   (org.jellyfin.JellyfinDesktop)
+//   - the Flatpak id                          (rocks.shy.VacuumTube)
+//   - the window's WM_CLASS                   (steam)
 
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
@@ -21,7 +20,7 @@ import Shell from 'gi://Shell';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 
-// appId da janela do próprio launcher (ele vai definir esse WM_CLASS / app id).
+// appId of the launcher's own window (it sets this WM_CLASS / app id).
 const LAUNCHER_ID = 'htpc-launcher';
 
 const BUS_NAME = 'org.htpc.Launcher';
@@ -63,7 +62,7 @@ const IFACE_XML = `
 </node>`;
 
 // ---------------------------------------------------------------------------
-// Identificação de janelas
+// Identifying windows
 
 function normalWindows() {
     return global.get_window_actors()
@@ -71,7 +70,7 @@ function normalWindows() {
         .filter(win => win && win.get_window_type() === Meta.WindowType.NORMAL);
 }
 
-// Todos os nomes pelos quais a janela pode ser chamada, em minúsculas.
+// Every name the window can be called by, in lowercase.
 function windowIds(win) {
     const ids = new Set();
     const app = Shell.WindowTracker.get_default().get_window_app(win);
@@ -92,7 +91,7 @@ function windowIds(win) {
     return [...ids].map(s => s.toLowerCase());
 }
 
-// Nome "principal" da janela, o que é devolvido pelos métodos.
+// The window's "main" name, the one the methods return.
 function primaryId(win) {
     const sandboxed = win.get_sandboxed_app_id?.();
     if (sandboxed)
@@ -110,12 +109,12 @@ function windowsOf(appId) {
         return [];
     return normalWindows()
         .filter(win => windowIds(win).includes(wanted))
-        // a usada por último primeiro
+        // most recently used first
         .sort((a, b) => b.get_user_time() - a.get_user_time());
 }
 
 // ---------------------------------------------------------------------------
-// Objeto exportado no D-Bus
+// Object exported on D-Bus
 
 class LauncherBridge {
     ListWindows() {
@@ -135,15 +134,15 @@ class LauncherBridge {
         return windowsOf(appId).length > 0;
     }
 
-    // Traz para a frente a janela já aberta do app (retoma a sessão).
-    // Devolve false se o app não tem janela — aí o launcher deve abri-lo.
+    // Raises the app's existing window (resumes it).
+    // Returns false if the app has no window; then the launcher should start it.
     Activate(appId) {
         return this.ActivatePreferring(appId, []);
     }
 
-    // Como Activate, mas para apps com várias janelas (o Steam abre "Steam",
-    // "Friends List", "Special Offers"...): traz a primeira janela cujo título
-    // esteja em `titles`, na ordem dada; se nenhuma bater, a usada por último.
+    // Like Activate, for apps with several windows (Steam opens "Steam",
+    // "Friends List", "Special Offers"...): raises the first window whose title
+    // is in `titles`, in the given order; if none match, the most recent one.
     ActivatePreferring(appId, titles) {
         const wins = windowsOf(appId);
         if (wins.length === 0)
@@ -167,8 +166,8 @@ class LauncherBridge {
         return win ? primaryId(win) : '';
     }
 
-    // Pede para as janelas do app fecharem (como clicar no X).
-    // Matar o processo, se ele não fechar, fica a cargo de quem chamou.
+    // Asks the app's windows to close (like clicking X).
+    // Killing the process if it does not close is up to the caller.
     Close(appId) {
         const wins = windowsOf(appId);
         const now = global.get_current_time();

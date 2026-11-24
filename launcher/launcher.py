@@ -1,23 +1,23 @@
 #!/usr/bin/env python3
-"""Launcher do HTPC.
+"""HTPC launcher.
 
-Tela cheia controlada pelo controle (ou pelo teclado):
-  * no centro, um botão por app do apps.json; se o app já está aberto,
-    o botão traz a janela dele de volta (retoma), nunca abre outro;
-  * relógio no canto superior esquerdo, internet no direito;
-  * no rodapé, à direita: editar apps, reiniciar e desligar (os dois
-    últimos pedem confirmação). Editar apps abre o modo de edição
-    (ver edicao.py), onde dá para adicionar, editar e remover atalhos.
+A full-screen home screen driven by a gamepad (or a keyboard):
+  * in the middle, one tile per app in apps.json; if the app is already
+    running, its tile brings the existing window back (resumes it) instead
+    of starting a second copy;
+  * clock in the top-left corner, network status in the top-right;
+  * in the footer, on the right: edit apps, restart and shut down (the last
+    two ask for confirmation). "Edit apps" opens edit mode (see editor.py),
+    where shortcuts can be added, edited and removed.
 
-A janela usa o app id "htpc-launcher", que é o que a extensão do GNOME
-procura quando o botão guide pede para mostrar o launcher.
+The window uses the app id "htpc-launcher", which is what the GNOME
+extension looks for when the guide button asks to show the launcher.
 
-Controle: direcional ou analógico esquerdo move, A abre, B volta;
-          no teclado da tela, X apaga e Y põe espaço.
-Teclado:  setas movem, Enter abre, Esc cancela.
+Gamepad:  d-pad or left stick moves, A selects, B goes back;
+          on the on-screen keyboard, X deletes and Y types a space.
+Keyboard: arrows move, Enter selects, Esc goes back.
 """
 
-import json
 import os
 import subprocess
 import sys
@@ -26,7 +26,7 @@ from pathlib import Path
 
 from gi.repository import GLib
 
-# Tem que vir antes do GTK: no Wayland o app id da janela vem daqui.
+# Must run before GTK is loaded: on Wayland the window's app id comes from this.
 GLib.set_prgname("htpc-launcher")
 GLib.set_application_name("HTPC Launcher")
 
@@ -40,14 +40,30 @@ from gi.repository import Gdk, Gio, Gtk, Pango  # noqa: E402
 try:
     import evdev
     from evdev import ecodes
-except ImportError:  # sem evdev o launcher ainda funciona pelo teclado
+except ImportError:  # without evdev the launcher still works with a keyboard
     evdev = None
 
-CONFIG = (Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
-          / "htpc-launcher" / "apps.json")
-CSS = Path(__file__).with_name("launcher.css")
+HERE = Path(__file__).resolve().parent
+# Installed side by side; in the repo, htpc_config.py lives in common/.
+sys.path.insert(0, str(HERE))
+sys.path.insert(1, str(HERE.parent / "common"))
+import htpc_config  # noqa: E402
+from editor import EditorMixin  # noqa: E402
+from i18n import Translator  # noqa: E402
+
+CSS = HERE / "launcher.css"
+ICONS = HERE / "icons"
+# Icons chosen by the user; offered as options in the app editor.
+APP_ICONS = Path.home() / ".local/share/htpc-launcher/app-icons"
 LAUNCHER_ID = "htpc-launcher"
-TEMPO_ABRINDO = 20  # segundos em que um app "está abrindo" e não é aberto de novo
+OPENING_GRACE = 20   # seconds an app counts as "opening" and is not started again
+RESUME_DELAY = 1500  # ms to wait after on_resume before raising the app's window
+COLUMNS = 5          # tiles per row; more apps wrap onto more rows
+
+# Where Flatpak publishes the .desktop files and icons of installed apps. They are
+# usually on the session's XDG_DATA_DIRS already; looking here too covers when not.
+FLATPAK_EXPORTS = [Path.home() / ".local/share/flatpak/exports/share",
+                   Path("/var/lib/flatpak/exports/share")]
 
 
 def log(*args):
@@ -55,9 +71,9 @@ def log(*args):
 
 
 # ---------------------------------------------------------------------------
-# Extensão do GNOME (D-Bus org.htpc.Launcher)
+# GNOME extension (D-Bus org.htpc.Launcher)
 
-class Ponte:
+class Bridge:
     def __init__(self):
         self.proxy = None
         try:
@@ -66,329 +82,322 @@ class Ponte:
                 Gio.DBusProxyFlags.DO_NOT_AUTO_START | Gio.DBusProxyFlags.DO_NOT_LOAD_PROPERTIES,
                 None, "org.htpc.Launcher", "/org/htpc/Launcher", "org.htpc.Launcher", None)
         except GLib.Error as e:
-            log("sem D-Bus:", e.message)
+            log("no D-Bus:", e.message)
 
-    def chamar(self, metodo, assinatura=None, *args):
+    def call(self, method, signature=None, *args):
         if self.proxy is None:
             return None
-        params = GLib.Variant(assinatura, args) if assinatura else None
+        params = GLib.Variant(signature, args) if signature else None
         try:
-            r = self.proxy.call_sync(metodo, params, Gio.DBusCallFlags.NONE, 2000, None)
+            r = self.proxy.call_sync(method, params, Gio.DBusCallFlags.NONE, 2000, None)
             return r.unpack()[0] if r is not None else None
         except GLib.Error as e:
-            log(f"extensão não respondeu a {metodo}:", e.message)
+            log(f"extension did not answer {method}:", e.message)
             return None
 
-    def ativar(self, app_id, titulos=None):
-        if titulos:
-            r = self.chamar("ActivatePreferring", "(sas)", app_id, list(titulos))
+    def activate(self, app_id, titles=None):
+        if titles:
+            r = self.call("ActivatePreferring", "(sas)", app_id, list(titles))
             if r is not None:
                 return bool(r)
-            # extensão antiga, sem esse método: traz qualquer janela do app
-        return bool(self.chamar("Activate", "(s)", app_id))
+            # older extension without that method: bring any window of the app
+        return bool(self.call("Activate", "(s)", app_id))
 
-    def rodando(self, app_id):
-        return bool(self.chamar("IsRunning", "(s)", app_id))
+    def is_running(self, app_id):
+        return bool(self.call("IsRunning", "(s)", app_id))
 
-    def ao_mudar_foco(self, callback):
+    def on_focus_changed(self, callback):
         if self.proxy is not None:
-            self.proxy.connect("g-signal", lambda _p, _s, sinal, _a:
-                               sinal == "FocusChanged" and callback())
+            self.proxy.connect("g-signal", lambda _p, _s, signal, _a:
+                               signal == "FocusChanged" and callback())
 
 
 # ---------------------------------------------------------------------------
-# Controle (evdev). O launcher lê os botões só enquanto está na frente.
+# Gamepad (evdev). The launcher only acts on buttons while it is in front.
 
-class Controle:
-    ZONA_MORTA = 0.55     # quanto do analógico conta como "apertado"
-    REPETIR_APOS = 0.40   # segurar uma direção repete depois disso...
-    REPETIR_CADA = 0.14   # ...nesse ritmo
+class Gamepad:
+    DEAD_ZONE = 0.55      # how far the stick must go to count as a press
+    REPEAT_AFTER = 0.40   # holding a direction repeats after this...
+    REPEAT_EVERY = 0.14   # ...at this pace
 
-    def __init__(self, ativo, mover, confirmar, voltar, outro_botao=None):
-        self.ativo, self.mover, self.confirmar, self.voltar = ativo, mover, confirmar, voltar
-        self.outro_botao = outro_botao or (lambda _nome: None)  # "x" ou "y"
-        self.devs, self.ignorados, self.watches = {}, set(), {}
-        self.eixos = {}         # (caminho, eixo) -> direção atual (-1, 0, 1)
-        self.direcao = None     # (dx, dy) sendo segurada
-        self.repeticao = 0
+    def __init__(self, active, move, press, back, other_button=None):
+        self.active, self.move, self.press, self.back = active, move, press, back
+        self.other_button = other_button or (lambda _name: None)  # "x" or "y"
+        self.devs, self.ignored, self.watches = {}, set(), {}
+        self.axes = {}          # (path, axis) -> current direction (-1, 0, 1)
+        self.direction = None   # (dx, dy) being held
+        self.repeat = 0
         if evdev is None:
-            log("python3-evdev não instalado: só teclado")
+            log("python3-evdev not installed: keyboard only")
             return
-        self.revarrer()
-        GLib.timeout_add_seconds(2, self.revarrer)
+        self.rescan()
+        GLib.timeout_add_seconds(2, self.rescan)
 
-    def revarrer(self):
-        caminhos = set(evdev.list_devices())
-        self.ignorados &= caminhos
-        for caminho in caminhos - self.devs.keys() - self.ignorados:
+    def rescan(self):
+        paths = set(evdev.list_devices())
+        self.ignored &= paths
+        for path in paths - self.devs.keys() - self.ignored:
             try:
-                dev = evdev.InputDevice(caminho)
+                dev = evdev.InputDevice(path)
             except OSError:
-                self.ignorados.add(caminho)
+                self.ignored.add(path)
                 continue
-            teclas = dev.capabilities().get(ecodes.EV_KEY, [])
-            if ecodes.BTN_SOUTH in teclas and ecodes.BTN_START in teclas:
-                self.devs[caminho] = dev
-                self.watches[caminho] = GLib.io_add_watch(
+            keys = dev.capabilities().get(ecodes.EV_KEY, [])
+            if ecodes.BTN_SOUTH in keys and ecodes.BTN_START in keys:
+                self.devs[path] = dev
+                self.watches[path] = GLib.io_add_watch(
                     dev.fd, GLib.PRIORITY_DEFAULT,
                     GLib.IOCondition.IN | GLib.IOCondition.HUP | GLib.IOCondition.ERR,
-                    self._ler, caminho)
-                log("controle:", dev.name)
+                    self._read, path)
+                log("gamepad:", dev.name)
             else:
                 dev.close()
-                self.ignorados.add(caminho)
+                self.ignored.add(path)
         return True
 
-    def _remover(self, caminho):
-        dev = self.devs.pop(caminho, None)
-        self.watches.pop(caminho, None)
-        for chave in [k for k in self.eixos if k[0] == caminho]:
-            del self.eixos[chave]
+    def _remove(self, path):
+        dev = self.devs.pop(path, None)
+        self.watches.pop(path, None)
+        for key in [k for k in self.axes if k[0] == path]:
+            del self.axes[key]
         if dev:
             try:
                 dev.close()
             except OSError:
                 pass
 
-    def _ler(self, _fd, _cond, caminho):
-        dev = self.devs.get(caminho)
+    def _read(self, _fd, _cond, path):
+        dev = self.devs.get(path)
         if dev is None:
             return False
         try:
-            eventos = list(dev.read())
-        except (OSError, BlockingIOError) as e:
-            if isinstance(e, BlockingIOError):
-                return True
-            self._remover(caminho)
+            events = list(dev.read())
+        except BlockingIOError:
+            return True
+        except OSError:
+            self._remove(path)
             return False
-        for ev in eventos:
-            self._evento(caminho, dev, ev)
+        for ev in events:
+            self._event(path, dev, ev)
         return True
 
-    def _evento(self, caminho, dev, ev):
+    def _event(self, path, dev, ev):
         if ev.type == ecodes.EV_KEY and ev.value in (0, 1):
             dpad = {ecodes.BTN_DPAD_LEFT: (-1, 0), ecodes.BTN_DPAD_RIGHT: (1, 0),
                     ecodes.BTN_DPAD_UP: (0, -1), ecodes.BTN_DPAD_DOWN: (0, 1)}
             if ev.code in dpad:
-                self._segurar(dpad[ev.code] if ev.value else None)
-            elif ev.value == 1 and self.ativo():
+                self._hold(dpad[ev.code] if ev.value else None)
+            elif ev.value == 1 and self.active():
                 if ev.code == ecodes.BTN_SOUTH:
-                    self.confirmar()
+                    self.press()
                 elif ev.code == ecodes.BTN_EAST:
-                    self.voltar()
+                    self.back()
                 elif ev.code == ecodes.BTN_WEST:
-                    self.outro_botao("x")
+                    self.other_button("x")
                 elif ev.code == ecodes.BTN_NORTH:
-                    self.outro_botao("y")
+                    self.other_button("y")
         elif ev.type == ecodes.EV_ABS:
             if ev.code in (ecodes.ABS_HAT0X, ecodes.ABS_HAT0Y):
-                valor = max(-1, min(1, ev.value))
+                value = max(-1, min(1, ev.value))
             elif ev.code in (ecodes.ABS_X, ecodes.ABS_Y):
                 info = dev.absinfo(ev.code)
-                meio = (info.max + info.min) / 2
-                metade = (info.max - info.min) / 2 or 1
-                frac = (ev.value - meio) / metade
-                valor = 1 if frac > self.ZONA_MORTA else -1 if frac < -self.ZONA_MORTA else 0
+                middle = (info.max + info.min) / 2
+                half = (info.max - info.min) / 2 or 1
+                frac = (ev.value - middle) / half
+                value = 1 if frac > self.DEAD_ZONE else -1 if frac < -self.DEAD_ZONE else 0
             else:
                 return
-            chave = (caminho, ev.code)
-            if self.eixos.get(chave, 0) == valor:
+            key = (path, ev.code)
+            if self.axes.get(key, 0) == value:
                 return
-            self.eixos[chave] = valor
+            self.axes[key] = value
             horizontal = ev.code in (ecodes.ABS_HAT0X, ecodes.ABS_X)
-            if valor:
-                self._segurar((valor, 0) if horizontal else (0, valor))
-            elif self.direcao and ((horizontal and self.direcao[0]) or (not horizontal and self.direcao[1])):
-                self._segurar(None)
+            if value:
+                self._hold((value, 0) if horizontal else (0, value))
+            elif self.direction and ((horizontal and self.direction[0]) or (not horizontal and self.direction[1])):
+                self._hold(None)
 
-    def _segurar(self, direcao):
-        if self.repeticao:
-            GLib.source_remove(self.repeticao)
-            self.repeticao = 0
-        self.direcao = direcao
-        if direcao is None or not self.ativo():
+    def _hold(self, direction):
+        if self.repeat:
+            GLib.source_remove(self.repeat)
+            self.repeat = 0
+        self.direction = direction
+        if direction is None or not self.active():
             return
-        self.mover(*direcao)
-        self.repeticao = GLib.timeout_add(int(self.REPETIR_APOS * 1000), self._repetir_inicio)
+        self.move(*direction)
+        self.repeat = GLib.timeout_add(int(self.REPEAT_AFTER * 1000), self._start_repeat)
 
-    def _repetir_inicio(self):
-        self.repeticao = GLib.timeout_add(int(self.REPETIR_CADA * 1000), self._repetir)
+    def _start_repeat(self):
+        self.repeat = GLib.timeout_add(int(self.REPEAT_EVERY * 1000), self._repeat)
         return False
 
-    def _repetir(self):
-        if self.direcao is None or not self.ativo():
-            self.repeticao = 0
+    def _repeat(self):
+        if self.direction is None or not self.active():
+            self.repeat = 0
             return False
-        self.mover(*self.direcao)
+        self.move(*self.direction)
         return True
 
 
 # ---------------------------------------------------------------------------
-# Interface
+# Icons
 
-ICONES = Path(__file__).with_name("icones")
-# Ícones escolhidos pelo usuário; aparecem como opção no editor de apps.
-ICONES_APPS = Path.home() / ".local/share/htpc-launcher/icones-apps"
-
-# Onde o Flatpak publica os .desktop e os ícones dos apps instalados. Normalmente
-# já estão no XDG_DATA_DIRS da sessão; procurar aqui também cobre quando não estão.
-EXPORTS_FLATPAK = [Path.home() / ".local/share/flatpak/exports/share",
-                   Path("/var/lib/flatpak/exports/share")]
-
-
-def _info_desktop(nome):
+def desktop_info(name):
     try:
-        info = Gio.DesktopAppInfo.new(nome)
+        info = Gio.DesktopAppInfo.new(name)
     except TypeError:
         info = None
     if info:
         return info
-    for base in EXPORTS_FLATPAK:
-        arquivo = base / "applications" / nome
-        if arquivo.exists():
-            return Gio.DesktopAppInfo.new_from_filename(str(arquivo))
+    for base in FLATPAK_EXPORTS:
+        path = base / "applications" / name
+        if path.exists():
+            return Gio.DesktopAppInfo.new_from_filename(str(path))
     return None
 
 
-def icone_do_app(app):
-    """O ícone que o próprio app instalou (pelo .desktop dele), ou um genérico.
+def app_icon(app):
+    """The icon the app installed itself (through its .desktop file), or a generic one.
 
-    "icone" no apps.json troca por outro: nome de ícone do tema ou caminho de arquivo.
+    "icon" in apps.json overrides it: a theme icon name or an image file path.
     """
-    if app.get("icone"):
-        icone = os.path.expanduser(app["icone"])
-        if not os.path.isabs(icone):
-            return Gio.ThemedIcon.new(icone)
-        if os.path.exists(icone):
-            return Gio.FileIcon.new(Gio.File.new_for_path(icone))
-        log("ícone não encontrado:", icone, "- usando o do app")
+    if app.get("icon"):
+        icon = os.path.expanduser(app["icon"])
+        if not os.path.isabs(icon):
+            return Gio.ThemedIcon.new(icon)
+        if os.path.exists(icon):
+            return Gio.FileIcon.new(Gio.File.new_for_path(icon))
+        log("icon not found:", icon, "- using the app's own")
     if not app.get("id") and not app.get("desktop"):
         return Gio.ThemedIcon.new("application-x-executable")
     for desktop in (app.get("desktop"), f"{app.get('id')}.desktop"):
         if not desktop:
             continue
-        info = _info_desktop(desktop)
+        info = desktop_info(desktop)
         if info and info.get_icon():
             return info.get_icon()
-    # O Flatpak também publica o ícone com o nome do próprio id.
-    tema = Gtk.IconTheme.get_for_display(Gdk.Display.get_default())
-    if app.get("id") and tema.has_icon(app["id"]):
+    # Flatpak also publishes the icon under the app id itself.
+    theme = Gtk.IconTheme.get_for_display(Gdk.Display.get_default())
+    if app.get("id") and theme.has_icon(app["id"]):
         return Gio.ThemedIcon.new(app["id"])
-    log("sem ícone para", app.get("nome"), "- o app está instalado?")
+    log("no icon for", app.get("name"), "- is the app installed?")
     return Gio.ThemedIcon.new("application-x-executable")
 
 
+# ---------------------------------------------------------------------------
+# Tiles
+
 class Tile(Gtk.Button):
-    def __init__(self, app, ao_ativar):
+    def __init__(self, app, on_activate):
         super().__init__()
         self.app = app
         self.add_css_class("tile")
         self.set_focus_on_click(False)
-        caixa = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=14)
-        caixa.set_valign(Gtk.Align.CENTER)
-        imagem = Gtk.Image.new_from_gicon(icone_do_app(app))
-        imagem.set_pixel_size(128)
-        imagem.add_css_class("tile-icone")
-        nome = Gtk.Label(label=app.get("nome", "?"), ellipsize=Pango.EllipsizeMode.END, max_width_chars=14)
-        nome.add_css_class("tile-nome")
-        self.estado = Gtk.Label(label="")
-        self.estado.add_css_class("tile-estado")
-        for w in (imagem, nome, self.estado):
-            caixa.append(w)
-        self.set_child(caixa)
-        self.connect("clicked", lambda _b: ao_ativar(self))
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=14)
+        box.set_valign(Gtk.Align.CENTER)
+        image = Gtk.Image.new_from_gicon(app_icon(app))
+        image.set_pixel_size(128)
+        image.add_css_class("tile-icon")
+        name = Gtk.Label(label=app.get("name", "?"), ellipsize=Pango.EllipsizeMode.END, max_width_chars=14)
+        name.add_css_class("tile-name")
+        self.status = Gtk.Label(label="")
+        self.status.add_css_class("tile-status")
+        for w in (image, name, self.status):
+            box.append(w)
+        self.set_child(box)
+        self.connect("clicked", lambda _b: on_activate(self))
 
-    def mostrar_estado(self, texto):
-        self.estado.set_label(texto)
-        if texto in ("aberto", "abrindo…"):
-            self.add_css_class("aberto")
+    def show_status(self, text, running=False):
+        self.status.set_label(text)
+        if running:
+            self.add_css_class("running")
         else:
-            self.remove_css_class("aberto")
+            self.remove_css_class("running")
 
 
-class TileNovo(Gtk.Button):
-    """O "+ Adicionar" que aparece no fim da lista no modo de edição."""
+class AddTile(Gtk.Button):
+    """The "+ Add" tile shown at the end of the list in edit mode."""
 
-    def __init__(self, ao_ativar):
+    def __init__(self, label, on_activate):
         super().__init__()
         self.add_css_class("tile")
-        self.add_css_class("tile-novo")
+        self.add_css_class("tile-add")
         self.set_focus_on_click(False)
-        caixa = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=14, valign=Gtk.Align.CENTER)
-        mais = Gtk.Label(label="+")
-        mais.add_css_class("tile-mais")
-        nome = Gtk.Label(label="Adicionar")
-        nome.add_css_class("tile-nome")
-        caixa.append(mais)
-        caixa.append(nome)
-        self.set_child(caixa)
-        self.connect("clicked", lambda _b: ao_ativar())
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=14, valign=Gtk.Align.CENTER)
+        plus = Gtk.Label(label="+")
+        plus.add_css_class("tile-plus")
+        name = Gtk.Label(label=label)
+        name.add_css_class("tile-name")
+        box.append(plus)
+        box.append(name)
+        self.set_child(box)
+        self.connect("clicked", lambda _b: on_activate())
 
 
-COLUNAS = 5  # apps por linha; acima disso a lista quebra em mais linhas
+# ---------------------------------------------------------------------------
+# The launcher window
 
-sys.path.insert(0, str(Path(__file__).parent))
-from edicao import DICA_NORMAL, EdicaoMixin  # noqa: E402
-
-
-class Launcher(EdicaoMixin):
-    # O que o modo de edição (edicao.py) usa daqui, sem importar este arquivo.
-    icone_do_app = staticmethod(icone_do_app)
-    info_desktop = staticmethod(_info_desktop)
-    pasta_icones_apps = ICONES_APPS
-    exports_flatpak = EXPORTS_FLATPAK
+class Launcher(EditorMixin):
+    # What the edit mode (editor.py) uses from here, without importing this file.
+    app_icon = staticmethod(app_icon)
+    desktop_info = staticmethod(desktop_info)
+    app_icons_dir = APP_ICONS
+    flatpak_exports = FLATPAK_EXPORTS
     launcher_id = LAUNCHER_ID
 
-    def __init__(self, app):
-        self.gtk_app = app
-        self.cfg = json.loads(CONFIG.read_text(encoding="utf-8"))
-        self.ponte = Ponte()
+    def __init__(self, gtk_app):
+        self.gtk_app = gtk_app
+        self.cfg, migrated = htpc_config.load()
+        if migrated:
+            htpc_config.save(self.cfg)
+            log("apps.json converted to the current format")
+        self.t = Translator(self.cfg.get("language"))
+        self.bridge = Bridge()
 
-        tema = Gtk.IconTheme.get_for_display(Gdk.Display.get_default())
-        for base in EXPORTS_FLATPAK:
+        theme = Gtk.IconTheme.get_for_display(Gdk.Display.get_default())
+        for base in FLATPAK_EXPORTS:
             if (base / "icons").is_dir():
-                tema.add_search_path(str(base / "icons"))
-        self.abrindo = {}           # app id -> momento em que mandou abrir
-        self.modais = []            # pilha de janelas por cima (confirmação, editor...)
-        self.editando = False
-        self.tiles, self.tile_novo, self.linhas_grade = [], None, []
+                theme.add_search_path(str(base / "icons"))
+        self.opening = {}         # app id -> when it was started
+        self.overlays = []        # stack of things shown on top (confirmation, editor...)
+        self.editing = False
+        self.tiles, self.add_tile, self.tile_rows = [], None, []
 
-        self.win = Gtk.Window(application=app, title="HTPC")
+        self.win = Gtk.Window(application=gtk_app, title="HTPC")
         self.win.add_css_class("htpc")
         self.win.set_default_size(1920, 1080)
 
-        self.sobrepor = Gtk.Overlay()
-        self.win.set_child(self.sobrepor)
+        self.overlay = Gtk.Overlay()
+        self.win.set_child(self.overlay)
 
-        raiz = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
-        raiz.add_css_class("raiz")
-        self.sobrepor.set_child(raiz)
+        root = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        root.add_css_class("root")
+        self.overlay.set_child(root)
 
-        raiz.append(self._barra_superior())
-        self.grade = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=44,
-                             halign=Gtk.Align.CENTER, valign=Gtk.Align.CENTER, vexpand=True)
-        raiz.append(self.grade)
-        raiz.append(self._barra_inferior())
-        self.montar_grade()
+        root.append(self._top_bar())
+        self.grid = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=44,
+                            halign=Gtk.Align.CENTER, valign=Gtk.Align.CENTER, vexpand=True)
+        root.append(self.grid)
+        root.append(self._footer())
+        self.build_grid()
 
-        teclas = Gtk.EventControllerKey()
-        teclas.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
-        teclas.connect("key-pressed", self._tecla)
-        self.win.add_controller(teclas)
+        keys = Gtk.EventControllerKey()
+        keys.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
+        keys.connect("key-pressed", self._on_key)
+        self.win.add_controller(keys)
 
-        self.win.connect("notify::is-active", lambda *_: self.win.is_active() and self.atualizar_estados())
-        self.ponte.ao_mudar_foco(self.atualizar_estados)
+        self.win.connect("notify::is-active", lambda *_: self.win.is_active() and self.refresh_status())
+        self.bridge.on_focus_changed(self.refresh_status)
 
-        self.controle = Controle(self.win.is_active, self.mover, self.apertar, self.voltar,
-                                 self.outro_botao)
+        self.gamepad = Gamepad(self.win.is_active, self.move, self.press, self.back, self.other_button)
 
-        self._atualizar_relogio()
-        GLib.timeout_add_seconds(1, self._atualizar_relogio)
-        self.rede = Gio.NetworkMonitor.get_default()
-        self.rede.connect("notify::connectivity", lambda *_: self._atualizar_rede())
-        self.rede.connect("network-changed", lambda *_: self._atualizar_rede())
-        self._atualizar_rede()
-        GLib.timeout_add_seconds(3, self._a_cada_3s)
+        self._update_clock()
+        GLib.timeout_add_seconds(1, self._update_clock)
+        self.network = Gio.NetworkMonitor.get_default()
+        self.network.connect("notify::connectivity", lambda *_: self._update_network())
+        self.network.connect("network-changed", lambda *_: self._update_network())
+        self._update_network()
+        GLib.timeout_add_seconds(3, self._every_3s)
 
         self.win.set_cursor(Gdk.Cursor.new_from_name("none", None))
         self.win.fullscreen()
@@ -397,361 +406,365 @@ class Launcher(EdicaoMixin):
             self.tiles[0].grab_focus()
 
     @property
-    def linhas(self):
-        return self.linhas_grade + [[self.btn_config, self.btn_reiniciar, self.btn_desligar]]
+    def rows(self):
+        return self.tile_rows + [[self.btn_settings, self.btn_restart, self.btn_power]]
 
-    # --- grade de apps -----------------------------------------------------------
+    # --- app grid ------------------------------------------------------------
 
-    def montar_grade(self, focar=None):
-        """(Re)monta os botões dos apps, em linhas de até COLUNAS.
+    def build_grid(self, focus=None):
+        """(Re)build the app tiles, in rows of up to COLUMNS.
 
-        focar: índice do app que deve ficar em foco depois; -1 = o "+ Adicionar".
+        focus: index of the app to focus afterwards; -1 means the "+ Add" tile.
         """
-        filho = self.grade.get_first_child()
-        while filho is not None:
-            proximo = filho.get_next_sibling()
-            self.grade.remove(filho)
-            filho = proximo
+        child = self.grid.get_first_child()
+        while child is not None:
+            following = child.get_next_sibling()
+            self.grid.remove(child)
+            child = following
 
-        self.tiles = [Tile(a, self.ativar_tile) for a in self.cfg.get("apps", [])]
-        itens = list(self.tiles)
-        self.tile_novo = None
-        if self.editando:
-            self.tile_novo = TileNovo(self.novo_app)
-            itens.append(self.tile_novo)
-            for t in self.tiles:
-                t.add_css_class("editando")
+        self.tiles = [Tile(a, self.on_tile) for a in self.cfg.get("apps", [])]
+        items = list(self.tiles)
+        self.add_tile = None
+        if self.editing:
+            self.add_tile = AddTile(self.t("add"), self.new_app)
+            items.append(self.add_tile)
+            for tile in self.tiles:
+                tile.add_css_class("editing")
 
-        self.linhas_grade = [itens[i:i + COLUNAS] for i in range(0, len(itens), COLUNAS)]
-        for linha in self.linhas_grade:
-            caixa = Gtk.Box(spacing=48, halign=Gtk.Align.CENTER)
-            for w in linha:
-                caixa.append(w)
-            self.grade.append(caixa)
+        self.tile_rows = [items[i:i + COLUMNS] for i in range(0, len(items), COLUMNS)]
+        for row in self.tile_rows:
+            box = Gtk.Box(spacing=48, halign=Gtk.Align.CENTER)
+            for w in row:
+                box.append(w)
+            self.grid.append(box)
 
-        self.atualizar_estados()
-        if focar is not None:
-            alvo = self.tile_novo if focar == -1 or not self.tiles else self.tiles[min(focar, len(self.tiles) - 1)]
-            if alvo is not None:
-                alvo.grab_focus()
+        self.refresh_status()
+        if focus is not None:
+            target = self.add_tile if focus == -1 or not self.tiles else self.tiles[min(focus, len(self.tiles) - 1)]
+            if target is not None:
+                target.grab_focus()
 
-    def ativar_tile(self, tile):
-        if self.editando:
-            self.editar_app(self.tiles.index(tile))
+    def on_tile(self, tile):
+        if self.editing:
+            self.edit_app(self.tiles.index(tile))
         else:
-            self.abrir_app(tile)
+            self.open_app(tile)
 
-    def salvar_config(self):
-        """Grava o apps.json de uma vez (arquivo temporário + rename)."""
-        temp = CONFIG.with_suffix(".json.tmp")
-        temp.write_text(json.dumps(self.cfg, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-        os.replace(temp, CONFIG)
-        log("apps.json salvo")
+    def save_config(self):
+        htpc_config.save(self.cfg)
+        log("apps.json saved")
 
-    # --- topo ---------------------------------------------------------------
+    # --- top bar ---------------------------------------------------------------
 
-    def _barra_superior(self):
-        """Estilo console: relógio no canto esquerdo, internet sozinha no direito."""
-        barra = Gtk.Box()
-        barra.add_css_class("barra")
+    def _top_bar(self):
+        """Console style: clock in the left corner, network status alone on the right."""
+        bar = Gtk.Box()
+        bar.add_css_class("top-bar")
 
-        relogio = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, valign=Gtk.Align.START, hexpand=True)
-        self.hora = Gtk.Label(label="", xalign=0)
-        self.hora.add_css_class("hora")
-        self.data = Gtk.Label(label="", xalign=0)
-        self.data.add_css_class("data")
-        relogio.append(self.hora)
-        relogio.append(self.data)
+        clock = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, valign=Gtk.Align.START, hexpand=True)
+        self.time_label = Gtk.Label(label="", xalign=0)
+        self.time_label.add_css_class("clock")
+        self.date_label = Gtk.Label(label="", xalign=0)
+        self.date_label.add_css_class("date")
+        clock.append(self.time_label)
+        clock.append(self.date_label)
 
-        # Conectado: só o ícone. Texto só quando há problema.
-        rede = Gtk.Box(spacing=10, valign=Gtk.Align.START)
-        rede.add_css_class("rede")
-        self.rede_texto = Gtk.Label(label="")
-        self.rede_icone = Gtk.Image()
-        self.rede_icone.set_pixel_size(30)
-        rede.append(self.rede_texto)
-        rede.append(self.rede_icone)
+        # Connected: just the icon. Text only when something is wrong.
+        net = Gtk.Box(spacing=10, valign=Gtk.Align.START)
+        net.add_css_class("network")
+        self.net_text = Gtk.Label(label="")
+        self.net_icon = Gtk.Image()
+        self.net_icon.set_pixel_size(30)
+        net.append(self.net_text)
+        net.append(self.net_icon)
 
-        barra.append(relogio)
-        barra.append(rede)
-        return barra
+        bar.append(clock)
+        bar.append(net)
+        return bar
 
-    # --- rodapé -------------------------------------------------------------------
+    # --- footer ----------------------------------------------------------------
 
-    def _barra_inferior(self):
-        barra = Gtk.Box(spacing=14)
-        barra.add_css_class("rodape")
+    def _footer(self):
+        bar = Gtk.Box(spacing=14)
+        bar.add_css_class("footer")
 
-        self.dica = Gtk.Label(label=DICA_NORMAL, hexpand=True, xalign=0)
-        self.dica.add_css_class("dica")
-        barra.append(self.dica)
+        self.hint = Gtk.Label(label=self.t("hint_normal"), hexpand=True, xalign=0)
+        self.hint.add_css_class("hint")
+        bar.append(self.hint)
 
-        self.btn_config = self._botao_rodape("config.svg", "Editar apps", self.alternar_edicao)
-        self.btn_reiniciar = self._botao_rodape("reiniciar.svg", "Reiniciar",
-                                                lambda: self.confirmar_energia("reiniciar"))
-        self.btn_desligar = self._botao_rodape("desligar.svg", "Desligar",
-                                               lambda: self.confirmar_energia("desligar"))
-        for b in (self.btn_config, self.btn_reiniciar, self.btn_desligar):
-            barra.append(b)
-        return barra
+        self.btn_settings = self._footer_button("settings.svg", self.t("edit_apps"), self.toggle_edit_mode)
+        self.btn_restart = self._footer_button("restart.svg", self.t("restart"),
+                                               lambda: self.confirm_power("restart"))
+        self.btn_power = self._footer_button("power.svg", self.t("power_off"),
+                                             lambda: self.confirm_power("power_off"))
+        for b in (self.btn_settings, self.btn_restart, self.btn_power):
+            bar.append(b)
+        return bar
 
-    def _botao_rodape(self, icone, texto, acao):
+    def _footer_button(self, icon, text, action):
         b = Gtk.Button()
-        b.add_css_class("energia")
+        b.add_css_class("footer-button")
         b.set_focus_on_click(False)
-        caixa = Gtk.Box(spacing=8)
-        img = Gtk.Image.new_from_file(str(ICONES / icone))
-        img.set_pixel_size(20)
-        b.rotulo = Gtk.Label(label=texto)
-        b.rotulo.add_css_class("energia-texto")
-        caixa.append(img)
-        caixa.append(b.rotulo)
-        b.set_child(caixa)
-        b.connect("clicked", lambda _b: acao())
+        box = Gtk.Box(spacing=8)
+        image = Gtk.Image.new_from_file(str(ICONS / icon))
+        image.set_pixel_size(20)
+        b.label = Gtk.Label(label=text)
+        b.label.add_css_class("footer-button-label")
+        box.append(image)
+        box.append(b.label)
+        b.set_child(box)
+        b.connect("clicked", lambda _b: action())
         return b
 
-    def _atualizar_relogio(self):
-        agora = GLib.DateTime.new_now_local()
-        self.hora.set_label(agora.format("%H:%M"))
-        dias = ["", "segunda", "terça", "quarta", "quinta", "sexta", "sábado", "domingo"]
-        meses = ["", "jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"]
-        self.data.set_label(f"{dias[agora.get_day_of_week()]}, {agora.get_day_of_month()} {meses[agora.get_month()]}")
+    def _update_clock(self):
+        now = GLib.DateTime.new_now_local()
+        self.time_label.set_label(now.format("%H:%M"))
+        self.date_label.set_label(self.t.date(now.get_day_of_week(), now.get_day_of_month(), now.get_month()))
         return True
 
-    def _atualizar_rede(self):
-        c = self.rede.get_connectivity()
-        if not self.rede.get_network_available() or c == Gio.NetworkConnectivity.LOCAL:
-            texto, icone, classe = "sem internet", "wifi-off.svg", "off"
+    def _update_network(self):
+        c = self.network.get_connectivity()
+        if not self.network.get_network_available() or c == Gio.NetworkConnectivity.LOCAL:
+            text, icon, state = self.t("no_internet"), "wifi-off.svg", "off"
         elif c == Gio.NetworkConnectivity.FULL:
-            texto, icone, classe = "", "wifi.svg", "on"
-        else:  # LIMITED ou PORTAL
-            texto, icone, classe = "internet limitada", "wifi-limitado.svg", "meio"
-        self.rede_icone.set_from_file(str(ICONES / icone))
-        self.rede_icone.set_pixel_size(30)
-        self.rede_texto.set_label(texto)
-        self.rede_texto.set_visible(bool(texto))
-        for cl in ("on", "off", "meio"):
-            self.rede_texto.remove_css_class(cl)
-        self.rede_texto.add_css_class(classe)
-        self.estado_rede = classe
+            text, icon, state = "", "wifi.svg", "on"
+        else:  # LIMITED or PORTAL
+            text, icon, state = self.t("limited_internet"), "wifi-limited.svg", "limited"
+        self.net_icon.set_from_file(str(ICONS / icon))
+        self.net_icon.set_pixel_size(30)
+        self.net_text.set_label(text)
+        self.net_text.set_visible(bool(text))
+        for s in ("on", "off", "limited"):
+            self.net_text.remove_css_class(s)
+        self.net_text.add_css_class(state)
+        self.network_state = state
 
-    def _a_cada_3s(self):
-        if self.win.is_active() and not self.modais:
-            self.atualizar_estados()
+    def _every_3s(self):
+        if self.win.is_active() and not self.overlays:
+            self.refresh_status()
         return True
 
-    # --- apps ----------------------------------------------------------------
+    # --- apps --------------------------------------------------------------------
 
-    def atualizar_estados(self):
-        agora = time.monotonic()
-        for t in self.tiles:
-            if self.editando:
-                t.mostrar_estado("editar")
+    def refresh_status(self):
+        now = time.monotonic()
+        for tile in self.tiles:
+            if self.editing:
+                tile.show_status(self.t("status_edit"))
                 continue
-            app_id = t.app["id"]
-            if self.ponte.rodando(app_id):
-                self.abrindo.pop(app_id, None)
-                t.mostrar_estado("aberto")
-            elif agora - self.abrindo.get(app_id, -1e9) < TEMPO_ABRINDO:
-                t.mostrar_estado("abrindo…")
+            app_id = tile.app["id"]
+            if self.bridge.is_running(app_id):
+                self.opening.pop(app_id, None)
+                tile.show_status(self.t("status_open"), running=True)
+            elif now - self.opening.get(app_id, -1e9) < OPENING_GRACE:
+                tile.show_status(self.t("status_opening"), running=True)
             else:
-                self.abrindo.pop(app_id, None)
-                t.mostrar_estado("")
+                self.opening.pop(app_id, None)
+                tile.show_status("")
         return False
 
-    def abrir_app(self, tile):
+    def _spawn(self, command):
+        try:
+            subprocess.Popen(command, start_new_session=True,
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            return True
+        except OSError as e:
+            log("could not start", command, e)
+            return False
+
+    def open_app(self, tile):
         app = tile.app
         app_id = app["id"]
-        if self.ponte.ativar(app_id, app.get("janelas_preferidas")):
-            log("retomando", app["nome"])
+        windows = app.get("preferred_windows")
+        if self.bridge.activate(app_id, windows):
+            log("resuming", app["name"])
+            on_resume = app.get("on_resume")
+            if on_resume and self._spawn(on_resume):
+                # e.g. Steam switching to Big Picture opens a new window; bring it up.
+                GLib.timeout_add(RESUME_DELAY, lambda: self.bridge.activate(app_id, windows) and False)
             return
-        if time.monotonic() - self.abrindo.get(app_id, -1e9) < TEMPO_ABRINDO:
-            log(app["nome"], "ainda está abrindo")
+        if time.monotonic() - self.opening.get(app_id, -1e9) < OPENING_GRACE:
+            log(app["name"], "is still opening")
             return
-        comando = app.get("abrir")
-        if not comando:
-            log("sem comando para abrir", app["nome"])
+        command = app.get("launch")
+        if not command:
+            log("no launch command for", app["name"])
             return
-        log("abrindo", app["nome"], comando)
-        try:
-            subprocess.Popen(comando, start_new_session=True,
-                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        except OSError as e:
-            log("não abriu:", e)
-            return
-        self.abrindo[app_id] = time.monotonic()
-        tile.mostrar_estado("abrindo…")
+        log("starting", app["name"], command)
+        if self._spawn(command):
+            self.opening[app_id] = time.monotonic()
+            tile.show_status(self.t("status_opening"), running=True)
 
-    # --- janelas por cima (confirmações, editor, listas) -----------------------
+    # --- things shown on top (confirmations, editor, lists) ------------------------
 
-    def abrir_modal(self, conteudo, linhas, foco=None, **extra):
-        """Põe `conteudo` por cima da tela, escurecendo o fundo.
+    def push_overlay(self, content, rows, focus=None, **hooks):
+        """Show `content` on top of the screen, dimming the background.
 
-        linhas: botões navegáveis, em linhas (como a grade de apps).
-        extra: ganchos opcionais do modal — digitar(texto), apagar(), espaco(), enter().
+        rows: navigable buttons, in rows (like the app grid).
+        hooks: optional callbacks for this overlay — type(text), delete(), space(), enter().
         """
-        fundo = Gtk.Box(halign=Gtk.Align.FILL, valign=Gtk.Align.FILL)
-        fundo.add_css_class("modal-fundo")
-        conteudo.set_halign(Gtk.Align.CENTER)
-        conteudo.set_valign(Gtk.Align.CENTER)
-        conteudo.set_hexpand(True)
-        fundo.append(conteudo)
-        self.sobrepor.add_overlay(fundo)
-        self.modais.append(dict(fundo=fundo, linhas=linhas, foco_antes=self.win.get_focus(), **extra))
-        alvo = foco or (linhas[0][0] if linhas and linhas[0] else None)
-        if alvo is not None:
-            alvo.grab_focus()
+        backdrop = Gtk.Box(halign=Gtk.Align.FILL, valign=Gtk.Align.FILL)
+        backdrop.add_css_class("dialog-backdrop")
+        content.set_halign(Gtk.Align.CENTER)
+        content.set_valign(Gtk.Align.CENTER)
+        content.set_hexpand(True)
+        backdrop.append(content)
+        self.overlay.add_overlay(backdrop)
+        self.overlays.append(dict(backdrop=backdrop, rows=rows, focus_before=self.win.get_focus(), **hooks))
+        target = focus or (rows[0][0] if rows and rows[0] else None)
+        if target is not None:
+            target.grab_focus()
 
-    def fechar_modal(self):
-        if not self.modais:
+    def pop_overlay(self):
+        if not self.overlays:
             return
-        m = self.modais.pop()
-        self.sobrepor.remove_overlay(m["fundo"])
-        anterior = m["foco_antes"]
-        if anterior is not None and anterior.get_root() is not None:
-            anterior.grab_focus()
-        elif self.modais:
-            self.modais[-1]["linhas"][0][0].grab_focus()
+        top = self.overlays.pop()
+        self.overlay.remove_overlay(top["backdrop"])
+        previous = top["focus_before"]
+        if previous is not None and previous.get_root() is not None:
+            previous.grab_focus()
+        elif self.overlays:
+            self.overlays[-1]["rows"][0][0].grab_focus()
         elif self.tiles:
             self.tiles[0].grab_focus()
 
-    def caixa_modal(self, titulo, texto=None):
-        caixa = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=28)
-        caixa.add_css_class("modal")
-        rotulo = Gtk.Label(label=titulo)
-        rotulo.add_css_class("modal-titulo")
-        caixa.append(rotulo)
-        if texto:
-            aviso = Gtk.Label(label=texto, wrap=True, max_width_chars=60, justify=Gtk.Justification.CENTER)
-            aviso.add_css_class("modal-aviso")
-            caixa.append(aviso)
-        return caixa
+    def dialog_box(self, title, text=None):
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=28)
+        box.add_css_class("dialog")
+        label = Gtk.Label(label=title)
+        label.add_css_class("dialog-title")
+        box.append(label)
+        if text:
+            note = Gtk.Label(label=text, wrap=True, max_width_chars=60, justify=Gtk.Justification.CENTER)
+            note.add_css_class("dialog-text")
+            box.append(note)
+        return box
 
-    def botao_modal(self, texto, acao, perigo=False):
-        b = Gtk.Button(label=texto)
-        b.add_css_class("modal-botao")
-        if perigo:
-            b.add_css_class("perigo")
+    def dialog_button(self, text, action, danger=False):
+        b = Gtk.Button(label=text)
+        b.add_css_class("dialog-button")
+        if danger:
+            b.add_css_class("danger")
         b.set_focus_on_click(False)
-        b.connect("clicked", lambda _b: acao())
+        b.connect("clicked", lambda _b: action())
         return b
 
-    def confirmar(self, titulo, texto, rotulo_sim, acao_sim, perigo=True):
-        """Pergunta sim/não. O foco começa em Cancelar."""
-        caixa = self.caixa_modal(titulo, texto)
-        botoes = Gtk.Box(spacing=20, halign=Gtk.Align.CENTER)
-        cancelar = self.botao_modal("Cancelar", self.fechar_modal)
-        sim = self.botao_modal(rotulo_sim, lambda: (self.fechar_modal(), acao_sim()), perigo)
-        botoes.append(cancelar)
-        botoes.append(sim)
-        caixa.append(botoes)
-        self.abrir_modal(caixa, [[cancelar, sim]], foco=cancelar)
+    def confirm(self, title, text, yes_label, on_yes, danger=True):
+        """Yes/no question. Focus starts on Cancel."""
+        box = self.dialog_box(title, text)
+        buttons = Gtk.Box(spacing=20, halign=Gtk.Align.CENTER)
+        cancel = self.dialog_button(self.t("cancel"), self.pop_overlay)
+        yes = self.dialog_button(yes_label, lambda: (self.pop_overlay(), on_yes()), danger)
+        buttons.append(cancel)
+        buttons.append(yes)
+        box.append(buttons)
+        self.push_overlay(box, [[cancel, yes]], focus=cancel)
 
-    # --- reiniciar / desligar --------------------------------------------------
+    # --- restart / shut down ----------------------------------------------------------
 
-    def confirmar_energia(self, acao):
-        self.confirmar("Reiniciar o HTPC?" if acao == "reiniciar" else "Desligar o HTPC?",
-                       "O Jellyfin e os outros serviços deste servidor também param.",
-                       acao.capitalize(), lambda: self._executar_energia(acao))
+    def confirm_power(self, action):
+        title = self.t("confirm_restart") if action == "restart" else self.t("confirm_power_off")
+        label = self.t("restart") if action == "restart" else self.t("power_off")
+        self.confirm(title, self.t("power_warning"), label, lambda: self._run_power(action))
 
-    def _executar_energia(self, acao):
-        comando = ["systemctl", "reboot" if acao == "reiniciar" else "poweroff"]
-        log("executando", comando)
-        subprocess.Popen(comando, start_new_session=True)
+    def _run_power(self, action):
+        command = ["systemctl", "reboot" if action == "restart" else "poweroff"]
+        log("running", command)
+        subprocess.Popen(command, start_new_session=True)
 
-    # --- navegação ---------------------------------------------------------------
+    # --- navigation ---------------------------------------------------------------------
 
-    def _linhas_atuais(self):
-        return self.modais[-1]["linhas"] if self.modais else self.linhas
+    def _current_rows(self):
+        return self.overlays[-1]["rows"] if self.overlays else self.rows
 
-    def _centro_x(self, w):
+    def _center_x(self, w):
         ok, r = w.compute_bounds(self.win)
         return r.get_x() + r.get_width() / 2 if ok else 0
 
-    def mover(self, dx, dy):
-        linhas = [l for l in self._linhas_atuais() if l]
-        if not linhas:
+    def move(self, dx, dy):
+        rows = [r for r in self._current_rows() if r]
+        if not rows:
             return
-        foco = self.win.get_focus()
-        pos = next(((i, j) for i, linha in enumerate(linhas)
-                    for j, w in enumerate(linha) if w is foco), None)
+        focused = self.win.get_focus()
+        pos = next(((i, j) for i, row in enumerate(rows)
+                    for j, w in enumerate(row) if w is focused), None)
         if pos is None:
-            alvo = linhas[0][0]
+            target = rows[0][0]
         elif dx:
             i, j = pos
-            alvo = linhas[i][max(0, min(len(linhas[i]) - 1, j + dx))]
+            target = rows[i][max(0, min(len(rows[i]) - 1, j + dx))]
         else:
-            i = max(0, min(len(linhas) - 1, pos[0] + dy))
+            i = max(0, min(len(rows) - 1, pos[0] + dy))
             if i == pos[0]:
                 return
-            x = self._centro_x(foco)
-            alvo = min(linhas[i], key=lambda w: abs(self._centro_x(w) - x))
-        alvo.grab_focus()
+            x = self._center_x(focused)
+            target = min(rows[i], key=lambda w: abs(self._center_x(w) - x))
+        target.grab_focus()
 
-    def apertar(self):
-        foco = self.win.get_focus()
-        if isinstance(foco, Gtk.Button):
-            foco.emit("clicked")
+    def press(self):
+        focused = self.win.get_focus()
+        if isinstance(focused, Gtk.Button):
+            focused.emit("clicked")
 
-    def voltar(self):
-        if self.modais:
-            self.fechar_modal()
-        elif self.editando:
-            self.alternar_edicao()
+    def back(self):
+        if self.overlays:
+            self.pop_overlay()
+        elif self.editing:
+            self.toggle_edit_mode()
 
-    def outro_botao(self, nome):
-        gancho = {"x": "apagar", "y": "espaco"}[nome]
-        if self.modais and self.modais[-1].get(gancho):
-            self.modais[-1][gancho]()
+    def other_button(self, name):
+        hook = {"x": "delete", "y": "space"}[name]
+        if self.overlays and self.overlays[-1].get(hook):
+            self.overlays[-1][hook]()
 
-    def _tecla(self, _ctl, tecla, _cod, _mod):
-        topo = self.modais[-1] if self.modais else {}
-        if topo.get("digitar"):  # teclado da tela aberto: teclado físico digita
-            if tecla == Gdk.KEY_BackSpace:
-                topo["apagar"]()
+    def _on_key(self, _ctl, keyval, _code, _mods):
+        top = self.overlays[-1] if self.overlays else {}
+        if top.get("type"):  # on-screen keyboard open: a real keyboard types too
+            if keyval == Gdk.KEY_BackSpace:
+                top["delete"]()
                 return True
-            if tecla in (Gdk.KEY_Return, Gdk.KEY_KP_Enter):
-                topo["enter"]()
+            if keyval in (Gdk.KEY_Return, Gdk.KEY_KP_Enter):
+                top["enter"]()
                 return True
-            letra = chr(Gdk.keyval_to_unicode(tecla) or 0)
-            if letra.isprintable() and letra:
-                topo["digitar"](letra)
+            char = chr(Gdk.keyval_to_unicode(keyval) or 0)
+            if char and char.isprintable():
+                top["type"](char)
                 return True
-        direcoes = {Gdk.KEY_Left: (-1, 0), Gdk.KEY_Right: (1, 0),
-                    Gdk.KEY_Up: (0, -1), Gdk.KEY_Down: (0, 1)}
-        if tecla in direcoes:
-            self.mover(*direcoes[tecla])
-        elif tecla in (Gdk.KEY_Return, Gdk.KEY_KP_Enter, Gdk.KEY_space):
-            self.apertar()
-        elif tecla == Gdk.KEY_Escape:
-            self.voltar()
+        directions = {Gdk.KEY_Left: (-1, 0), Gdk.KEY_Right: (1, 0),
+                      Gdk.KEY_Up: (0, -1), Gdk.KEY_Down: (0, 1)}
+        if keyval in directions:
+            self.move(*directions[keyval])
+        elif keyval in (Gdk.KEY_Return, Gdk.KEY_KP_Enter, Gdk.KEY_space):
+            self.press()
+        elif keyval == Gdk.KEY_Escape:
+            self.back()
         else:
             return False
         return True
 
 
 def main():
-    if not CONFIG.exists():
-        raise SystemExit(f"Falta o arquivo de configuração: {CONFIG}")
+    if not htpc_config.CONFIG_PATH.exists():
+        raise SystemExit(f"Missing configuration file: {htpc_config.CONFIG_PATH}")
 
-    # Já existe um launcher aberto? Então só traz ele para a frente.
-    if Ponte().ativar(LAUNCHER_ID):
-        log("já estava aberto")
+    # Is a launcher already open? Then just bring it to the front.
+    if Bridge().activate(LAUNCHER_ID):
+        log("already running")
         return
 
     app = Gtk.Application(application_id=None, flags=Gio.ApplicationFlags.NON_UNIQUE)
-    estado = {}
+    state = {}
 
-    def ativar(a):
-        if "launcher" in estado:
+    def activate(a):
+        if "launcher" in state:
             return
-        provedor = Gtk.CssProvider()
-        provedor.load_from_path(str(CSS))
+        provider = Gtk.CssProvider()
+        provider.load_from_path(str(CSS))
         Gtk.StyleContext.add_provider_for_display(
-            Gdk.Display.get_default(), provedor, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
-        estado["launcher"] = Launcher(a)
+            Gdk.Display.get_default(), provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+        state["launcher"] = Launcher(a)
 
-    app.connect("activate", ativar)
+    app.connect("activate", activate)
     app.run([sys.argv[0]])
 
 

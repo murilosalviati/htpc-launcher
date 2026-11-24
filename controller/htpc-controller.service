@@ -1,0 +1,14 @@
+[Unit]
+Description=HTPC gamepad shortcuts (guide returns to the launcher, combo closes the app)
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+ExecStart=/usr/bin/python3 %h/.local/share/htpc-launcher/controller.py
+# The service may start the launcher; without this, restarting the service would kill it too.
+KillMode=process
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=graphical-session.target

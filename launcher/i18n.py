@@ -1,0 +1,123 @@
+"""On-screen text of the launcher, per language.
+
+The language comes from "language" in apps.json ("en" or "pt-BR").
+To add a language, copy the "en" block, translate it, and use its code.
+"""
+
+STRINGS = {
+    "en": {
+        "hint_normal": "Ⓐ open    Ⓑ back    Guide: come back here    Start + Select + L1 + R1: close the app",
+        "hint_edit": "Edit mode    Ⓐ edit or add    Ⓑ leave edit mode",
+        "edit_apps": "Edit apps",
+        "done": "Done",
+        "restart": "Restart",
+        "power_off": "Shut down",
+        "confirm_restart": "Restart the HTPC?",
+        "confirm_power_off": "Shut down the HTPC?",
+        "power_warning": "Services running on this machine will stop too.",
+        "cancel": "Cancel",
+        "save": "Save",
+        "remove": "Remove",
+        "back": "Back",
+        "status_open": "open",
+        "status_opening": "opening…",
+        "status_edit": "edit",
+        "no_internet": "no internet",
+        "limited_internet": "limited internet",
+        "add": "Add",
+        "edit_app": "Edit app",
+        "new_app": "New app",
+        "field_name": "Name",
+        "field_app": "Application",
+        "field_icon": "Icon",
+        "unnamed": "No name",
+        "choose": "Choose…",
+        "own_icon": "The app's own icon",
+        "own_icon_short": "App icon",
+        "error_no_app": "Choose the application this shortcut opens.",
+        "error_no_name": "Give the shortcut a name.",
+        "remove_title": "Remove {name}?",
+        "remove_text": "The application stays installed. Only the shortcut is removed.",
+        "this_app": "this app",
+        "keyboard_title": "Shortcut name",
+        "key_shift": "⇧ Shift",
+        "key_space": "Space",
+        "key_backspace": "⌫ Delete",
+        "key_ok": "OK",
+        "keyboard_hint": "Ⓧ delete    Ⓨ space    Ⓑ cancel",
+        "choose_app": "Choose the application",
+        "no_apps": "No installed applications were found.",
+        "choose_icon": "Choose the icon",
+        "icon_hint": "For more options, put PNG images in {path}",
+        "weekdays": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"],
+        "months": ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"],
+        "date": "{weekday}, {month} {day}",
+        "keyboard_rows": ["1234567890", "qwertyuiop", "asdfghjkl", "zxcvbnm-.'&"],
+    },
+    "pt-BR": {
+        "hint_normal": "Ⓐ abrir    Ⓑ voltar    Guide: volta para cá    Start + Select + L1 + R1: fecha o app",
+        "hint_edit": "Modo de edição    Ⓐ editar ou adicionar    Ⓑ sair da edição",
+        "edit_apps": "Editar apps",
+        "done": "Concluir",
+        "restart": "Reiniciar",
+        "power_off": "Desligar",
+        "confirm_restart": "Reiniciar o HTPC?",
+        "confirm_power_off": "Desligar o HTPC?",
+        "power_warning": "Os serviços que rodam nesta máquina também param.",
+        "cancel": "Cancelar",
+        "save": "Salvar",
+        "remove": "Remover",
+        "back": "Voltar",
+        "status_open": "aberto",
+        "status_opening": "abrindo…",
+        "status_edit": "editar",
+        "no_internet": "sem internet",
+        "limited_internet": "internet limitada",
+        "add": "Adicionar",
+        "edit_app": "Editar app",
+        "new_app": "Novo app",
+        "field_name": "Nome",
+        "field_app": "Aplicativo",
+        "field_icon": "Ícone",
+        "unnamed": "Sem nome",
+        "choose": "Escolher…",
+        "own_icon": "Ícone do próprio app",
+        "own_icon_short": "Ícone do app",
+        "error_no_app": "Escolha o aplicativo que o atalho abre.",
+        "error_no_name": "Dê um nome ao atalho.",
+        "remove_title": "Remover {name}?",
+        "remove_text": "O aplicativo continua instalado. Só o atalho sai da tela.",
+        "this_app": "este app",
+        "keyboard_title": "Nome do atalho",
+        "key_shift": "⇧ Maiúsc",
+        "key_space": "Espaço",
+        "key_backspace": "⌫ Apagar",
+        "key_ok": "OK",
+        "keyboard_hint": "Ⓧ apagar    Ⓨ espaço    Ⓑ cancelar",
+        "choose_app": "Escolha o aplicativo",
+        "no_apps": "Nenhum aplicativo instalado foi encontrado.",
+        "choose_icon": "Escolha o ícone",
+        "icon_hint": "Para ter mais opções, ponha imagens PNG em {path}",
+        "weekdays": ["segunda", "terça", "quarta", "quinta", "sexta", "sábado", "domingo"],
+        "months": ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"],
+        "date": "{weekday}, {day} {month}",
+        "keyboard_rows": ["1234567890", "qwertyuiop", "asdfghjklç", "zxcvbnm-.'&"],
+    },
+}
+
+
+class Translator:
+    def __init__(self, language):
+        self.strings = {**STRINGS["en"], **STRINGS.get(language, {})}
+
+    def __call__(self, key, **values):
+        text = self.strings[key]
+        return text.format(**values) if values else text
+
+    def raw(self, key):
+        return self.strings[key]
+
+    def date(self, weekday, day, month):
+        """weekday 1..7 (Monday first), month 1..12."""
+        return self.strings["date"].format(weekday=self.strings["weekdays"][weekday - 1],
+                                           day=day, month=self.strings["months"][month - 1])

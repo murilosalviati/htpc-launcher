@@ -1,67 +1,41 @@
 {
+  "language": "en",
   "launcher": {
     "id": "htpc-launcher",
-    "abrir": null
+    "launch": null
   },
   "apps": [
     {
-      "nome": "YouTube",
+      "name": "YouTube",
       "id": "rocks.shy.VacuumTube",
-      "icone": "~/.local/share/htpc-launcher/icones-apps/youtube.png",
-      "abrir": [
-        "flatpak",
-        "run",
-        "rocks.shy.VacuumTube",
-        "--ozone-platform=wayland"
-      ],
-      "pausar_ao_sair": true
+      "icon": "~/.local/share/htpc-launcher/app-icons/youtube.png",
+      "launch": ["flatpak", "run", "rocks.shy.VacuumTube", "--ozone-platform=wayland"],
+      "pause_on_home": true
     },
     {
-      "nome": "Jellyfin",
+      "name": "Jellyfin",
       "id": "org.jellyfin.JellyfinDesktop",
-      "icone": "~/.local/share/htpc-launcher/icones-apps/jellyfin.png",
-      "abrir": [
-        "flatpak",
-        "run",
-        "org.jellyfin.JellyfinDesktop"
-      ],
-      "pausar_ao_sair": true
+      "icon": "~/.local/share/htpc-launcher/app-icons/jellyfin.png",
+      "launch": ["flatpak", "run", "org.jellyfin.JellyfinDesktop"],
+      "pause_on_home": true
     },
     {
-      "nome": "Moonlight",
+      "name": "Moonlight",
       "id": "com.moonlight_stream.Moonlight",
-      "icone": "~/.local/share/htpc-launcher/icones-apps/moonlight.png",
-      "abrir": [
-        "flatpak",
-        "run",
-        "com.moonlight_stream.Moonlight"
-      ],
-      "fechar_em_dois_toques": true
+      "icon": "~/.local/share/htpc-launcher/app-icons/moonlight.png",
+      "launch": ["flatpak", "run", "com.moonlight_stream.Moonlight"],
+      "close_on_second_press": true
     },
     {
-      "nome": "Steam",
+      "name": "Steam",
       "id": "com.valvesoftware.Steam",
-      "icone": "~/.local/share/htpc-launcher/icones-apps/steam.png",
-      "outros_ids": [
-        "steam"
-      ],
-      "abrir": [
-        "flatpak",
-        "run",
-        "com.valvesoftware.Steam",
-        "-gamepadui"
-      ],
-      "fechar": [
-        "flatpak",
-        "run",
-        "com.valvesoftware.Steam",
-        "-shutdown"
-      ],
-      "janelas_preferidas": [
-        "Steam Big Picture Mode",
-        "Steam"
-      ],
-      "espera_fechar": 10
+      "icon": "~/.local/share/htpc-launcher/app-icons/steam.png",
+      "extra_ids": ["steam"],
+      "launch": ["flatpak", "run", "com.valvesoftware.Steam", "-gamepadui"],
+      "on_resume": ["flatpak", "run", "com.valvesoftware.Steam", "steam://open/bigpicture"],
+      "close": ["flatpak", "run", "com.valvesoftware.Steam", "-shutdown"],
+      "close_timeout": 10,
+      "preferred_windows": ["Steam Big Picture Mode", "Steam"]
     }
   ]
 }
