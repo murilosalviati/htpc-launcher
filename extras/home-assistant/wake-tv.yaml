@@ -1,0 +1,48 @@
+# Home Assistant automation: the gamepad wakes the TV and picks the HTPC input.
+#
+# The HTPC's controller service calls this webhook when a gamepad connects or a
+# button is pressed (at most once a minute); see htpc/home_assistant.py and the
+# "home_assistant" entry of apps.json.
+#
+# Needs the LG webOS TV integration, with an automation that turns the TV on
+# when Home Assistant asks for it (webostv.turn_on trigger -> Wake-on-LAN).
+# Other TV brands work the same way as long as media_player.turn_on and
+# media_player.select_source work for them.
+#
+# Replace:
+#   WEBHOOK_ID      the same value as "webhook_id" in apps.json
+#   media_player.tv the TV's entity
+#   "HDMI 3"        the input the HTPC is on, exactly as in the TV's source list
+alias: "HTPC: gamepad wakes the TV"
+description: Turns the TV on and switches it to the HTPC input when the gamepad is used.
+mode: single
+max_exceeded: silent
+triggers:
+  - trigger: webhook
+    webhook_id: WEBHOOK_ID
+    allowed_methods: [POST]
+    local_only: true
+variables:
+  tv: media_player.tv
+  htpc_input: "HDMI 3"
+actions:
+  - if:
+      - condition: template
+        value_template: "{{ not is_state(tv, 'on') }}"
+    then:
+      - action: media_player.turn_on
+        target:
+          entity_id: "{{ tv }}"
+      - wait_template: "{{ is_state(tv, 'on') }}"
+        timeout: "00:00:40"
+        continue_on_timeout: false
+      - delay: "00:00:03"   # the TV accepts commands a moment after it reports "on"
+  - if:
+      - condition: template
+        value_template: "{{ state_attr(tv, 'source') != htpc_input }}"
+    then:
+      - action: media_player.select_source
+        target:
+          entity_id: "{{ tv }}"
+        data:
+          source: "{{ htpc_input }}"

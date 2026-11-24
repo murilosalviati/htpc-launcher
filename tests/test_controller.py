@@ -324,6 +324,35 @@ fb.pads = []
 n.tick()
 check("notices: turned off in apps.json, nothing is shown", len(fb.shown) == count)
 
+# 9b4. Home Assistant: webhook events when the gamepad is used
+from htpc import home_assistant as hass  # noqa: E402
+sent = []
+ha_cfg = {"home_assistant": {"url": "http://ha.local:8123/", "webhook_id": "htpc-test"}}
+pads_now = ["Xbox"]
+g = SimpleNamespace(connected=lambda: list(pads_now), devs={"/dev/input/event2": SimpleNamespace(name="Xbox")})
+hclock = [0.0]
+h = hass.HomeAssistant(g, settings=lambda: ha_cfg, post=lambda url, p: sent.append((url, p["event"], p["gamepad"])),
+                       clock=lambda: hclock[0], background=False)
+h.tick()
+check("HA: nothing for the gamepad already there at start", sent == [])
+press = GamepadEvent("/dev/input/event2", "button", "a", 1)
+h.button(press)
+h.button(GamepadEvent("/dev/input/event2", "button", "a", 0))
+hclock[0] += 30
+h.button(press)
+check("HA: a press sends gamepad_activity once a minute at most",
+      sent == [("http://ha.local:8123/api/webhook/htpc-test", "gamepad_activity", "Xbox")])
+hclock[0] += 31
+h.button(press)
+check("HA: and again after a minute", len(sent) == 2)
+pads_now = ["Xbox", "8BitDo"]
+h.tick()
+check("HA: a gamepad showing up sends gamepad_connected", sent[-1][1:] == ("gamepad_connected", "8BitDo"))
+ha_cfg["home_assistant"]["enabled"] = False
+hclock[0] += 120
+h.button(press)
+check("HA: nothing when turned off or not configured", len(sent) == 3)
+
 # 9c. weather: finding the place and reading the conditions (no network: a fake fetch)
 from htpc import weather  # noqa: E402
 

@@ -10,7 +10,9 @@ and runs the shortcuts from htpc.shortcuts:
   * Start + Select + L1 + R1: close the focused app.
 
 It also shows on-screen notices (htpc.notifications) when a gamepad connects,
-disconnects or runs low on battery, and when the internet drops or comes back.
+disconnects or runs low on battery, and when the internet drops or comes back,
+and tells Home Assistant when the gamepad is used (htpc.home_assistant), so an
+automation there can turn the TV on and pick the right input.
 
 Everything OS-specific (reading gamepads, finding and closing windows, pausing
 media) comes from the backend for the running OS (htpc.backends).
@@ -28,6 +30,7 @@ sys.path.insert(1, str(HERE.parent))
 
 from htpc import config  # noqa: E402
 from htpc.backends import get_backend  # noqa: E402
+from htpc.home_assistant import HomeAssistant  # noqa: E402
 from htpc.notifications import Notifier  # noqa: E402
 from htpc.shortcuts import GamepadShortcuts, Shortcuts  # noqa: E402
 
@@ -40,16 +43,19 @@ def run(backend, poll_timeout=2.0):
         raise SystemExit("This backend cannot read gamepads here (is python3-evdev installed?)")
     handler = GamepadShortcuts(Shortcuts(backend))
     notifier = Notifier(backend, gamepads)
+    home_assistant = HomeAssistant(gamepads)
     while True:
         for event in gamepads.poll(poll_timeout):
             if event.kind == "disconnected":
                 handler.forget(event.device)
             else:
                 handler.handle(event)
-        try:
-            notifier.tick()
-        except Exception as e:  # noqa: BLE001 - notices must never stop the shortcuts
-            log.warning("notices: %s", e)
+                home_assistant.button(event)
+        for job in (notifier.tick, home_assistant.tick):
+            try:
+                job()
+            except Exception as e:  # noqa: BLE001 - extras must never stop the shortcuts
+                log.warning("%s: %s", job.__qualname__, e)
 
 
 def main():
