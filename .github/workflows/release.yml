@@ -1,0 +1,35 @@
+# Publishes a release: Actions tab -> "Release" -> "Run workflow", type the version (e.g. 1.0.0).
+# Creates the vX.Y.Z tag on the latest main, builds htpc-launcher-X.Y.Z.tar.gz and attaches it.
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version without the v (e.g. 1.0.0)"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build the package
+        run: |
+          VERSION="${{ inputs.version }}"
+          git archive --format=tar.gz --prefix="htpc-launcher-$VERSION/" \
+            -o "htpc-launcher-$VERSION.tar.gz" HEAD
+
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="${{ inputs.version }}"
+          gh release create "v$VERSION" "htpc-launcher-$VERSION.tar.gz" \
+            --target "$GITHUB_SHA" \
+            --title "HTPC Launcher $VERSION" \
+            --notes-file .github/release-notes.md
