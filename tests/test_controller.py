@@ -170,6 +170,21 @@ check("evdev: the d-pad hat becomes right press, right release, left press",
 ev = pads.translate("p", dev, raw(ecodes.EV_ABS, ecodes.ABS_X, 32767))
 check("evdev: the left stick becomes a -1..1 axis", ev[0].name == "lx" and abs(ev[0].value - 1.0) < 0.01)
 
+# 9a2. X and Y by gamepad: Xbox-style drivers send them swapped by position
+from htpc.backends.linux import gamepads as lg  # noqa: E402
+pads = EvdevGamepads()
+pads.xbox_codes = {"xbox": True, "ps4": False}
+xb = [pads.translate("xbox", dev, raw(ecodes.EV_KEY, code, 1))[0].name
+      for code in (ecodes.BTN_X, ecodes.BTN_Y, ecodes.BTN_SOUTH, ecodes.BTN_EAST)]
+check("Xbox pad: X is X, Y is Y, A and B unchanged", xb == ["x", "y", "a", "b"])
+ps = [pads.translate("ps4", dev, raw(ecodes.EV_KEY, code, 1))[0].name
+      for code in (ecodes.BTN_WEST, ecodes.BTN_NORTH)]
+check("PS4/Nintendo pad (positional codes): square/left is X, triangle/top is Y", ps == ["x", "y"])
+check("Xbox codes detected by name, not for other pads",
+      lg.uses_xbox_codes("/dev/input/event999", "Microsoft Xbox Series S|X Controller")
+      and lg.uses_xbox_codes("/dev/input/event999", "Microsoft X-Box 360 pad 0")
+      and not lg.uses_xbox_codes("/dev/input/event999", "Wireless Controller"))
+
 # 9b. counting connected gamepads: one per physical gamepad, virtual ones left out
 pads = EvdevGamepads()
 pads.devs = {

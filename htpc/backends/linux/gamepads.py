@@ -55,8 +55,9 @@ def device_batteries(root=POWER_SUPPLY):
     return out
 
 if evdev is not None:
-    # Raw button code -> normalized name. BTN_WEST/BTN_NORTH follow what the
-    # previous versions did (X and Y on an Xbox layout).
+    # Raw button code -> normalized name, by position as the kernel documents it
+    # (BTN_WEST is the left face button, BTN_NORTH the top one). Sony and Nintendo
+    # drivers follow this; Xbox-style drivers do not, see uses_xbox_codes().
     BUTTONS = {
         ecodes.BTN_SOUTH: "a", ecodes.BTN_EAST: "b",
         ecodes.BTN_WEST: "x", ecodes.BTN_NORTH: "y",
@@ -74,6 +75,32 @@ def is_gamepad(dev):
     return ecodes.BTN_SOUTH in keys and ecodes.BTN_START in keys
 
 
+# Xbox-style drivers send the X button (left) as BTN_X and Y (top) as BTN_Y. In
+# the kernel BTN_X is the same code as BTN_NORTH and BTN_Y as BTN_WEST, so by
+# position they come out swapped: Y read as X. (SDL's mappings for these pads
+# account for it too.)
+XBOX_DRIVERS = ("xpad", "xone", "xpadneo", "microsoft")
+
+
+def uses_xbox_codes(path, name=""):
+    """True when the gamepad sends X/Y the Xbox way (swapped by position): its
+    driver is an Xbox one (xpad on USB or a dongle, xone, xpadneo, hid-microsoft),
+    or its name says Xbox (Bluetooth Xbox pads on hid-generic number their buttons
+    the same way, and so do Steam Input's virtual "X-Box 360" pads)."""
+    lowered = (name or "").lower()
+    if "xbox" in lowered or "x-box" in lowered:
+        return True
+    node = os.path.realpath(f"/sys/class/input/{os.path.basename(path)}/device")
+    # The driver sits a few levels up: on the USB interface or the HID device.
+    for _ in range(4):
+        link = os.path.join(node, "driver")
+        if os.path.exists(link):
+            driver = os.path.basename(os.path.realpath(link)).lower()
+            return any(d in driver for d in XBOX_DRIVERS)
+        node = os.path.dirname(node)
+    return False
+
+
 def is_virtual(path):
     """True for gamepads made by software (uinput), e.g. Steam Input's virtual pads."""
     name = os.path.basename(path)  # eventN
@@ -89,6 +116,7 @@ class EvdevGamepads(Gamepads):
         self.next_scan = 0.0
         self.virtual = {}    # path -> made by software (not counted in connected())
         self.sysfs = {}      # path -> the input device's real sysfs path
+        self.xbox_codes = {} # path -> X/Y come swapped (Xbox-style driver)
 
     def available(self):
         return evdev is not None
@@ -139,8 +167,10 @@ class EvdevGamepads(Gamepads):
                 self.devs[path] = dev
                 self.virtual[path] = is_virtual(path)
                 self.sysfs[path] = os.path.realpath(f"/sys/class/input/{os.path.basename(path)}/device")
-                log.info("gamepad connected: %s (%s)%s", dev.name, path,
-                         " [virtual]" if self.virtual[path] else "")
+                self.xbox_codes[path] = uses_xbox_codes(path, dev.name)
+                log.info("gamepad connected: %s (%s)%s%s", dev.name, path,
+                         " [virtual]" if self.virtual[path] else "",
+                         " [Xbox X/Y codes]" if self.xbox_codes[path] else "")
             else:
                 dev.close()
                 self.ignored.add(path)
@@ -149,6 +179,7 @@ class EvdevGamepads(Gamepads):
         dev = self.devs.pop(path, None)
         self.virtual.pop(path, None)
         self.sysfs.pop(path, None)
+        self.xbox_codes.pop(path, None)
         for key in [k for k in self.hats if k[0] == path]:
             del self.hats[key]
         if dev:
@@ -162,7 +193,10 @@ class EvdevGamepads(Gamepads):
     def translate(self, path, dev, ev):
         """Raw evdev event -> list of GamepadEvent (empty for events we do not use)."""
         if ev.type == ecodes.EV_KEY and ev.value in (0, 1) and ev.code in BUTTONS:
-            return [GamepadEvent(path, "button", BUTTONS[ev.code], ev.value)]
+            name = BUTTONS[ev.code]
+            if name in ("x", "y") and self.xbox_codes.get(path):
+                name = "y" if name == "x" else "x"
+            return [GamepadEvent(path, "button", name, ev.value)]
         if ev.type != ecodes.EV_ABS:
             return []
         if ev.code in HATS:
