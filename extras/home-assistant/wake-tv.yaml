@@ -30,6 +30,8 @@ variables:
   tv: media_player.tv
   htpc_input: "HDMI 3"
   event: "{{ (trigger.json or {}).get('event', '') }}"
+  # webOS reports "on", "idle", "playing" or "paused" while the TV is on
+  is_on: "{{ states(tv) not in ['off', 'standby', 'unavailable', 'unknown'] }}"
 actions:
   - if:
       - condition: template
@@ -43,16 +45,15 @@ actions:
   # wake a TV that went off a moment ago.
   - condition: template
     value_template: >-
-      {{ is_state(tv, 'on') or
-         (now() - states[tv].last_changed).total_seconds() > 15 }}
+      {{ is_on or (now() - states[tv].last_changed).total_seconds() > 15 }}
   - if:
       - condition: template
-        value_template: "{{ not is_state(tv, 'on') }}"
+        value_template: "{{ not is_on }}"
     then:
       - action: media_player.turn_on
         target:
           entity_id: "{{ tv }}"
-      - wait_template: "{{ is_state(tv, 'on') }}"
+      - wait_template: "{{ states(tv) not in ['off', 'standby', 'unavailable', 'unknown'] }}"
         timeout: "00:00:40"
         continue_on_timeout: false
       - delay: "00:00:03"   # the TV accepts commands a moment after it reports "on"
