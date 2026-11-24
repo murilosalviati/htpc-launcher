@@ -7,28 +7,60 @@
     {
       "nome": "YouTube",
       "id": "rocks.shy.VacuumTube",
-      "abrir": ["flatpak", "run", "rocks.shy.VacuumTube", "--ozone-platform=wayland"],
+      "icone": "~/.local/share/htpc-launcher/icones-apps/youtube.png",
+      "abrir": [
+        "flatpak",
+        "run",
+        "rocks.shy.VacuumTube",
+        "--ozone-platform=wayland"
+      ],
       "pausar_ao_sair": true
     },
     {
       "nome": "Jellyfin",
       "id": "org.jellyfin.JellyfinDesktop",
-      "abrir": ["flatpak", "run", "org.jellyfin.JellyfinDesktop"],
+      "icone": "~/.local/share/htpc-launcher/icones-apps/jellyfin.png",
+      "abrir": [
+        "flatpak",
+        "run",
+        "org.jellyfin.JellyfinDesktop"
+      ],
       "pausar_ao_sair": true
     },
     {
       "nome": "Moonlight",
       "id": "com.moonlight_stream.Moonlight",
-      "abrir": ["flatpak", "run", "com.moonlight_stream.Moonlight"],
+      "icone": "~/.local/share/htpc-launcher/icones-apps/moonlight.png",
+      "abrir": [
+        "flatpak",
+        "run",
+        "com.moonlight_stream.Moonlight"
+      ],
       "fechar_em_dois_toques": true
     },
     {
       "nome": "Steam",
       "id": "com.valvesoftware.Steam",
-      "outros_ids": ["steam"],
-      "abrir": ["flatpak", "run", "com.valvesoftware.Steam", "-gamepadui"],
-      "fechar": ["flatpak", "run", "com.valvesoftware.Steam", "-shutdown"],
-      "janelas_preferidas": ["Steam Big Picture Mode", "Steam"],
+      "icone": "~/.local/share/htpc-launcher/icones-apps/steam.png",
+      "outros_ids": [
+        "steam"
+      ],
+      "abrir": [
+        "flatpak",
+        "run",
+        "com.valvesoftware.Steam",
+        "-gamepadui"
+      ],
+      "fechar": [
+        "flatpak",
+        "run",
+        "com.valvesoftware.Steam",
+        "-shutdown"
+      ],
+      "janelas_preferidas": [
+        "Steam Big Picture Mode",
+        "Steam"
+      ],
       "espera_fechar": 10
     }
   ]

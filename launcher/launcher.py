@@ -246,9 +246,11 @@ def icone_do_app(app):
     """
     if app.get("icone"):
         icone = os.path.expanduser(app["icone"])
-        if os.path.isabs(icone):
+        if not os.path.isabs(icone):
+            return Gio.ThemedIcon.new(icone)
+        if os.path.exists(icone):
             return Gio.FileIcon.new(Gio.File.new_for_path(icone))
-        return Gio.ThemedIcon.new(icone)
+        log("ícone não encontrado:", icone, "- usando o do app")
     for desktop in (app.get("desktop"), f"{app['id']}.desktop"):
         if not desktop:
             continue
