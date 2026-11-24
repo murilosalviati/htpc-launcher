@@ -71,7 +71,7 @@ def p2():
     l.mover(1, 0)
     confere("direita vai para o 2º app", l.win.get_focus() is l.tiles[1])
     n = len(falsos.estado["log"])
-    l.confirmar()
+    l.apertar()
     confere("abrir app já aberto chama Activate (retoma)", ("Activate", ("org.jellyfin.JellyfinDesktop",)) in falsos.estado["log"][n:])
     confere("app já aberto não é aberto de novo", "org.jellyfin.JellyfinDesktop" not in l.abrindo)
 
@@ -79,10 +79,10 @@ def p2():
 def p3():
     l = L()
     l.mover(-1, 0)
-    l.confirmar()
+    l.apertar()
     confere("abrir app fechado mostra 'abrindo…'", l.tiles[0].estado.get_label() == "abrindo…")
     n = len(falsos.estado["log"]); antes = dict(l.abrindo)
-    l.confirmar()
+    l.apertar()
     confere("apertar de novo enquanto abre não abre outro", l.abrindo == antes)
 
 @passo(300)
@@ -92,10 +92,10 @@ def p4():
     confere("não passa do último app", l.win.get_focus() is l.tiles[-1])
     capturar(l.win, "2-ultimo-app")
     l.mover(0, 1)
-    confere("baixo vai para os botões de energia (mais próximo)", l.win.get_focus() in (l.btn_reiniciar, l.btn_desligar))
+    confere("baixo vai para o rodapé (botão mais próximo)", l.win.get_focus() in (l.btn_config, l.btn_reiniciar, l.btn_desligar))
     l.mover(-1, 0)
-    l.mover(1, 0)
-    confere("direita na barra chega no Desligar", l.win.get_focus() is l.btn_desligar)
+    l.mover(1, 0); l.mover(1, 0); l.mover(1, 0)
+    confere("direita no rodapé chega no Desligar", l.win.get_focus() is l.btn_desligar)
 
 @passo(400)
 def p4b():
@@ -108,18 +108,18 @@ def p5():
     import subprocess
     orig = subprocess.Popen
     l._popen_orig = orig
-    l.confirmar()
-    confere("Desligar abre confirmação", l.modal is not None)
-    confere("foco padrão é Cancelar", l.win.get_focus() is l.modal[1][0])
+    l.apertar()
+    confere("Desligar abre confirmação", len(l.modais) == 1)
+    confere("foco padrão é Cancelar", l.win.get_focus() is l.modais[-1]["linhas"][0][0])
     l.mover(0, 1)
-    confere("baixo no modal não sai do modal", l.win.get_focus() in l.modal[1])
+    confere("baixo no modal não sai do modal", l.win.get_focus() in l.modais[-1]["linhas"][0])
 
 @passo(400)
 def p6():
     l = L()
     capturar(l.win, "4-confirmar-desligar")
     l.voltar()
-    confere("B fecha a confirmação", l.modal is None)
+    confere("B fecha a confirmação", not l.modais)
     confere("foco volta ao Desligar", l.win.get_focus() is l.btn_desligar)
     l.mover(0, -1)
     confere("cima volta aos apps", l.win.get_focus() in l.tiles)
@@ -130,7 +130,7 @@ def p6():
 def p7():
     l = L()
     steam = next(t for t in l.tiles if t.app["nome"] == "Steam")
-    steam.grab_focus(); l.confirmar()
+    steam.grab_focus(); l.apertar()
     confere("Steam aberto: traz a janela 'Steam', não a 'Friends List'", falsos.estado.get("ativada") == "Steam")
     confere("Steam aberto não é aberto de novo", "com.valvesoftware.Steam" not in l.abrindo)
 
@@ -159,6 +159,110 @@ def p9():
 @passo(500)
 def p10():
     capturar(L().win, "6-conectado")
+
+# ---------------- modo de edição ----------------
+def apps_cfg(): return L().cfg["apps"]
+def apps_disco(): return json.load(open(f"{cfgdir}/htpc-launcher/apps.json"))["apps"]
+
+@passo(300)
+def e1():
+    l = L()
+    l.tiles[-1].grab_focus(); l.mover(0, 1)
+    confere("baixo a partir do último app chega no rodapé", l.win.get_focus() in (l.btn_config, l.btn_reiniciar, l.btn_desligar))
+    l.btn_config.grab_focus(); l.apertar()
+    confere("engrenagem entra no modo de edição", l.editando and l.tile_novo is not None)
+    confere("dica muda para o modo de edição", "Modo de edição" in l.dica.get_label())
+    confere("botão vira Concluir", l.btn_config.rotulo.get_label() == "Concluir")
+
+@passo(500)
+def e2():
+    l = L()
+    capturar(l.win, "7-modo-edicao")
+    l.tiles[2].grab_focus(); l.apertar()
+    confere("Ⓐ num app abre o editor", len(l.modais) == 1 and l.edicao["indice"] == 2)
+    confere("editor começa no Nome", l.win.get_focus() is l.campo_nome)
+
+@passo(500)
+def e3():
+    l = L()
+    capturar(l.win, "8-editor")
+    l.apertar()
+    m = l.modais[-1]
+    confere("Nome abre o teclado da tela", "digitar" in m)
+    for _ in range(20): l.outro_botao("x")
+    for c in "jogos": m["digitar"](c)
+    l.outro_botao("y"); m["digitar"]("2")
+
+@passo(500)
+def e4():
+    l = L()
+    capturar(l.win, "9-teclado")
+    l.modais[-1]["enter"]()
+    confere("teclado: maiúscula automática, X apaga, Y põe espaço", l.edicao["r"]["nome"] == "Jogos 2")
+    l.mover(0, 1); l.mover(0, 1)
+    confere("baixo chega no campo Ícone", l.win.get_focus() is l.campo_icone)
+    l.apertar()
+    linhas = l.modais[-1]["linhas"]
+    confere("escolha de ícone mostra o do app e os 4 da pasta", sum(len(x) for x in linhas) == 5)
+
+@passo(500)
+def e5():
+    l = L()
+    capturar(l.win, "10-escolher-icone")
+    l.modais[-1]["linhas"][0][1].grab_focus(); l.apertar()
+    confere("ícone escolhido vai para o rascunho", l.edicao["r"].get("icone", "").endswith("icones-apps/jellyfin.png"))
+    l.modais[-1]["linhas"][3][0].grab_focus(); l.apertar()  # Salvar
+    a = apps_disco()[2]
+    confere("salvar grava nome e ícone no apps.json", a["nome"] == "Jogos 2" and a["icone"].endswith("jellyfin.png"))
+    confere("salvar mantém o app e os ajustes dele", a["id"] == "com.moonlight_stream.Moonlight" and a.get("fechar_em_dois_toques") is True)
+    confere("depois de salvar, foco volta no app editado", l.win.get_focus() is l.tiles[2] and not l.modais)
+
+@passo(300)
+def e6():
+    l = L()
+    l.tile_novo.grab_focus(); l.apertar()
+    confere("+ Adicionar abre editor de app novo, no campo Aplicativo", l.edicao["indice"] is None and l.win.get_focus() is l.campo_app)
+    l.modais[-1]["linhas"][3][0].grab_focus(); l.apertar()
+    confere("salvar sem escolher app mostra erro", l.edicao_erro.get_visible() and len(l.modais) == 1)
+    l.campo_app.grab_focus(); l.apertar()
+    botoes = [b for linha in l.modais[-1]["linhas"] for b in linha]
+    nomes = [b.get_child().get_last_child().get_label() for b in botoes]
+    confere("lista de apps traz os instalados (Flatpak e .desktop do usuário)", "Exemplo Player" in nomes and "rocks.shy.VacuumTube" in nomes)
+    estado["botao_exemplo"] = botoes[nomes.index("Exemplo Player")]
+
+@passo(500)
+def e7():
+    l = L()
+    capturar(l.win, "11-escolher-app")
+    estado["botao_exemplo"].grab_focus(); l.apertar()
+    r = l.edicao["r"]
+    confere("app escolhido preenche id, comando e nome", r["id"] == "org.exemplo.Player" and r["abrir"][:2] == ["gio", "launch"] and r["nome"] == "Exemplo Player")
+    confere("app escolhido guarda o WM_CLASS como nome extra", r.get("outros_ids") == ["exemplo-player"])
+    l.modais[-1]["linhas"][3][0].grab_focus(); l.apertar()
+    confere("app novo entra no fim da lista", apps_disco()[-1]["id"] == "org.exemplo.Player" and len(l.tiles) == 5)
+    confere("com 5 apps + Adicionar, a grade quebra em 2 linhas", len(l.linhas_grade) == 2)
+
+@passo(500)
+def e8():
+    l = L()
+    capturar(l.win, "12-cinco-apps")
+    l.tiles[0].grab_focus(); l.apertar()
+    remover = l.modais[-1]["linhas"][3][1]
+    confere("editor de app existente tem Remover", remover.get_label() == "Remover")
+    remover.grab_focus(); l.apertar()
+    confere("Remover pede confirmação, com foco em Cancelar", len(l.modais) == 2 and l.win.get_focus() is l.modais[-1]["linhas"][0][0])
+    l.mover(1, 0); l.apertar()
+    ids = [a["id"] for a in apps_disco()]
+    confere("app removido sai do apps.json", "rocks.shy.VacuumTube" not in ids and len(ids) == 4)
+    confere("tela se reorganiza: 4 apps + Adicionar numa linha só", len(l.tiles) == 4 and len(l.linhas_grade) == 1 and not l.modais)
+    confere("foco vai para o app que ficou no lugar", l.win.get_focus() is l.tiles[0])
+
+@passo(500)
+def e9():
+    l = L()
+    capturar(l.win, "13-depois-de-remover")
+    l.voltar()
+    confere("Ⓑ sai do modo de edição", not l.editando and l.tile_novo is None and l.btn_config.rotulo.get_label() == "Editar apps")
 
 @passo(200)
 def fim():

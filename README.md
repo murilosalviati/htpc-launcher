@@ -9,6 +9,8 @@ Front end para um HTPC com Ubuntu e GNOME (Wayland), controlado por controle de 
 - **Guide** (botão Xbox / Home / PS): pausa o vídeo, se houver um tocando, e volta ao launcher. O app continua aberto por trás.
 - **Start + Select + L1 + R1:** fecha o app em foco. No Moonlight, o 1º toque encerra o stream e um 2º toque em até 15 s fecha o app.
 
+- **Editar apps** (engrenagem no rodapé): entra no modo de edição. Ⓐ num app abre o editor (nome, aplicativo e ícone; tem também Remover), Ⓐ em "+ Adicionar" cria um atalho novo, Ⓑ sai. O nome é digitado num teclado na tela (Ⓧ apaga, Ⓨ põe espaço), ou num teclado físico. O aplicativo vem da lista dos instalados, e o ícone pode ser o do próprio app ou uma imagem de `~/.local/share/htpc-launcher/icones-apps/`. Tudo é salvo no `apps.json`. Acima de 5 apps, a grade quebra em mais linhas.
+
 Apps configurados: VacuumTube (YouTube), Jellyfin Desktop, Moonlight e Steam Big Picture (os quatro em Flatpak).
 
 ## Partes
@@ -17,7 +19,7 @@ Apps configurados: VacuumTube (YouTube), Jellyfin Desktop, Moonlight e Steam Big
 |---|---|
 | `gnome-extension/` | Extensão do GNOME Shell `htpc-launcher@htpc`. No Wayland só o GNOME pode trazer janelas para a frente; ela oferece isso pelo D-Bus (`org.htpc.Launcher`). |
 | `controle/` | Serviço systemd de usuário que lê os controles (evdev) e cuida do guide e do combo de fechar. |
-| `launcher/` | O launcher, em Python + GTK4. |
+| `launcher/` | O launcher, em Python + GTK4 (`launcher.py`), com o modo de edição em `edicao.py`. |
 | `config/apps.json` | Lista de apps, compartilhada pelo launcher e pelo serviço. Fica em `~/.config/htpc-launcher/apps.json`. |
 | `testes/` | Testes com a extensão e o player de mídia simulados. |
 

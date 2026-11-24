@@ -15,7 +15,7 @@ if [ ${#faltando[@]} -gt 0 ]; then
 fi
 
 mkdir -p "$DADOS" "$CONFIG" "$HOME/.local/share/applications" "$HOME/.config/autostart"
-cp "$AQUI/launcher.py" "$AQUI/launcher.css" "$DADOS/"
+cp "$AQUI/launcher.py" "$AQUI/edicao.py" "$AQUI/launcher.css" "$DADOS/"
 cp -r "$AQUI/icones" "$DADOS/"
 # Ícones dos apps escolhidos por você (não vão para o repositório público).
 if [ -d "$AQUI/../icones-apps" ]; then
