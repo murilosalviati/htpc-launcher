@@ -19,7 +19,7 @@ A gamepad-driven home screen for a living-room PC running Ubuntu with GNOME on W
 - **Resume, never duplicate:** selecting an app that is already running brings its existing window back instead of starting a second copy.
 - **Guide button** (Xbox / Home / PS): pauses the video that is playing, if any, and returns to the launcher. The app keeps running behind it.
 - **Start + Select + L1 + R1:** closes the focused app and returns to the launcher. For game streaming apps like Moonlight, the first press ends the stream (Moonlight's own shortcut) and a second press within 15 seconds closes the app.
-- **Settings** (the gear in the footer): apps, background color, weather location, temperature unit (°C or °F) and language, all from the couch.
+- **Settings** (the gear in the footer): apps, background color, weather location, temperature unit (°C or °F) and language, all from the couch. Settings also has a button to close the launcher; the guide button opens it again.
 - **Weather:** type a Brazilian CEP or a city name; the launcher finds the place, asks you to confirm it, and shows the conditions, updated every 30 minutes, with a moon instead of the sun at night. It uses [Open-Meteo](https://open-meteo.com/) and [ViaCEP](https://viacep.com.br/), which are free and need no account. Leave the location empty to hide it.
 - **Edit mode** (Settings → Apps): add, edit and remove shortcuts.
   - Type names on an on-screen keyboard driven by the gamepad (Ⓧ deletes, Ⓨ types a space). A physical keyboard works too.
@@ -54,7 +54,7 @@ On Wayland, a regular program cannot raise another app's window or find out whic
 - Ubuntu with GNOME on Wayland. Tested on GNOME Shell 50; the extension declares support for 47 to 51.
 - `python3-evdev`, `python3-jeepney`, `python3-gi` and `gir1.2-gtk-4.0`. The install scripts install whichever are missing.
 - The apps you want to launch. The default `apps.json` expects these Flatpaks: `rocks.shy.VacuumTube`, `org.jellyfin.JellyfinDesktop`, `com.moonlight_stream.Moonlight` and `com.valvesoftware.Steam`.
-- **Jellyfin Desktop:** its Flatpak cannot see gamepads by default (`devices=dri` only), so its gamepad support finds none. `launcher/install.sh` gives it access (`flatpak override --user --device=input org.jellyfin.JellyfinDesktop`, or `--device=all` on Flatpak older than 1.15.6). Also switch it to TV mode (Settings → Client settings → layout, or `"layout": "tv"` in its `jellyfin-desktop.conf`) so the interface is made for a gamepad.
+- **Jellyfin Desktop:** its Flatpak cannot see gamepads by default (`devices=dri` only), so its gamepad support finds none. `launcher/install.sh` gives it access (`flatpak override --user --device=input org.jellyfin.JellyfinDesktop`, or `--device=all` on Flatpak older than 1.15.6). Its own Xbox map only matches controllers named "Xbox One", so `launcher/install.sh` also installs `extras/jellyfin/xbox-series.json` into each Jellyfin profile (it matches any Xbox controller and leaves the guide button to the launcher); profiles exist after Jellyfin's first start, so run the script again after that. Also switch it to TV mode (Settings → Client settings → layout, or `"layout": "tv"` in its `jellyfin-desktop.conf`) so the interface is made for a gamepad.
 
 ## Install
 

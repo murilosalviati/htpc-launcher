@@ -26,6 +26,7 @@ Gamepad:  d-pad or left stick moves, A selects, B goes back;
 Keyboard: arrows move, Enter selects, Esc goes back.
 """
 
+import os
 import sys
 import threading
 import time
@@ -35,6 +36,12 @@ from gi.repository import GLib
 
 # Must run before GTK is loaded: on Wayland the window's app id comes from this.
 GLib.set_prgname("htpc-launcher")
+
+# Started at login, GTK asks xdg-desktop-portal for settings before the portal
+# is up and waits for it to time out: the window appeared ~50 s late. The
+# launcher needs nothing from the portal. Removed again once GTK is up, so the
+# apps it starts use portals normally.
+os.environ["GDK_DEBUG"] = ",".join(filter(None, [os.environ.get("GDK_DEBUG"), "no-portals"]))
 GLib.set_application_name("HTPC Launcher")
 
 import gi  # noqa: E402
@@ -767,6 +774,14 @@ class Launcher(EditorMixin, SettingsMixin):
         return True
 
 
+def _drop_no_portals():
+    parts = [p for p in os.environ.get("GDK_DEBUG", "").split(",") if p and p != "no-portals"]
+    if parts:
+        os.environ["GDK_DEBUG"] = ",".join(parts)
+    else:
+        os.environ.pop("GDK_DEBUG", None)
+
+
 def main():
     if not config.exists():
         raise SystemExit(f"Missing configuration file: {paths.config_file()}")
@@ -782,6 +797,7 @@ def main():
     def activate(a):
         if "launcher" in state:
             return
+        _drop_no_portals()
         provider = Gtk.CssProvider()
         provider.load_from_path(str(CSS))
         Gtk.StyleContext.add_provider_for_display(

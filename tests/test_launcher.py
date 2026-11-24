@@ -262,6 +262,20 @@ def e1():
           and f["language"].value.get_label() == "Português (Brasil)"
           and f["location"].value.get_label() == "Desligado (sem clima)")
     check("focus starts on Apps", l.win.get_focus() is f["apps"])
+    check("Settings has a 'Fechar o launcher' button next to Close",
+          l.settings_quit.get_label() == "Fechar o launcher" and l.settings_quit in l.overlays[-1]["rows"][-1])
+    quits = []
+    real_quit = l.quit_launcher
+    l.quit_launcher = lambda: quits.append(1)
+    l.settings_quit.grab_focus()
+    l.press()
+    check("closing the launcher asks first, focused on Cancel",
+          len(l.overlays) == 2 and l.win.get_focus() is l.overlays[-1]["rows"][0][0] and not quits)
+    l.move(1, 0)
+    l.press()
+    check("confirming closes the launcher", quits == [1])
+    l.quit_launcher = real_quit
+    f["apps"].grab_focus()
     l.press()
     check("Apps closes Settings and enters edit mode", l.editing and l.add_tile is not None and not l.overlays)
     check("the hint switches to edit mode", "Modo de edição" in l.hint.get_label())

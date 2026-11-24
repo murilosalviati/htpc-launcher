@@ -8,7 +8,9 @@
     keyboard. It is looked up once, confirmed on screen, and saved with its
     coordinates; empty hides the weather;
   * Temperature: °C or °F, switched with Ⓐ;
-  * Language: rebuilds the screen in the chosen language right away.
+  * Language: rebuilds the screen in the chosen language right away;
+  * Close the launcher: quits it, after a confirmation (the guide button opens
+    it again, through the controller service).
 
 Everything is saved to apps.json. Like editor.py, this only uses the Launcher
 instance and has nothing specific to an operating system.
@@ -51,12 +53,15 @@ class SettingsMixin:
         for w in f.values():
             box.append(w)
         close = self.dialog_button(self.t("close"), self.pop_overlay)
-        close_box = Gtk.Box(halign=Gtk.Align.CENTER)
+        quit_ = self.dialog_button(self.t("quit_launcher"), self._confirm_quit, danger=True)
+        close_box = Gtk.Box(spacing=20, halign=Gtk.Align.CENTER)
         close_box.add_css_class("editor-buttons")
         close_box.append(close)
+        close_box.append(quit_)
         box.append(close_box)
+        self.settings_quit = quit_
         self.refresh_settings()
-        self.push_overlay(box, [[w] for w in f.values()] + [[close]], focus=f.get(focus))
+        self.push_overlay(box, [[w] for w in f.values()] + [[close, quit_]], focus=f.get(focus))
 
     def refresh_settings(self):
         f = getattr(self, "settings_fields", None)
@@ -72,6 +77,12 @@ class SettingsMixin:
     def _unit(self):
         unit = self.cfg.get("temperature_unit", "celsius")
         return unit if unit in UNITS else "celsius"
+
+    def _confirm_quit(self):
+        self.confirm(self.t("quit_title"), self.t("quit_text"), self.t("quit_launcher"), self.quit_launcher)
+
+    def quit_launcher(self):
+        self.gtk_app.quit()
 
     def _settings_apps(self):
         self.pop_overlay()

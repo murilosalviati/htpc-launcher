@@ -80,6 +80,17 @@ if command -v flatpak >/dev/null; then
     grant_input org.jellyfin.JellyfinDesktop
 fi
 
+# Jellyfin Desktop's own Xbox map only matches "Xbox One"; ours matches any Xbox
+# controller and leaves the guide button to the launcher. Profiles only exist
+# after Jellyfin's first start: run this script again after that.
+JF_PROFILES="$HOME/.var/app/org.jellyfin.JellyfinDesktop/data/jellyfin-desktop/profiles"
+for profile in "$JF_PROFILES"/*/; do
+    [ -d "$profile" ] || continue
+    mkdir -p "$profile/inputmaps"
+    cp "$HERE/../extras/jellyfin/xbox-series.json" "$profile/inputmaps/xbox-series.json"
+    echo "Installed the Xbox gamepad map for Jellyfin Desktop in $profile"
+done
+
 sed "s|@DATA@|$DATA|g" "$HERE/htpc-launcher.desktop.in" > "$HOME/.local/share/applications/htpc-launcher.desktop"
 cp "$HOME/.local/share/applications/htpc-launcher.desktop" "$HOME/.config/autostart/"
 
