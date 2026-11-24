@@ -111,6 +111,11 @@ def s1():
     check("focus starts on the first app", l.win.get_focus() is l.tiles[0])
     check("Jellyfin shows as open, in Portuguese", l.tiles[1].status.get_label() == "aberto")
     screenshot(l.win, "1-home")
+    check("edge sizes follow the screen: scale 1 on 1920×1080", abs((l.edge_scale or 0) - 1.0) < 0.01)
+    l.apply_edge_scale(2.0)
+    check("on a screen twice as big, the edge icons double", l.weather_icon.get_pixel_size() == 144
+          and l.net_icon.get_pixel_size() == 84 and all(i.get_pixel_size() == 56 for i in l.footer_images))
+    l.apply_edge_scale(1.0)
 
 
 @step(300)

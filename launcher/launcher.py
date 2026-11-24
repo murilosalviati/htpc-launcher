@@ -68,6 +68,18 @@ OPENING_GRACE = 20   # seconds an app counts as "opening" and is not started aga
 FULLSCREEN_FOR = 60  # seconds after starting an app during which its new windows go full screen
 RESUME_DELAY = 1500  # ms to wait after on_resume before raising the app's window
 COLUMNS = 5          # tiles per row; more apps wrap onto more rows
+# Sizes of what sits on the edges (top bar and footer), for a 1920×1080 screen.
+# They are multiplied by how much bigger or smaller the screen is (see
+# apply_edge_scale), so they keep the same share of the screen on any TV.
+EDGE = {
+    "clock": 56, "date": 20,                      # pt
+    "weather_temp": 38, "weather_place": 17,      # pt
+    "status_text": 20, "hint": 17, "footer_label": 17,  # pt
+    "weather_icon": 72, "status_icon": 42, "footer_icon": 28,  # px
+    "footer_height": 56, "footer_pad_x": 24, "footer_gap": 18,  # px
+    "pad_top": 44, "pad_side": 72, "pad_bottom": 40,  # px, around the screen
+}
+EDGE_MIN_SCALE, EDGE_MAX_SCALE = 0.6, 3.0
 WEATHER_EVERY = 30 * 60   # seconds between weather updates
 WEATHER_RETRY = 5 * 60    # ...or after a failed one
 
@@ -234,6 +246,13 @@ class Launcher(EditorMixin, SettingsMixin):
             Gdk.Display.get_default(), self.theme_provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION + 1)
         self.apply_theme(self.cfg.get("background", themes.DEFAULT_THEME))
 
+        # Edge sizes follow the screen size: their own provider, above launcher.css.
+        self.edge_provider = Gtk.CssProvider()
+        Gtk.StyleContext.add_provider_for_display(
+            Gdk.Display.get_default(), self.edge_provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION + 2)
+        self.edge_scale = None
+        self.screen_size = None
+
         theme = Gtk.IconTheme.get_for_display(Gdk.Display.get_default())
         for folder in self.apps.icon_dirs():
             theme.add_search_path(folder)
@@ -273,6 +292,7 @@ class Launcher(EditorMixin, SettingsMixin):
         GLib.timeout_add_seconds(1, self._update_gamepads)
         GLib.timeout_add_seconds(1, lambda: self.opening and self._check_opening() or True)
         GLib.timeout_add_seconds(3, self._every_3s)
+        GLib.timeout_add(500, self._check_screen_size)
         self.refresh_top_bar()
         self.update_weather()
 
@@ -285,6 +305,7 @@ class Launcher(EditorMixin, SettingsMixin):
     def build_ui(self):
         """(Re)build everything on screen in the current language. Called again
         when the language changes; the timers keep working on the new widgets."""
+        self.footer_images = []
         root = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         root.add_css_class("root")
         root.append(self._top_bar())
@@ -294,6 +315,46 @@ class Launcher(EditorMixin, SettingsMixin):
         root.append(self._footer())
         self.overlay.set_child(root)
         self.build_grid()
+
+    # --- sizes that follow the screen -----------------------------------------------
+
+    def px(self, key):
+        return max(1, round(EDGE[key] * (self.edge_scale or 1.0)))
+
+    def _check_screen_size(self):
+        w, h = self.win.get_width(), self.win.get_height()
+        if w > 0 and h > 0 and (w, h) != self.screen_size:
+            self.screen_size = (w, h)
+            self.apply_edge_scale(max(EDGE_MIN_SCALE, min(EDGE_MAX_SCALE, min(w / 1920, h / 1080))))
+        return True
+
+    def apply_edge_scale(self, scale):
+        """Resize the clock, weather, status, hint and footer for this screen."""
+        self.edge_scale = scale
+        e = {k: v * scale for k, v in EDGE.items()}
+        css = f"""
+            .root {{ padding: {e['pad_top']:.0f}px {e['pad_side']:.0f}px {e['pad_bottom']:.0f}px {e['pad_side']:.0f}px; }}
+            .clock {{ font-size: {e['clock']:.1f}pt; }}
+            .date {{ font-size: {e['date']:.1f}pt; }}
+            .weather-temp {{ font-size: {e['weather_temp']:.1f}pt; }}
+            .weather-place {{ font-size: {e['weather_place']:.1f}pt; }}
+            .network, .gamepad-count {{ font-size: {e['status_text']:.1f}pt; }}
+            .hint {{ font-size: {e['hint']:.1f}pt; }}
+            .footer-button-label {{ font-size: {e['footer_label']:.1f}pt; }}
+            button.footer-button {{ min-height: {e['footer_height']:.0f}px;
+                                    padding: 4px {e['footer_pad_x']:.0f}px; }}
+            .footer {{ border-spacing: {e['footer_gap']:.0f}px; }}
+        """
+        if hasattr(self.edge_provider, "load_from_string"):  # GTK 4.12+
+            self.edge_provider.load_from_string(css)
+        else:
+            self.edge_provider.load_from_data(css, -1)
+        for image in self.footer_images:
+            image.set_pixel_size(self.px("footer_icon"))
+        self.weather_icon.set_pixel_size(self.px("weather_icon"))
+        self.net_icon.set_pixel_size(self.px("status_icon"))
+        self.pad_icon.set_pixel_size(self.px("status_icon"))
+        log(f"screen {self.screen_size}: edge scale {scale:.2f}")
 
     def refresh_top_bar(self):
         self._update_clock()
@@ -379,7 +440,7 @@ class Launcher(EditorMixin, SettingsMixin):
         self.weather_box.add_css_class("weather")
         line = Gtk.Box(spacing=12)
         self.weather_icon = Gtk.Image()
-        self.weather_icon.set_pixel_size(54)
+        self.weather_icon.set_pixel_size(self.px("weather_icon"))
         self.weather_temp = Gtk.Label(label="", xalign=0)
         self.weather_temp.add_css_class("weather-temp")
         line.append(self.weather_icon)
@@ -403,13 +464,13 @@ class Launcher(EditorMixin, SettingsMixin):
         net.add_css_class("network")
         self.net_text = Gtk.Label(label="")
         self.net_icon = Gtk.Image()
-        self.net_icon.set_pixel_size(30)
+        self.net_icon.set_pixel_size(self.px("status_icon"))
 
         # Gamepads: lit when at least one is connected, with the count when there are more.
         pads = Gtk.Box(spacing=4, valign=Gtk.Align.CENTER)
         pads.add_css_class("gamepads")
         self.pad_icon = Gtk.Image()
-        self.pad_icon.set_pixel_size(30)
+        self.pad_icon.set_pixel_size(self.px("status_icon"))
         self.pad_count = Gtk.Label(label="")
         self.pad_count.add_css_class("gamepad-count")
         pads.append(self.pad_icon)
@@ -450,7 +511,9 @@ class Launcher(EditorMixin, SettingsMixin):
         b.set_focus_on_click(False)
         box = Gtk.Box(spacing=8)
         image = Gtk.Image.new_from_file(str(ICONS / icon))
-        image.set_pixel_size(20)
+        image.set_pixel_size(self.px("footer_icon"))
+        image.add_css_class("footer-icon")
+        self.footer_images.append(image)
         b.label = Gtk.Label(label=text)
         b.label.add_css_class("footer-button-label")
         box.append(image)
@@ -481,7 +544,7 @@ class Launcher(EditorMixin, SettingsMixin):
         icon = (kind or self.last_kind) + {"on": "", "limited": "-limited", "off": "-off"}[state]
         self.net_icon_name = icon
         self.net_icon.set_from_file(str(ICONS / f"{icon}.svg"))
-        self.net_icon.set_pixel_size(30)
+        self.net_icon.set_pixel_size(self.px("status_icon"))
         self.net_text.set_label(text)
         self.net_text.set_visible(bool(text))
         for s in ("on", "off", "limited"):
@@ -513,7 +576,7 @@ class Launcher(EditorMixin, SettingsMixin):
         if n != self.gamepad_count:
             self.gamepad_count = n
             self.pad_icon.set_from_file(str(ICONS / ("gamepad.svg" if n else "gamepad-off.svg")))
-            self.pad_icon.set_pixel_size(30)
+            self.pad_icon.set_pixel_size(self.px("status_icon"))
             self.pad_count.set_label(str(n) if n > 1 else "")
             self.pad_count.set_visible(n > 1)
         return True
@@ -562,7 +625,7 @@ class Launcher(EditorMixin, SettingsMixin):
             self.weather_box.set_visible(False)
             return
         self.weather_icon.set_from_file(str(ICONS / c.icon))
-        self.weather_icon.set_pixel_size(54)
+        self.weather_icon.set_pixel_size(self.px("weather_icon"))
         self.weather_temp.set_label(f"{c.temperature}°")
         self.weather_place.set_label(place.get("name", ""))
         self.weather_box.set_visible(True)
