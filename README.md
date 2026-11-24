@@ -7,160 +7,67 @@ A gamepad-driven home screen for a living-room PC running Ubuntu with GNOME on W
 
 ![Launcher home screen](docs/preview.png)
 
-*The app icons in this screenshot are placeholders. On a real install the launcher shows each app's own icon, or images you choose.*
-
-![Settings menu](docs/settings.png)
-
-What changed in each version is in [CHANGELOG.md](CHANGELOG.md).
+*The app icons in these screenshots are placeholders. On a real install the launcher shows each app's own icon, or images you choose.*
 
 ## Features
 
-- **Full-screen home screen** with one tile per app. Across the top:
-  - on the left, the current weather (icon, temperature and place), once you set a location;
-  - in the middle, the clock and date;
-  - on the right, a gamepad icon that lights up when a gamepad is connected (USB, Bluetooth or wireless dongle) and shows how many there are when there is more than one, with a battery icon for each wireless gamepad that reports its charge (a gamepad on a cable reports none), and the network icon: a cable symbol on a wired connection, Wi-Fi bars on Wi-Fi. It is just an icon while you are online and only shows text when the connection is limited or down.
-- **Made for a TV across the room:** the selected tile lifts and glows, pushing it plays a short "button pressed" animation, and a tile pulses green while its app is opening. The clock, weather, status icons, hints and footer grow with the screen (they keep the same share of a 1080p, 1440p or 4K screen), and every icon is drawn from vectors, so it stays sharp at any size.
-- **Notices over whatever is playing:** when a gamepad connects or disconnects, its battery gets low, or the internet drops or comes back, a short notice shows in the top-right corner, even over a full-screen video or game, without taking the focus. They can be turned off in Settings.
-- **Home Assistant (optional):** the gamepad wakes the TV and switches it to the HTPC's input, a "Turn off TV" button turns it off, and while the TV is off the gamepad only wakes it. See **[docs/home-assistant.md](docs/home-assistant.md)**.
-- **No stray mouse pointer:** using the gamepad hides the pointer on the whole screen, apps included; moving the mouse brings it back.
-- **Apps open in full screen** (through the GNOME extension), except where an app's own full-screen mode is better, like Steam's Big Picture.
-- **Resume, never duplicate:** selecting an app that is already running brings its existing window back instead of starting a second copy.
-- **Home + LB + RB** (PlayStation: PS + L1 + R1; Nintendo: Home + L + R): pauses the video that is playing, if any, and returns to the launcher. The app keeps running behind it. The guide button alone is left to the apps, so Steam can open its menu with it.
-- **Start + Select + LB + RB:** closes the focused app and returns to the launcher. For game streaming apps like Moonlight, the first press ends the stream (Moonlight's own shortcut) and a second press within 15 seconds closes the app.
-- **Start + Select + ↑ / ↓:** volume up / down, 5 points at a time (hold the arrow to keep going), with GNOME's volume indicator on screen over any app. Uses PipeWire (`wpctl`) or PulseAudio (`pactl`).
-- **Both shortcuts can be changed** in Settings → Gamepads: pick one and hold the new buttons together for 2 seconds.
-- **Pair Bluetooth gamepads** from Settings → Gamepads → Pair a gamepad: put the gamepad in pairing mode, pick it from the list, done. It is trusted, so next time it reconnects by itself. Paired gamepads can be forgotten from the same list. Needs a Bluetooth adapter (BlueZ); without one the screen says how to use a cable or the gamepad's own USB receiver instead.
-- **Settings** (the gear in the footer): apps, background color, weather location, temperature unit (°C or °F) and language, all from the couch. Settings also has a button to close the launcher; the "back to the launcher" shortcut opens it again.
-- **Weather:** type a Brazilian CEP or a city name; the launcher finds the place, asks you to confirm it, and shows the conditions, updated every 30 minutes, with a moon instead of the sun at night. It uses [Open-Meteo](https://open-meteo.com/) and [ViaCEP](https://viacep.com.br/), which are free and need no account. Leave the location empty to hide it.
-- **Edit mode** (Settings → Apps): add, edit and remove shortcuts.
-  - Type names on an on-screen keyboard driven by the gamepad (Ⓧ deletes, Ⓨ types a space). A physical keyboard works too.
-  - Pick the application from the list of installed apps, including Flatpaks.
-  - Pick the icon: the app's own, or any image in `~/.local/share/htpc-launcher/app-icons/`.
-  - The grid wraps onto more rows after 5 apps and reflows when you remove one.
-- **Background colors:** 9 dark themes (Midnight, Ocean, Forest, Aurora, Plum, Wine, Ember, Graphite, Black), previewed live as you move between them.
-- **Restart and shut down** buttons in the footer, both with a confirmation that defaults to Cancel.
-- **English and Brazilian Portuguese** on-screen text, switched in Settings without restarting.
-- **Steam opens in Big Picture.** It starts with `-gamepadui`, and if it is already running in desktop mode, the launcher switches it to Big Picture when you select it.
+- **A home screen made for the couch:**
+  - one tile per app, with a glow and press animations;
+  - the clock, the weather, gamepad and battery icons, and the network status across the top;
+  - sizes that follow the screen, from 1080p to 4K.
+- **Apps open in full screen and resume, never duplicate.** Selecting an app that is already running brings it back. Steam opens in Big Picture.
+- **Shortcuts in any app:**
+
+  | Shortcut | What it does |
+  |---|---|
+  | Home + LB + RB | Back to the launcher (pausing the video). |
+  | Start + Select + LB + RB | Close the app. |
+  | Start + Select + ↑ / ↓ | Volume, with GNOME's volume indicator. |
+
+  The first two can be changed from Settings.
+- **Over whatever is playing:** a short notice when a gamepad connects or disconnects, when a battery gets low, or when the internet drops or comes back. They show even over full-screen video and games.
+- **Settings from the couch:**
+  - apps (with an on-screen keyboard), background color, weather location, °C/°F, and English or Brazilian Portuguese;
+  - **Bluetooth gamepad pairing**;
+  - shortcuts;
+  - Home Assistant.
+- **Home Assistant (optional):** the gamepad wakes the TV and switches it to the right input, a button turns the TV off, and while it's off the gamepad only wakes it.
+- **Small touches:** the mouse pointer hides while you use the gamepad, and Restart and Shut down are in the footer, with Cancel as the default.
 
 The default configuration has VacuumTube (YouTube's TV interface), Jellyfin Desktop, Moonlight and Steam, all as Flatpaks.
 
-## How it works
+<p>
+  <img src="docs/settings.png" width="49%" alt="Settings">
+  <img src="docs/gamepads.png" width="49%" alt="Settings → Gamepads">
+</p>
 
-The code is split into a shared, OS-independent part and a backend per operating system. Today there is a Linux backend (GNOME on Wayland); a Windows backend is planned and its design is written down in `htpc/backends/windows/`.
+## Quick start
 
-On Wayland, a regular program cannot raise another app's window or find out which window has focus, so on Linux there is also a small GNOME Shell extension that does it.
+1. Download the newest `htpc-launcher-<version>.tar.gz` from the [Releases page](https://github.com/murilosalviati/htpc-launcher/releases).
+2. Extract it and install:
 
-| Folder | What it is |
+   ```bash
+   tar xzf htpc-launcher-*.tar.gz && cd htpc-launcher-*/
+   ./install.sh
+   ```
+
+3. Log out and back in. On a first install, then run `gnome-extensions enable htpc-launcher@htpc`.
+
+The launcher starts by itself at login. Requirements, updating, and the notes for Jellyfin and Steam are in **[Installation](docs/installation.md)**.
+
+## Documentation
+
+| | |
 |---|---|
-| `gnome-extension/` | The `htpc-launcher@htpc` GNOME Shell extension. It runs inside GNOME and exposes window control on the session bus (`org.htpc.Launcher`): list windows, raise, close or put an app's windows in full screen, hide the mouse pointer, show a notice over full-screen apps, show the launcher. |
-| `controller/` | The background service that reads the gamepads and runs the shortcuts (a systemd user service on Linux). |
-| `launcher/` | The home screen UI in GTK 4 (`launcher.py`), with the settings menu in `settings.py` and edit mode in `editor.py`. It only reaches the OS through the backend. |
-| `htpc/` | The shared Python package: `apps.json` handling (`config.py`), file locations per OS (`paths.py`), the gamepad shortcuts (`shortcuts.py`), on-screen text (`i18n.py`), background colors (`themes.py`) and the weather lookup (`weather.py`). |
-| `htpc/backends/` | Everything that talks to the operating system, behind the interface in `base.py`: window control, media pausing, gamepad input, the installed-apps list, the connection type, and starting, force-closing, restart and shut down. `linux/` implements it; `windows/` is a documented placeholder. |
-| `extras/` | Files for other apps, such as a gamepad map for Jellyfin Desktop. |
-| `config/apps.json` | The example configuration, installed to `~/.config/htpc-launcher/apps.json`. |
-| `tests/` | Tests that run against a fake GNOME extension and a fake media player. |
+| **[Installation](docs/installation.md)** | Requirements, installing, updating, app notes, uninstalling. |
+| **[Using the launcher](docs/using.md)** | The home screen, notices, and every Settings menu. |
+| **[Gamepads](docs/gamepads.md)** | Shortcuts, volume, changing the shortcuts, Bluetooth pairing, batteries. |
+| **[Configuration](docs/configuration.md)** | The `apps.json` reference. |
+| **[Home Assistant](docs/home-assistant.md)** | TV on/off with the gamepad and from the launcher. |
+| **[Troubleshooting](docs/troubleshooting.md)** | Logs, common problems, working over SSH. |
+| **[Development](docs/development.md)** | Architecture, the extension's D-Bus API, backends, tests, releases. |
 
-## Requirements
-
-- Ubuntu with GNOME on Wayland. Tested on GNOME Shell 50; the extension declares support for 47 to 51.
-- `python3-evdev`, `python3-jeepney`, `python3-gi` and `gir1.2-gtk-4.0`. The install scripts install whichever are missing.
-- The apps you want to launch. The default `apps.json` expects these Flatpaks: `rocks.shy.VacuumTube`, `org.jellyfin.JellyfinDesktop`, `com.moonlight_stream.Moonlight` and `com.valvesoftware.Steam`.
-- **Jellyfin Desktop:** its Flatpak cannot see gamepads by default (`devices=dri` only), so its gamepad support finds none. `launcher/install.sh` gives it access (`flatpak override --user --device=input org.jellyfin.JellyfinDesktop`, or `--device=all` on Flatpak older than 1.15.6). Its own Xbox map only matches controllers named "Xbox One", so `launcher/install.sh` also installs `extras/jellyfin/xbox-series.json` into each Jellyfin profile (it matches any Xbox controller and leaves the guide button to the launcher); profiles exist after Jellyfin's first start, so run the script again after that. Also switch it to TV mode (Settings → Client settings → layout, or `"layout": "tv"` in its `jellyfin-desktop.conf`) so the interface is made for a gamepad.
-
-## Install
-
-Download the newest beta from the [Releases page](https://github.com/murilosalviati/htpc-launcher/releases) (they are marked as pre-releases), extract it and run:
-
-```bash
-./install.sh
-```
-
-It installs the three parts below in order. The first time, log out and back in afterwards so GNOME loads the extension, then run `gnome-extensions enable htpc-launcher@htpc`.
-
-To install the parts one by one instead, in this order:
-
-```bash
-gnome-extension/install.sh   # then log out and back in, and run:
-                             #   gnome-extensions enable htpc-launcher@htpc
-controller/install.sh
-launcher/install.sh          # starts by itself on the next login; to start it now:
-                             #   gtk-launch htpc-launcher
-```
-
-With auto-login, logging out may not log you back in; `sudo systemctl restart gdm` does, but it closes every open app.
-
-Steam keeps its guide button: pressing it alone opens Steam's menu, and the launcher only reacts to Home + LB + RB. Steam also uses some guide-button chords of its own (Guide + RB takes a screenshot in Big Picture, for example); if one gets in the way, pick another combo in Settings → Gamepads.
-
-To use your own icons, put PNG files in an `app-icons/` folder at the root of the repository before running `launcher/install.sh`, or copy them straight to `~/.local/share/htpc-launcher/app-icons/`. That folder is in `.gitignore`.
-
-## Configuration: `apps.json`
-
-You can change everything from the launcher's Settings, or by hand:
-
-```json
-{
-  "name": "YouTube",
-  "id": "rocks.shy.VacuumTube",
-  "icon": "~/.local/share/htpc-launcher/app-icons/youtube.png",
-  "launch": ["flatpak", "run", "rocks.shy.VacuumTube", "--ozone-platform=wayland"],
-  "pause_on_home": true
-}
-```
-
-| Field | What it does |
-|---|---|
-| `name` | The label under the tile. |
-| `id` | The app's window name: its Flatpak id, `.desktop` id or WM_CLASS. `gnome-extension/test.sh` lists the names of every open window. |
-| `extra_ids` | Other names for the same window. |
-| `launch` | The command that starts the app. |
-| `on_resume` | A command to run when the app is already running and you select it again, such as switching Steam to Big Picture. |
-| `close` | The command that closes the app, for apps that only hide when their window closes (Steam: `-shutdown`). |
-| `close_timeout` | Seconds to wait before forcing the app to close. The default is 3. |
-| `pause_on_home` | Pause media (MPRIS) when the "back to the launcher" shortcut is used in this app. |
-| `close_on_second_press` | The first close combo goes to the app itself; the second one closes it. |
-| `fullscreen` | Put the app's windows in full screen when it opens. On by default; Steam defaults to off because Big Picture already is full screen and its other windows should not be. Needs version 3 of the GNOME extension. |
-| `preferred_windows` | For apps with several windows: titles to bring to the front, in order of preference. Without it, the most recently used window comes up. |
-| `icon` | A theme icon name or an image path. Without it, the launcher uses the icon the app installed. |
-| `desktop` | The `.desktop` file to take the icon from, when it differs from `id`. |
-
-At the top level, `language` sets the on-screen text (`en` or `pt-BR`), `background` sets the background color (`midnight`, `ocean`, `forest`, `aurora`, `plum`, `wine`, `ember`, `graphite` or `black`; see `htpc/themes.py`), `temperature_unit` is `celsius` or `fahrenheit`, `weather` holds the place chosen in Settings (`query`, `name`, `latitude`, `longitude`; remove it to hide the weather), and `launcher.launch` is the command the service uses to start the launcher if it is not running. `launcher/install.sh` fills it in. `shortcuts` holds the gamepad combos changed in Settings (`{"home": ["guide", "l1", "r1"], "close": ["start", "select", "l1", "r1"]}`; button names: `guide`, `start`, `select`, `l1`, `r1`, `a`, `b`, `x`, `y`). The `home_assistant` entry and `tv_off_button` are described in [docs/home-assistant.md](docs/home-assistant.md#settings-reference).
-
-Older versions of this project used Portuguese field names (`nome`, `abrir`...). They are converted automatically the first time the launcher starts, and the on-screen text stays in Portuguese for those installs.
-
-## Troubleshooting
-
-```bash
-gnome-extension/test.sh                           # open windows and the focused app
-gnome-extension/test.sh launcher                  # bring the launcher to the front
-journalctl --user -fu htpc-controller             # what the gamepad service is doing
-journalctl --user -f -o cat /usr/bin/gnome-shell  # errors from the extension
-```
-
-Over SSH, first export `XDG_RUNTIME_DIR=/run/user/$(id -u)`, `DBUS_SESSION_BUS_ADDRESS=unix:path=$XDG_RUNTIME_DIR/bus` and `WAYLAND_DISPLAY=wayland-0` so the commands reach the graphical session. To restart the launcher from SSH, start it through your systemd user manager so it gets the session's `DISPLAY` and `XAUTHORITY` (X apps like Steam need them):
-
-```bash
-pkill -f "[h]tpc-launcher/launcher.py"; systemd-run --user --collect -p KillMode=process gtk-launch htpc-launcher
-```
-
-**Apps do not open in full screen, the pointer does not hide, no notices or no volume indicator show up:** after updating the extension (it changed in 0.1.0-beta.3, and twice after 0.1.0-beta.4: version 6 adds the volume indicator), GNOME only loads the new version after you log out and back in (or restart the machine).
-
-**A gamepad does nothing in a Flatpak app:** many Flatpaks cannot see input devices. Give the app access with `flatpak override --user --device=input <app id>` (`--device=all` on Flatpak older than 1.15.6).
-
-**Everything feels slow on a 4K TV:** many integrated GPUs and HDMI ports only drive 4K at 30 Hz, and big-screen interfaces like Steam's Big Picture feel sluggish at 30 frames per second. A 60 Hz mode such as 2560×1440 or 1920×1080 is much smoother, and the TV scales it up; the launcher adapts to the new size by itself. Check the modes your TV offers in GNOME's Display settings.
-
-## Porting to another operating system
-
-Implement the classes in `htpc/backends/base.py` (`WindowControl`, `Media`, `Gamepads`, `AppCatalog`, `System`) in `htpc/backends/<os>/`, and add the OS to `get_backend()` in `htpc/backends/__init__.py`. The launcher UI, edit mode, configuration and shortcut rules then work unchanged. `htpc/backends/windows/__init__.py` lists how each piece would be done on Windows.
-
-## Tests
-
-```bash
-dbus-run-session -- python3 tests/test_controller.py
-xvfb-run -s "-screen 0 1920x1080x24" dbus-run-session -- python3 tests/test_launcher.py
-```
-
-`tests/test_controller.py` covers the shortcut rules, the Linux backend's D-Bus and evdev handling, and config migration. `tests/test_launcher.py` drives the UI with normalized gamepad events and explains the files it expects in `HOME` for the icon and app-list checks.
+What changed in each version is in the **[CHANGELOG](CHANGELOG.md)**.
 
 ## License
 

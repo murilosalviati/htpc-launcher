@@ -8,7 +8,7 @@ The launcher can work with [Home Assistant](https://www.home-assistant.io/) to c
 
 All of this is optional. Without Home Assistant the launcher works exactly as before.
 
-[← Back to the README](../README.md)
+[← Documentation](README.md)
 
 ## Contents
 

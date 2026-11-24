@@ -2,7 +2,11 @@
 
 The project is in beta: every `0.x` version is a pre-release, and the configuration format or install steps may still change.
 
-## Unreleased
+## 0.1.0-beta.5
+
+Update by running `./install.sh` again, then **log out and back in once** so GNOME loads version 6 of the extension (notices, the hidden pointer and the volume indicator need it). Your `apps.json` is kept. **The "back to the launcher" shortcut changed:** it is now Home + LB + RB instead of the guide button alone.
+
+- **Documentation:** a full guide in [docs/](docs/README.md): installation, using the launcher, gamepads, configuration, Home Assistant, troubleshooting and development. The README is now a short overview.
 
 - **Volume from the gamepad: Start + Select + ↑ / ↓**, 5 points per press, repeating while the arrow is held, up to 100%; raising unmutes. GNOME's own volume indicator shows the level over any app, full-screen ones included, like the notices (GNOME extension version 6: log out and back in after updating). The launcher ignores the arrows while Start + Select are held, and a custom shortcut can't be just Start + Select.
 - **Back to the launcher is now Home + LB + RB** (PS + L1 + R1, Home + L + R). The guide button alone is left to the apps, so Steam's menu works again instead of throwing you back to the launcher.
