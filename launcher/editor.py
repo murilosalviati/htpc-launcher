@@ -52,7 +52,7 @@ class EditorMixin:
 
     def toggle_edit_mode(self):
         self.editing = not self.editing
-        self.hint.set_label(self.t("hint_edit") if self.editing else self.t("hint_normal"))
+        self.hint.set_label(self.t("hint_edit") if self.editing else self.hint_text())
         if self.editing:
             self.hint.add_css_class("editing")
             self.btn_settings.label.set_label(self.t("done"))

@@ -111,7 +111,7 @@ This step needs a long-lived access token:
 **Turn the TV off:** select **Turn off TV** in the footer and press Ⓐ. Wait about 15 seconds before pressing a button to wake it again.
 
 **TV off, with the token set:**
-- The launcher and the gamepad shortcuts (guide button, close combo) ignore the gamepad.
+- The launcher and the gamepad shortcuts (back to the launcher, close the app) ignore the gamepad.
 - The first press only wakes the TV. If it's still off 8 seconds later, the next press asks again.
 - The gamepad works normally again once Home Assistant reports the TV as on.
 - If Home Assistant can't be reached, or the TV's state is unknown (`unavailable`), nothing is blocked. The launcher never gets stuck because of Home Assistant.

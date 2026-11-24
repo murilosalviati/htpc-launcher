@@ -10,6 +10,9 @@
   * Temperature: °C or °F, switched with Ⓐ;
   * Language: rebuilds the screen in the chosen language right away;
   * On-screen notices: turns the gamepad, battery and internet notices on or off;
+  * Gamepad shortcuts: the combos that bring the launcher back and close the
+    app, recorded by holding the buttons (read by the controller service from
+    the same apps.json);
   * Home Assistant: its own menu with the address and webhook id (typed on the
     on-screen keyboard), on/off, the footer's "Turn off TV" button, and a
     connection test. The controller service reads the same apps.json entry;
@@ -27,7 +30,7 @@ import gi
 gi.require_version("Gtk", "4.0")
 from gi.repository import GLib, Gtk  # noqa: E402
 
-from htpc import home_assistant, weather  # noqa: E402
+from htpc import home_assistant, shortcuts, weather  # noqa: E402
 from htpc.i18n import STRINGS, Translator  # noqa: E402
 
 UNITS = {"celsius": "°C", "fahrenheit": "°F"}
@@ -56,6 +59,7 @@ class SettingsMixin:
             "language": self._field(self.t("settings_language"), self._choose_language, title_width=300),
             "notifications": self._field(self.t("settings_notifications"), self._toggle_notifications,
                                          title_width=300),
+            "shortcuts": self._field(self.t("settings_shortcuts"), self.open_shortcuts, title_width=300),
             "home_assistant": self._field(self.t("settings_ha"), self.open_home_assistant, title_width=300),
         }
         for w in f.values():
@@ -83,13 +87,14 @@ class SettingsMixin:
         f["language"].value.set_label(self.t("language_name"))
         f["notifications"].value.set_label(self.t("on" if self.cfg.get("notifications", True) else "off"))
         f["home_assistant"].value.set_label(self._ha_summary())
+        f["shortcuts"].value.set_label(shortcuts.combo_label(shortcuts.combos(self.cfg)["home"]))
 
     def _unit(self):
         unit = self.cfg.get("temperature_unit", "celsius")
         return unit if unit in UNITS else "celsius"
 
     def _confirm_quit(self):
-        self.confirm(self.t("quit_title"), self.t("quit_text"), self.t("quit_launcher"), self.quit_launcher)
+        self.confirm(self.t("quit_title"), self.t("quit_text", home=shortcuts.combo_label(shortcuts.combos(self.cfg)["home"])), self.t("quit_launcher"), self.quit_launcher)
 
     def quit_launcher(self):
         self.gtk_app.quit()
@@ -113,6 +118,143 @@ class SettingsMixin:
         self.cfg["notifications"] = not self.cfg.get("notifications", True)
         self.save_config()
         self.refresh_settings()
+
+    # --- gamepad shortcuts --------------------------------------------------------------
+
+    RECORD_HOLD_MS = 2000     # hold the buttons this long to record them
+    RECORD_GIVE_UP_S = 20     # nothing recorded after this: close the box
+
+    def open_shortcuts(self, focus=None):
+        box = self.dialog_box(self.t("settings_shortcuts"))
+        box.add_css_class("editor")
+        box.add_css_class("settings")
+        box.set_spacing(16)
+        f = self.shortcut_fields = {
+            "home": self._field(self.t("shortcut_home"), lambda: self.record_shortcut("home"), title_width=300),
+            "close": self._field(self.t("shortcut_close"), lambda: self.record_shortcut("close"), title_width=300),
+            "reset": self._field(self.t("shortcuts_reset"), self._reset_shortcuts, title_width=300),
+        }
+        for w in f.values():
+            box.append(w)
+        close = self.dialog_button(self.t("close"), self.pop_overlay)
+        close_box = Gtk.Box(spacing=20, halign=Gtk.Align.CENTER)
+        close_box.add_css_class("editor-buttons")
+        close_box.append(close)
+        box.append(close_box)
+        self.refresh_shortcuts()
+        self.push_overlay(box, [[w] for w in f.values()] + [[close]], focus=f.get(focus))
+
+    def refresh_shortcuts(self):
+        current = shortcuts.combos(self.cfg)
+        f = getattr(self, "shortcut_fields", None)
+        if f:
+            f["home"].value.set_label(shortcuts.combo_label(current["home"]))
+            f["close"].value.set_label(shortcuts.combo_label(current["close"]))
+            d = shortcuts.DEFAULT_COMBOS
+            f["reset"].value.set_label(self.t("shortcuts_reset_value", home=shortcuts.combo_label(d["home"]),
+                                              close=shortcuts.combo_label(d["close"])))
+        if not self.editing:
+            self.hint.set_label(self.hint_text())
+        self.refresh_settings()
+
+    def _save_combo(self, name, combo):
+        current = shortcuts.combos(self.cfg)
+        current[name] = frozenset(combo)
+        saved = {k: [b for b in shortcuts.COMBO_BUTTONS if b in v] for k, v in current.items()
+                 if v != shortcuts.DEFAULT_COMBOS[k]}
+        if saved:
+            self.cfg["shortcuts"] = saved
+        else:
+            self.cfg.pop("shortcuts", None)
+        self.save_config()
+        self.refresh_shortcuts()
+
+    def _reset_shortcuts(self):
+        if self.cfg.pop("shortcuts", None) is not None:
+            self.save_config()
+        self.refresh_shortcuts()
+
+    def record_shortcut(self, name):
+        """Hold the buttons of the new combo; holding B alone cancels."""
+        box = self.dialog_box(self.t("record_title"), self.t("record_text"))
+        live = Gtk.Label(label=self.t("record_waiting"))
+        live.add_css_class("record-live")
+        box.append(live)
+        state = {"held": {}, "timer": 0, "give_up": 0}
+
+        def held():
+            out = set()
+            for buttons in state["held"].values():
+                out |= buttons
+            return out
+
+        def stop_timer():
+            if state["timer"]:
+                GLib.source_remove(state["timer"])
+                state["timer"] = 0
+
+        def cleanup():
+            stop_timer()
+            if state["give_up"]:
+                GLib.source_remove(state["give_up"])
+                state["give_up"] = 0
+            if self.navigator.capture is capture:
+                self.navigator.capture = None
+
+        def finish(combo):
+            cleanup()
+            self.pop_overlay()
+            if combo:
+                self._combo_recorded(name, combo)
+            return False
+
+        def held_long_enough():
+            state["timer"] = 0
+            now = held()
+            if now == {"b"}:
+                return finish(None)
+            if len(now) >= 2:
+                return finish(frozenset(now))
+            return False
+
+        def capture(ev):
+            if ev.kind == "disconnected":
+                state["held"].pop(ev.device, None)
+            else:
+                buttons = state["held"].setdefault(ev.device, set())
+                (buttons.add if ev.value else buttons.discard)(ev.name)
+            now = held()
+            live.set_label(shortcuts.combo_label(now & set(shortcuts.COMBO_BUTTONS)) or self.t("record_waiting"))
+            stop_timer()
+            if now == {"b"} or len(now) >= 2:
+                state["timer"] = GLib.timeout_add(self.RECORD_HOLD_MS, held_long_enough)
+
+        self.record_capture = capture    # for the tests
+        self.navigator.capture = capture
+        state["give_up"] = GLib.timeout_add_seconds(self.RECORD_GIVE_UP_S, lambda: (state.update(give_up=0),
+                                                                                    finish(None))[1])
+        cancel = self.dialog_button(self.t("cancel"), lambda: finish(None))  # keyboard or mouse
+        box.append(cancel)
+        self.push_overlay(box, [[cancel]], focus=cancel, cancel=cleanup)
+
+    def _combo_recorded(self, name, combo):
+        other = shortcuts.combos(self.cfg)["close" if name == "home" else "home"]
+        problem = shortcuts.combo_problem(combo, other)
+        if problem == "bad_button":
+            self._message(self.t("combo_bad_button"))
+            return
+        if problem:
+            self._message(self.t("combo_overlap", combo=shortcuts.combo_label(combo & set(shortcuts.COMBO_BUTTONS)),
+                                 other=shortcuts.combo_label(other)))
+            return
+        box = self.dialog_box(self.t("record_use", combo=shortcuts.combo_label(combo)))
+        buttons = Gtk.Box(spacing=20, halign=Gtk.Align.CENTER)
+        use = self.dialog_button(self.t("use"), lambda: (self.pop_overlay(), self._save_combo(name, combo)))
+        cancel = self.dialog_button(self.t("cancel"), self.pop_overlay)
+        buttons.append(use)
+        buttons.append(cancel)
+        box.append(buttons)
+        self.push_overlay(box, [[use, cancel]], focus=use)
 
     # --- Home Assistant ----------------------------------------------------------------
 

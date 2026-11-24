@@ -25,9 +25,10 @@ What changed in each version is in [CHANGELOG.md](CHANGELOG.md).
 - **No stray mouse pointer:** using the gamepad hides the pointer on the whole screen, apps included; moving the mouse brings it back.
 - **Apps open in full screen** (through the GNOME extension), except where an app's own full-screen mode is better, like Steam's Big Picture.
 - **Resume, never duplicate:** selecting an app that is already running brings its existing window back instead of starting a second copy.
-- **Guide button** (Xbox / Home / PS): pauses the video that is playing, if any, and returns to the launcher. The app keeps running behind it.
-- **Start + Select + L1 + R1:** closes the focused app and returns to the launcher. For game streaming apps like Moonlight, the first press ends the stream (Moonlight's own shortcut) and a second press within 15 seconds closes the app.
-- **Settings** (the gear in the footer): apps, background color, weather location, temperature unit (°C or °F) and language, all from the couch. Settings also has a button to close the launcher; the guide button opens it again.
+- **Home + LB + RB** (PlayStation: PS + L1 + R1; Nintendo: Home + L + R): pauses the video that is playing, if any, and returns to the launcher. The app keeps running behind it. The guide button alone is left to the apps, so Steam can open its menu with it.
+- **Start + Select + LB + RB:** closes the focused app and returns to the launcher. For game streaming apps like Moonlight, the first press ends the stream (Moonlight's own shortcut) and a second press within 15 seconds closes the app.
+- **Both shortcuts can be changed** in Settings → Gamepad shortcuts: pick one and hold the new buttons together for 2 seconds.
+- **Settings** (the gear in the footer): apps, background color, weather location, temperature unit (°C or °F) and language, all from the couch. Settings also has a button to close the launcher; the "back to the launcher" shortcut opens it again.
 - **Weather:** type a Brazilian CEP or a city name; the launcher finds the place, asks you to confirm it, and shows the conditions, updated every 30 minutes, with a moon instead of the sun at night. It uses [Open-Meteo](https://open-meteo.com/) and [ViaCEP](https://viacep.com.br/), which are free and need no account. Leave the location empty to hide it.
 - **Edit mode** (Settings → Apps): add, edit and remove shortcuts.
   - Type names on an on-screen keyboard driven by the gamepad (Ⓧ deletes, Ⓨ types a space). A physical keyboard works too.
@@ -52,7 +53,7 @@ On Wayland, a regular program cannot raise another app's window or find out whic
 | `gnome-extension/` | The `htpc-launcher@htpc` GNOME Shell extension. It runs inside GNOME and exposes window control on the session bus (`org.htpc.Launcher`): list windows, raise, close or put an app's windows in full screen, hide the mouse pointer, show a notice over full-screen apps, show the launcher. |
 | `controller/` | The background service that reads the gamepads and runs the shortcuts (a systemd user service on Linux). |
 | `launcher/` | The home screen UI in GTK 4 (`launcher.py`), with the settings menu in `settings.py` and edit mode in `editor.py`. It only reaches the OS through the backend. |
-| `htpc/` | The shared Python package: `apps.json` handling (`config.py`), file locations per OS (`paths.py`), the guide and close-combo rules (`shortcuts.py`), on-screen text (`i18n.py`), background colors (`themes.py`) and the weather lookup (`weather.py`). |
+| `htpc/` | The shared Python package: `apps.json` handling (`config.py`), file locations per OS (`paths.py`), the gamepad shortcuts (`shortcuts.py`), on-screen text (`i18n.py`), background colors (`themes.py`) and the weather lookup (`weather.py`). |
 | `htpc/backends/` | Everything that talks to the operating system, behind the interface in `base.py`: window control, media pausing, gamepad input, the installed-apps list, the connection type, and starting, force-closing, restart and shut down. `linux/` implements it; `windows/` is a documented placeholder. |
 | `extras/` | Files for other apps, such as a gamepad map for Jellyfin Desktop. |
 | `config/apps.json` | The example configuration, installed to `~/.config/htpc-launcher/apps.json`. |
@@ -87,7 +88,7 @@ launcher/install.sh          # starts by itself on the next login; to start it n
 
 With auto-login, logging out may not log you back in; `sudo systemctl restart gdm` does, but it closes every open app.
 
-In Steam's controller settings, turn off the guide button's Steam function so it does not react together with the launcher.
+Steam keeps its guide button: pressing it alone opens Steam's menu, and the launcher only reacts to Home + LB + RB. Steam also uses some guide-button chords of its own (Guide + RB takes a screenshot in Big Picture, for example); if one gets in the way, pick another combo in Settings → Gamepad shortcuts.
 
 To use your own icons, put PNG files in an `app-icons/` folder at the root of the repository before running `launcher/install.sh`, or copy them straight to `~/.local/share/htpc-launcher/app-icons/`. That folder is in `.gitignore`.
 
@@ -114,14 +115,14 @@ You can change everything from the launcher's Settings, or by hand:
 | `on_resume` | A command to run when the app is already running and you select it again, such as switching Steam to Big Picture. |
 | `close` | The command that closes the app, for apps that only hide when their window closes (Steam: `-shutdown`). |
 | `close_timeout` | Seconds to wait before forcing the app to close. The default is 3. |
-| `pause_on_home` | Pause media (MPRIS) when the guide button is pressed in this app. |
+| `pause_on_home` | Pause media (MPRIS) when the "back to the launcher" shortcut is used in this app. |
 | `close_on_second_press` | The first close combo goes to the app itself; the second one closes it. |
 | `fullscreen` | Put the app's windows in full screen when it opens. On by default; Steam defaults to off because Big Picture already is full screen and its other windows should not be. Needs version 3 of the GNOME extension. |
 | `preferred_windows` | For apps with several windows: titles to bring to the front, in order of preference. Without it, the most recently used window comes up. |
 | `icon` | A theme icon name or an image path. Without it, the launcher uses the icon the app installed. |
 | `desktop` | The `.desktop` file to take the icon from, when it differs from `id`. |
 
-At the top level, `language` sets the on-screen text (`en` or `pt-BR`), `background` sets the background color (`midnight`, `ocean`, `forest`, `aurora`, `plum`, `wine`, `ember`, `graphite` or `black`; see `htpc/themes.py`), `temperature_unit` is `celsius` or `fahrenheit`, `weather` holds the place chosen in Settings (`query`, `name`, `latitude`, `longitude`; remove it to hide the weather), and `launcher.launch` is the command the service uses to start the launcher if it is not running. `launcher/install.sh` fills it in. The `home_assistant` entry and `tv_off_button` are described in [docs/home-assistant.md](docs/home-assistant.md#settings-reference).
+At the top level, `language` sets the on-screen text (`en` or `pt-BR`), `background` sets the background color (`midnight`, `ocean`, `forest`, `aurora`, `plum`, `wine`, `ember`, `graphite` or `black`; see `htpc/themes.py`), `temperature_unit` is `celsius` or `fahrenheit`, `weather` holds the place chosen in Settings (`query`, `name`, `latitude`, `longitude`; remove it to hide the weather), and `launcher.launch` is the command the service uses to start the launcher if it is not running. `launcher/install.sh` fills it in. `shortcuts` holds the gamepad combos changed in Settings (`{"home": ["guide", "l1", "r1"], "close": ["start", "select", "l1", "r1"]}`; button names: `guide`, `start`, `select`, `l1`, `r1`, `a`, `b`, `x`, `y`). The `home_assistant` entry and `tv_off_button` are described in [docs/home-assistant.md](docs/home-assistant.md#settings-reference).
 
 Older versions of this project used Portuguese field names (`nome`, `abrir`...). They are converted automatically the first time the launcher starts, and the on-screen text stays in Portuguese for those installs.
 

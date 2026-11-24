@@ -276,6 +276,12 @@ button.field:focus {
 .editor-buttons {
   margin-top: 8px;
 }
+.record-live {
+  font-size: 30pt;
+  font-weight: 700;
+  color: #7cb7ff;
+  margin: 18px 0;
+}
 .dialog.settings {
   padding-top: 36px;
   padding-bottom: 36px;

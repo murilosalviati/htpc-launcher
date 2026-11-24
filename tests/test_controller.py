@@ -69,6 +69,7 @@ def press(*buttons):
 
 
 COMBO = ("start", "select", "l1", "r1")
+HOME = ("guide", "l1", "r1")
 S = fakes.state
 
 
@@ -82,15 +83,20 @@ check("old Portuguese apps.json is translated on load",
       cfg_loaded["apps"][0]["name"] == "YouTube" and cfg_loaded["apps"][0]["pause_on_home"] is True
       and cfg_loaded["language"] == "pt-BR")
 
-# 1. guide on Jellyfin while it plays: pauses, shows the launcher, Jellyfin stays open
+# 1. the guide button alone is left to the app (Steam opens its menu with it)
+focus_before = S["focus"]
 press("guide"); time.sleep(0.2)
-check("guide pauses the video", S["player"] == "Paused")
-check("guide shows the launcher", S["focus"] == "htpc-launcher")
+check("guide alone does nothing (left to the app)", S["focus"] == focus_before and S["player"] != "Paused")
+
+# 1b. the home combo on Jellyfin while it plays: pauses, shows the launcher, Jellyfin stays open
+press(*HOME); time.sleep(0.2)
+check("Home + LB + RB pauses the video", S["player"] == "Paused")
+check("Home + LB + RB shows the launcher", S["focus"] == "htpc-launcher")
 check("Jellyfin stays open", "org.jellyfin.JellyfinDesktop" in running())
 
 # 2. the repeat from Steam's virtual gamepad is ignored
-n = len(S["log"]); press("guide"); time.sleep(0.1)
-check("a guide repeated right away is ignored", len(S["log"]) == n)
+n = len(S["log"]); press(*HOME); time.sleep(0.1)
+check("a home combo repeated right away is ignored", len(S["log"]) == n)
 time.sleep(0.4)
 
 # 3. combo with the launcher focused does nothing
@@ -185,6 +191,39 @@ check("gamepad use hides the pointer once, not on every press", hidden == [1])
 gs.pointer_hidden_at -= sc.POINTER_EVERY
 gs.handle(GamepadEvent("p", "button", "down", 1))
 check("and again after a while (the mouse may have shown it)", hidden == [1, 1])
+
+# 9a1b. the combos come from apps.json ("shortcuts"), with checks
+check("default combos: Home + LB + RB and Start + Select + LB + RB",
+      sc.combo_label(sc.combos({})["home"]) == "Home + LB + RB"
+      and sc.combo_label(sc.combos({})["close"]) == "Start + Select + LB + RB")
+custom = {"shortcuts": {"home": ["guide", "a"]}}
+check("a custom home combo is used, the close one stays the default",
+      sc.combos(custom)["home"] == {"guide", "a"} and sc.combos(custom)["close"] == sc.CLOSE_COMBO)
+check("combos that contain each other fall back to the defaults",
+      sc.combos({"shortcuts": {"home": ["start", "select"], "close": ["start", "select", "a"]}}) == sc.DEFAULT_COMBOS)
+check("a combo needs two buttons, no d-pad, and must not overlap the other",
+      sc.combo_problem({"guide"}, sc.CLOSE_COMBO) == "too_short"
+      and sc.combo_problem({"guide", "up"}, sc.CLOSE_COMBO) == "bad_button"
+      and sc.combo_problem({"start", "select"}, sc.CLOSE_COMBO) == "overlap"
+      and sc.combo_problem({"guide", "a"}, sc.CLOSE_COMBO) is None)
+fired = []
+stub2 = SimpleNamespace(windows=SimpleNamespace(hide_pointer=lambda: None),
+                        guide=lambda: fired.append("home"), close=lambda: fired.append("close"))
+gs2 = sc.GamepadShortcuts(stub2, settings=lambda: custom)
+
+
+def press2(*buttons):
+    for b in buttons:
+        gs2.handle(GamepadEvent("p", "button", b, 1))
+    for b in buttons:
+        gs2.handle(GamepadEvent("p", "button", b, 0))
+
+
+press2("guide", "l1", "r1")
+press2("guide", "a")
+press2(*COMBO)
+check("with a custom home combo, the old one does nothing and the new one works",
+      fired == ["home", "close"])
 
 # 9a2. X and Y by gamepad: Xbox-style drivers send them swapped by position
 from htpc.backends.linux import gamepads as lg  # noqa: E402

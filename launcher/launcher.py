@@ -55,7 +55,7 @@ HERE = Path(__file__).resolve().parent
 # Installed: the htpc package sits next to this file. In the repo: one folder up.
 sys.path.insert(0, str(HERE))
 sys.path.insert(1, str(HERE.parent))
-from htpc import config, home_assistant, paths, themes, weather  # noqa: E402
+from htpc import config, home_assistant, paths, shortcuts, themes, weather  # noqa: E402
 from htpc.backends import get_backend  # noqa: E402
 from htpc.i18n import Translator  # noqa: E402
 from editor import EditorMixin  # noqa: E402
@@ -105,6 +105,7 @@ class Navigator:
     def __init__(self, gamepads, active, move, press, back, other_button, blocked=lambda: False):
         self.gamepads = gamepads
         self.blocked = blocked  # True while the TV is off: input is ignored (it only wakes the TV)
+        self.capture = None     # set while Settings records a shortcut: gets every button event
         self.active, self.move, self.press, self.back = active, move, press, back
         self.other_button = other_button  # called with "x" or "y"
         self.stick = {}         # (device, axis) -> -1 / 0 / 1
@@ -121,6 +122,9 @@ class Navigator:
         return True
 
     def handle(self, ev):
+        if self.capture is not None and ev.kind in ("button", "disconnected"):
+            self.capture(ev)   # recording a new shortcut: buttons go there only
+            return
         if home_assistant.is_press(ev, self.DEAD_ZONE) and self.blocked():
             return
         if ev.kind == "button":
@@ -408,6 +412,11 @@ class Launcher(EditorMixin, SettingsMixin):
         self._update_gamepads()
         self.show_weather()
 
+    def hint_text(self):
+        current = shortcuts.combos(self.cfg)
+        return self.t("hint_normal", home=shortcuts.combo_label(current["home"]),
+                      close=shortcuts.combo_label(current["close"]))
+
     def tv_button_enabled(self):
         """The footer's "Turn off TV" shows only when it is switched on in Settings
         (and Home Assistant is set up, since that is what it calls)."""
@@ -552,7 +561,7 @@ class Launcher(EditorMixin, SettingsMixin):
         buttons = Gtk.Box(spacing=14, valign=Gtk.Align.CENTER)
         buttons.add_css_class("footer")
 
-        self.hint = Gtk.Label(label=self.t("hint_normal"), xalign=0, valign=Gtk.Align.CENTER)
+        self.hint = Gtk.Label(label=self.hint_text(), xalign=0, valign=Gtk.Align.CENTER)
         self.hint.add_css_class("hint")
         bar.set_start_widget(self.hint)
 

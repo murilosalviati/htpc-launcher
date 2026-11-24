@@ -2,10 +2,11 @@
 # Copyright (C) 2026 Murilo Salviati
 """What the gamepad shortcuts do, independent of the operating system.
 
-  * Guide: pauses media if the focused app has "pause_on_home", then shows the
-    launcher. The app keeps running behind it.
-  * Close combo (Start + Select + L1 + R1): closes the focused app and returns
-    to the launcher. Apps with "close_on_second_press" (Moonlight) get the first
+  * Home combo (Guide + L1 + R1 by default): pauses media if the focused app
+    has "pause_on_home", then shows the launcher. The app keeps running behind
+    it. The guide button alone is left to the apps (Steam opens its menu with it).
+  * Close combo (Start + Select + L1 + R1 by default): closes the focused app
+    and returns to the launcher. Apps with "close_on_second_press" (Moonlight) get the first
     press themselves (it ends the stream); a second press within 15 s closes them.
 
 The controller service feeds normalized gamepad events into GamepadShortcuts;
@@ -18,8 +19,18 @@ import time
 
 from . import config
 
-CLOSE_COMBO = frozenset({"start", "select", "l1", "r1"})
-GUIDE = "guide"
+# Both combos can be changed in Settings → Gamepad shortcuts ("shortcuts" in apps.json).
+DEFAULT_COMBOS = {
+    "home": frozenset({"guide", "l1", "r1"}),
+    "close": frozenset({"start", "select", "l1", "r1"}),
+}
+CLOSE_COMBO = DEFAULT_COMBOS["close"]
+# Buttons a combo may use (the d-pad is for moving around).
+COMBO_BUTTONS = ("guide", "start", "select", "l1", "r1", "a", "b", "x", "y")
+# How they are written on screen, Xbox style (PlayStation: PS, Options, Share,
+# L1, R1, ✕ ○ □ △; Nintendo: Home, +, -, L, R).
+BUTTON_LABELS = {"guide": "Home", "start": "Start", "select": "Select", "l1": "LB", "r1": "RB",
+                 "a": "A", "b": "B", "x": "X", "y": "Y"}
 
 # Steam creates a virtual gamepad that repeats the real gamepad's events;
 # an action inside this interval is treated as a repeat and ignored.
@@ -28,6 +39,37 @@ SECOND_PRESS_WINDOW = 15.0    # close_on_second_press: time allowed for the 2nd 
 DEFAULT_CLOSE_TIMEOUT = 3.0   # how long to wait for an app to close before forcing it
 
 log = logging.getLogger("htpc-controller")
+
+
+def combo_problem(combo, other):
+    """Why a combo can't be used next to the other one, or None if it can."""
+    if len(combo) < 2:
+        return "too_short"
+    if not set(combo) <= set(COMBO_BUTTONS):
+        return "bad_button"
+    if set(combo) <= set(other) or set(other) <= set(combo):
+        return "overlap"   # pressing one would also fire the other
+    return None
+
+
+def combos(cfg):
+    """{"home": frozenset, "close": frozenset}: the ones in apps.json when valid,
+    otherwise the defaults."""
+    saved = (cfg or {}).get("shortcuts") or {}
+    result = dict(DEFAULT_COMBOS)
+    for name in result:
+        value = saved.get(name)
+        if isinstance(value, list) and value:
+            result[name] = frozenset(value)
+    if combo_problem(result["home"], result["close"]) or combo_problem(result["close"], result["home"]):
+        log.warning("shortcuts in apps.json are not usable together; using the defaults")
+        return dict(DEFAULT_COMBOS)
+    return result
+
+
+def combo_label(combo):
+    """"Home + LB + RB", in a fixed order."""
+    return " + ".join(BUTTON_LABELS[b] for b in COMBO_BUTTONS if b in combo)
 
 
 def app_ids(app):
@@ -161,8 +203,9 @@ class GamepadShortcuts:
     """Tracks held buttons per gamepad and fires the shortcuts. Using the gamepad
     also hides the mouse pointer (it comes back when the mouse moves)."""
 
-    def __init__(self, shortcuts):
+    def __init__(self, shortcuts, settings=None):
         self.shortcuts = shortcuts
+        self.settings = settings or (lambda: config.load()[0])
         self.held = {}  # device -> set of button names
         self.pointer_hidden_at = -POINTER_EVERY
 
@@ -182,9 +225,16 @@ class GamepadShortcuts:
         if event.value:
             self._hide_pointer()
             held.add(event.name)
-            if event.name == GUIDE:
+            if len(held) < 2:
+                return   # every combo has at least two buttons: no need to read the config
+            try:
+                current = combos(self.settings())
+            except Exception as e:  # noqa: BLE001 - a broken apps.json: keep the defaults
+                log.warning("could not read the shortcuts: %s", e)
+                current = DEFAULT_COMBOS
+            if event.name in current["home"] and current["home"] <= held:
                 self.shortcuts.guide()
-            elif event.name in CLOSE_COMBO and CLOSE_COMBO <= held:
+            elif event.name in current["close"] and current["close"] <= held:
                 self.shortcuts.close()
         else:
             held.discard(event.name)

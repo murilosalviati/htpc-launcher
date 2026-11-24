@@ -272,7 +272,7 @@ def e1():
     l.press()
     f = l.settings_fields
     check("the gear opens Settings with apps, background, location, temperature and language",
-          len(l.overlays) == 1 and list(f) == ["apps", "background", "location", "unit", "language", "notifications", "home_assistant"])
+          len(l.overlays) == 1 and list(f) == ["apps", "background", "location", "unit", "language", "notifications", "shortcuts", "home_assistant"])
     check("Settings shows the current values",
           f["background"].value.get_label() == "Meia-noite" and f["unit"].value.get_label() == "°C"
           and f["language"].value.get_label() == "Português (Brasil)"
@@ -857,6 +857,82 @@ def tv7():
     check("TV off (gate closed): the launcher ignores the gamepad; on: it moves again",
           blocked_moves == [] and moved == [(1, 0)])
     del l.cfg["home_assistant"]
+    l.tiles[0].grab_focus()
+
+
+# ---------------- gamepad shortcuts ----------------
+
+def hold(l, *buttons, value=1):
+    from htpc.backends.base import GamepadEvent
+    for b in buttons:
+        l.navigator.handle(GamepadEvent("pad", "button", b, value))
+
+
+@step(300)
+def sc1():
+    l = L()
+    while l.overlays:
+        l.pop_overlay()
+    l.cfg.pop("shortcuts", None)
+    l.hint.set_label(l.hint_text())
+    check("the footer hint shows the default combos",
+          "Home + LB + RB" in l.hint.get_label() and "Start + Select + LB + RB" in l.hint.get_label())
+    l.RECORD_HOLD_MS = 150
+    l.open_settings(focus="shortcuts")
+    check("Settings has a gamepad shortcuts row", l.settings_fields["shortcuts"].value.get_label() == "Home + LB + RB")
+    l.press()
+    f = l.shortcut_fields
+    check("it opens the shortcuts menu", list(f) == ["home", "close", "reset"]
+          and f["close"].value.get_label() == "Start + Select + LB + RB")
+    f["home"].grab_focus()
+    l.press()
+    check("recording: the gamepad goes to the recorder", l.navigator.capture is not None)
+    hold(l, "a")          # the release of the A that opened it, and a single button: not enough
+    hold(l, "a", value=0)
+    hold(l, "guide", "a")
+
+
+@step(400)
+def sc2():
+    l = L()
+    names = label_texts(l.overlays[-1]["backdrop"])
+    check("holding Home + A records it and asks to confirm", l.navigator.capture is None
+          and l.t("record_use", combo="Home + A") in names)
+    hold(l, "guide", "a", value=0)
+    l.press()   # Use
+    check("saved: the home combo is now Home + A, and the hint says so",
+          l.cfg["shortcuts"] == {"home": ["guide", "a"]} and l.shortcut_fields["home"].value.get_label() == "Home + A"
+          and "Home + A" in l.hint.get_label())
+    l.shortcut_fields["close"].grab_focus()
+    l.press()
+    hold(l, "start", "select")
+
+
+@step(400)
+def sc3():
+    l = L()
+    names = label_texts(l.overlays[-1]["backdrop"])
+    check("a close combo that would overlap is refused", "Start + Select" in names
+          and "Home + A" not in l.cfg["shortcuts"].get("close", []) and "close" not in l.cfg["shortcuts"])
+    hold(l, "start", "select", value=0)
+    l.pop_overlay()
+    l.shortcut_fields["close"].grab_focus()
+    l.press()
+    hold(l, "b")
+
+
+@step(400)
+def sc4():
+    l = L()
+    screenshot(l.win, "16-shortcuts")
+    check("holding B alone cancels the recording", l.navigator.capture is None
+          and l.overlays[-1]["rows"][0][0] is not None and "close" not in l.cfg["shortcuts"])
+    hold(l, "b", value=0)
+    l.shortcut_fields["reset"].grab_focus()
+    l.press()
+    check("restore the defaults", "shortcuts" not in l.cfg and "Home + LB + RB" in l.hint.get_label())
+    while l.overlays:
+        l.pop_overlay()
     l.tiles[0].grab_focus()
 
 
