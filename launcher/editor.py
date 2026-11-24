@@ -205,9 +205,10 @@ class EditorMixin:
         self.editor["draft"]["name"] = text
         self._refresh_editor()
 
-    def keyboard(self, title, value, on_done, note=None):
-        # Capitalize the first letter automatically, like a phone keyboard.
-        state = {"text": value, "shift": not value}
+    def keyboard(self, title, value, on_done, note=None, capitalize=True, extra=None):
+        """On-screen keyboard. capitalize: start with Shift on, like a phone keyboard
+        (off for addresses and ids). extra: one more row of keys (e.g. ":/_" for a URL)."""
+        state = {"text": value, "shift": capitalize and not value}
         box = self.dialog_box(title, note)
         box.add_css_class("keyboard")
         display = Gtk.Label(label="", xalign=0)
@@ -230,7 +231,7 @@ class EditorMixin:
 
         def delete():
             state["text"] = state["text"][:-1]
-            if not state["text"]:
+            if not state["text"] and capitalize:
                 state["shift"] = True  # cleared everything: start capitalized again
             refresh()
 
@@ -243,7 +244,7 @@ class EditorMixin:
             on_done(state["text"].strip())
 
         rows = []
-        for row_text in self.t.raw("keyboard_rows"):
+        for row_text in self.t.raw("keyboard_rows") + ([extra] if extra else []):
             row_box = Gtk.Box(spacing=10, halign=Gtk.Align.CENTER)
             row = []
             for c in row_text:

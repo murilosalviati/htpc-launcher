@@ -272,7 +272,7 @@ def e1():
     l.press()
     f = l.settings_fields
     check("the gear opens Settings with apps, background, location, temperature and language",
-          len(l.overlays) == 1 and list(f) == ["apps", "background", "location", "unit", "language", "notifications", "tv_button"])
+          len(l.overlays) == 1 and list(f) == ["apps", "background", "location", "unit", "language", "notifications", "home_assistant"])
     check("Settings shows the current values",
           f["background"].value.get_label() == "Meia-noite" and f["unit"].value.get_label() == "°C"
           and f["language"].value.get_label() == "Português (Brasil)"
@@ -667,7 +667,31 @@ def w10():
           and l.settings_fields["location"].value.get_label() == "Off (weather hidden)")
 
 
-# ---------------- "Turn off TV" (Home Assistant) ----------------
+# ---------------- Home Assistant settings and "Turn off TV" ----------------
+
+def label_texts(widget):
+    """All the label texts inside a widget, joined."""
+    out = []
+    child = widget.get_first_child()
+    while child is not None:
+        if isinstance(child, Gtk.Label):
+            out.append(child.get_label())
+        out.append(label_texts(child))
+        child = child.get_next_sibling()
+    return "\n".join(t for t in out if t)
+
+
+def ha_type(l, field, text):
+    """Settings → Home Assistant → field, typed on the on-screen keyboard."""
+    l.open_home_assistant(focus=field)
+    l.press()
+    top = l.overlays[-1]
+    for _ in range(60):
+        top["delete"]()
+    for c in text:
+        top["type"](c)
+    top["enter"]()
+
 
 @step(300)
 def tv1():
@@ -676,23 +700,40 @@ def tv1():
         l.pop_overlay()
     check("no Home Assistant set up: no 'Desligar TV' button", not l.btn_tv.get_visible()
           and l.btn_tv not in l.rows[-1])
-    l.cfg["home_assistant"] = {"url": "http://ha.local:8123", "webhook_id": "htpc-test"}
-    l.build_ui()
-    l.refresh_top_bar()
-    check("Home Assistant set up but the button not switched on in Settings: still hidden",
-          not l.btn_tv.get_visible() and l.btn_tv not in l.rows[-1])
-    l.open_settings(focus="tv_button")
-    check("Settings shows the button as off", l.settings_fields["tv_button"].value.get_label() == l.t("off"))
-    l.press()  # A on the field switches it on
+    l.open_settings(focus="home_assistant")
+    check("Settings has a Home Assistant row saying it is not set up",
+          l.settings_fields["home_assistant"].value.get_label() == l.t("ha_not_set"))
+    l.press()
+    f = l.ha_fields
+    check("it opens the Home Assistant menu", len(l.overlays) == 2
+          and list(f) == ["enabled", "url", "webhook", "tv_button", "test"]
+          and f["tv_button"].value.get_label() == l.t("tv_button_needs_ha"))
+    l.pop_overlay()
+    ha_type(l, "url", "192.168.0.22:8123")
+    check("an address without http:// is refused", "home_assistant" not in l.cfg
+          and l.t("ha_bad_url") in label_texts(l.overlays[-1]["backdrop"]))
+    l.pop_overlay()
+    ha_type(l, "url", "http://192.168.0.22:8123/")
+    check("the address is typed in lower case and saved without the trailing /",
+          l.cfg["home_assistant"] == {"url": "http://192.168.0.22:8123"}
+          and l.ha_fields["url"].value.get_label() == "http://192.168.0.22:8123")
+    ha_type(l, "webhook", "htpc-gamepad_1")
+    check("the webhook id is saved: Home Assistant is set up",
+          l.cfg["home_assistant"]["webhook_id"] == "htpc-gamepad_1"
+          and l.settings_fields["home_assistant"].value.get_label() == l.t("ha_on_at", host="192.168.0.22:8123")
+          and l.ha_fields["tv_button"].value.get_label() == l.t("off") and not l.btn_tv.get_visible())
+    l.ha_fields["tv_button"].grab_focus()
+    l.press()  # A switches the footer button on
 
 
 @step(500)
 def tv2():
     l = L()
     from htpc import home_assistant as hass
-    check("switched on in Settings: saved and shown", l.cfg.get("tv_off_button") is True
-          and l.settings_fields["tv_button"].value.get_label() == l.t("on") and l.btn_tv.get_visible())
-    screenshot(l.win, "14-settings-tv-button")
+    check("'Desligar TV' switched on in the Home Assistant menu: saved and shown",
+          l.cfg.get("tv_off_button") is True and l.ha_fields["tv_button"].value.get_label() == l.t("on")
+          and l.btn_tv.get_visible())
+    screenshot(l.win, "14-settings-home-assistant")
     while l.overlays:
         l.pop_overlay()
     l.btn_tv.grab_focus()
@@ -714,20 +755,45 @@ def tv3():
     from htpc import home_assistant as hass
     check("'Desligar TV' sends tv_off to the Home Assistant webhook and leaves the marker",
           hass.tv_off_marker().exists())
-    l.open_settings(focus="tv_button")
+    sent = []
+    l.ha_post = lambda url, payload: sent.append((url, payload["event"]))
+    l.open_home_assistant(focus="test")
     l.press()
-    check("switched off again in Settings: hidden", l.cfg.get("tv_off_button") is False
-          and not l.btn_tv.get_visible() and l.btn_tv not in l.rows[-1])
-    while l.overlays:
-        l.pop_overlay()
-    del l.cfg["home_assistant"]
-    l.cfg["tv_off_button"] = True
-    l.build_ui()
-    l.refresh_top_bar()
-    check("switched on but Home Assistant gone: hidden", not l.btn_tv.get_visible())
-    l.open_settings(focus="tv_button")
-    check("Settings says it needs Home Assistant",
-          l.settings_fields["tv_button"].value.get_label() == l.t("tv_button_needs_ha"))
+
+
+@step(400)
+def tv4():
+    l = L()
+    check("the connection test posts a test event to the webhook and says it worked",
+          l.t("ha_test_ok") in label_texts(l.overlays[-1]["backdrop"]))
+    l.pop_overlay()
+
+    def fail(url, payload):
+        raise OSError("connection refused")
+    l.ha_post = fail
+    l.ha_fields["test"].grab_focus()
+    l.press()
+
+
+@step(400)
+def tv5():
+    l = L()
+    check("a failed test says why", l.t("ha_test_failed", error="connection refused")
+          in label_texts(l.overlays[-1]["backdrop"]))
+    l.pop_overlay()
+    l.ha_fields["enabled"].grab_focus()
+    l.press()
+    check("switching Home Assistant off hides the button and keeps the address",
+          l.cfg["home_assistant"].get("enabled") is False and not l.btn_tv.get_visible()
+          and l.cfg["home_assistant"]["url"] == "http://192.168.0.22:8123"
+          and l.ha_fields["tv_button"].value.get_label() == l.t("tv_button_needs_ha"))
+    l.press()
+    check("and on again brings it back", "enabled" not in l.cfg["home_assistant"] and l.btn_tv.get_visible())
+    ha_type(l, "webhook", "")
+    check("an empty webhook id leaves it not set up", "webhook_id" not in l.cfg["home_assistant"]
+          and not l.btn_tv.get_visible())
+    ha_type(l, "url", "")
+    check("and with both empty the entry is gone", "home_assistant" not in l.cfg)
     while l.overlays:
         l.pop_overlay()
     l.tiles[0].grab_focus()

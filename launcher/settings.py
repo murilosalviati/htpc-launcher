@@ -10,6 +10,9 @@
   * Temperature: °C or °F, switched with Ⓐ;
   * Language: rebuilds the screen in the chosen language right away;
   * On-screen notices: turns the gamepad, battery and internet notices on or off;
+  * Home Assistant: its own menu with the address and webhook id (typed on the
+    on-screen keyboard), on/off, the footer's "Turn off TV" button, and a
+    connection test. The controller service reads the same apps.json entry;
   * Close the launcher: quits it, after a confirmation (the guide button opens
     it again, through the controller service).
 
@@ -53,7 +56,7 @@ class SettingsMixin:
             "language": self._field(self.t("settings_language"), self._choose_language, title_width=300),
             "notifications": self._field(self.t("settings_notifications"), self._toggle_notifications,
                                          title_width=300),
-            "tv_button": self._field(self.t("settings_tv_button"), self._toggle_tv_button, title_width=300),
+            "home_assistant": self._field(self.t("settings_ha"), self.open_home_assistant, title_width=300),
         }
         for w in f.values():
             box.append(w)
@@ -79,10 +82,7 @@ class SettingsMixin:
         f["unit"].value.set_label(UNITS[self._unit()])
         f["language"].value.set_label(self.t("language_name"))
         f["notifications"].value.set_label(self.t("on" if self.cfg.get("notifications", True) else "off"))
-        if not home_assistant.webhook_url(self.cfg):
-            f["tv_button"].value.set_label(self.t("tv_button_needs_ha"))
-        else:
-            f["tv_button"].value.set_label(self.t("on" if self.cfg.get("tv_off_button", False) else "off"))
+        f["home_assistant"].value.set_label(self._ha_summary())
 
     def _unit(self):
         unit = self.cfg.get("temperature_unit", "celsius")
@@ -114,7 +114,94 @@ class SettingsMixin:
         self.save_config()
         self.refresh_settings()
 
-    # --- "Turn off TV" button in the footer -----------------------------------------
+    # --- Home Assistant ----------------------------------------------------------------
+
+    def _ha(self):
+        return self.cfg.get("home_assistant") or {}
+
+    def _ha_set(self, **values):
+        ha = dict(self._ha())
+        for key, value in values.items():
+            if value in (None, ""):
+                ha.pop(key, None)
+            else:
+                ha[key] = value
+        if ha:
+            self.cfg["home_assistant"] = ha
+        else:
+            self.cfg.pop("home_assistant", None)
+        self.save_config()
+        self.btn_tv.set_visible(self.tv_button_enabled())
+        self.refresh_home_assistant()
+        self.refresh_settings()
+
+    def _ha_summary(self):
+        ha = self._ha()
+        if not ha.get("url") or not ha.get("webhook_id"):
+            return self.t("ha_not_set")
+        if not ha.get("enabled", True):
+            return self.t("off")
+        host = ha["url"].split("://", 1)[-1].rstrip("/")
+        return self.t("ha_on_at", host=host)
+
+    def open_home_assistant(self, focus=None):
+        box = self.dialog_box(self.t("settings_ha"))
+        box.add_css_class("editor")
+        box.add_css_class("settings")
+        box.set_spacing(16)
+        f = self.ha_fields = {
+            "enabled": self._field(self.t("ha_enabled"), self._ha_toggle_enabled, title_width=300),
+            "url": self._field(self.t("ha_url"), self._ha_edit_url, title_width=300),
+            "webhook": self._field(self.t("ha_webhook"), self._ha_edit_webhook, title_width=300),
+            "tv_button": self._field(self.t("settings_tv_button"), self._toggle_tv_button, title_width=300),
+            "test": self._field(self.t("ha_test"), self._ha_test, title_width=300),
+        }
+        for w in f.values():
+            box.append(w)
+        close = self.dialog_button(self.t("close"), self.pop_overlay)
+        close_box = Gtk.Box(spacing=20, halign=Gtk.Align.CENTER)
+        close_box.add_css_class("editor-buttons")
+        close_box.append(close)
+        box.append(close_box)
+        self.refresh_home_assistant()
+        self.push_overlay(box, [[w] for w in f.values()] + [[close]], focus=f.get(focus))
+
+    def refresh_home_assistant(self):
+        f = getattr(self, "ha_fields", None)
+        if not f:
+            return
+        ha = self._ha()
+        f["enabled"].value.set_label(self.t("on" if ha.get("enabled", True) else "off"))
+        f["url"].value.set_label(ha.get("url") or "—")
+        f["webhook"].value.set_label(ha.get("webhook_id") or "—")
+        if not home_assistant.webhook_url(self.cfg):
+            f["tv_button"].value.set_label(self.t("tv_button_needs_ha"))
+        else:
+            f["tv_button"].value.set_label(self.t("on" if self.cfg.get("tv_off_button", False) else "off"))
+        f["test"].value.set_label(self.t("ha_test_value"))
+
+    def _ha_toggle_enabled(self):
+        self._ha_set(enabled=None if not self._ha().get("enabled", True) else False)
+
+    def _ha_edit_url(self):
+        self.keyboard(self.t("ha_url_title"), self._ha().get("url", "http://"), self._ha_url_typed,
+                      note=self.t("ha_url_note"), capitalize=False, extra=":/_")
+
+    def _ha_url_typed(self, text):
+        text = text.replace(" ", "").rstrip("/")
+        if text in ("", "http:", "https:"):
+            self._ha_set(url=None)
+        elif not text.lower().startswith(("http://", "https://")):
+            self._message(self.t("ha_bad_url"))
+        else:
+            self._ha_set(url=text)
+
+    def _ha_edit_webhook(self):
+        self.keyboard(self.t("ha_webhook_title"), self._ha().get("webhook_id", ""), self._ha_webhook_typed,
+                      note=self.t("ha_webhook_note"), capitalize=False, extra=":/_")
+
+    def _ha_webhook_typed(self, text):
+        self._ha_set(webhook_id=text.replace(" ", "") or None)
 
     def _toggle_tv_button(self):
         if not home_assistant.webhook_url(self.cfg):
@@ -123,7 +210,47 @@ class SettingsMixin:
         self.cfg["tv_off_button"] = not self.cfg.get("tv_off_button", False)
         self.save_config()
         self.btn_tv.set_visible(self.tv_button_enabled())
-        self.refresh_settings()
+        self.refresh_home_assistant()
+
+    def _ha_test(self):
+        url = home_assistant.webhook_url(self.cfg)
+        if not url:
+            self._message(self.t("tv_button_needs_ha_text"))
+            return
+        box = self.dialog_box(self.t("ha_testing"))
+        token = object()
+        self.ha_test_token = token
+
+        def give_up():
+            self.ha_test_token = None
+
+        cancel = self.dialog_button(self.t("cancel"), lambda: (give_up(), self.pop_overlay()))
+        box.append(cancel)
+        self.push_overlay(box, [[cancel]], focus=cancel, cancel=give_up)
+        post = getattr(self, "ha_post", None) or home_assistant.http_post
+        payload = {"event": "test", "gamepad": "", "host": "launcher"}
+
+        def work():
+            try:
+                post(url, payload)
+                result = None
+            except Exception as e:  # noqa: BLE001 - shown to the user below
+                result = e
+            GLib.idle_add(self._ha_tested, token, result)
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def _ha_tested(self, token, error):
+        if self.ha_test_token is not token:
+            return False
+        self.ha_test_token = None
+        self.pop_overlay()  # "Calling Home Assistant…"
+        if error is None:
+            self._message(self.t("ha_test_ok"))
+        else:
+            reason = getattr(error, "reason", None) or error
+            self._message(self.t("ha_test_failed", error=str(reason)[:80]))
+        return False
 
     # --- language ---------------------------------------------------------------------
 
