@@ -272,7 +272,7 @@ def e1():
     l.press()
     f = l.settings_fields
     check("the gear opens Settings with apps, background, location, temperature and language",
-          len(l.overlays) == 1 and list(f) == ["apps", "background", "location", "unit", "language", "notifications"])
+          len(l.overlays) == 1 and list(f) == ["apps", "background", "location", "unit", "language", "notifications", "tv_button"])
     check("Settings shows the current values",
           f["background"].value.get_label() == "Meia-noite" and f["unit"].value.get_label() == "°C"
           and f["language"].value.get_label() == "Português (Brasil)"
@@ -679,22 +679,32 @@ def tv1():
     l.cfg["home_assistant"] = {"url": "http://ha.local:8123", "webhook_id": "htpc-test"}
     l.build_ui()
     l.refresh_top_bar()
-    l.btn_tv.grab_focus()
+    check("Home Assistant set up but the button not switched on in Settings: still hidden",
+          not l.btn_tv.get_visible() and l.btn_tv not in l.rows[-1])
+    l.open_settings(focus="tv_button")
+    check("Settings shows the button as off", l.settings_fields["tv_button"].value.get_label() == l.t("off"))
+    l.press()  # A on the field switches it on
 
 
 @step(500)
 def tv2():
     l = L()
     from htpc import home_assistant as hass
+    check("switched on in Settings: saved and shown", l.cfg.get("tv_off_button") is True
+          and l.settings_fields["tv_button"].value.get_label() == l.t("on") and l.btn_tv.get_visible())
+    screenshot(l.win, "14-settings-tv-button")
+    while l.overlays:
+        l.pop_overlay()
+    l.btn_tv.grab_focus()
+    while GLib.MainContext.default().iteration(False):
+        pass
     ok, r = l.btn_tv.compute_bounds(l.win)
     middle = r.get_x() + r.get_width() / 2
-    check("with Home Assistant: 'Desligar TV' in the middle of the footer",
-          l.btn_tv.get_visible() and abs(middle - l.win.get_width() / 2) < 4
+    check("'Desligar TV' in the middle of the footer",
+          abs(middle - l.win.get_width() / 2) < 4
           and l.btn_tv.label.get_label() == l.t("tv_off") and l.rows[-1][0] is l.btn_tv)
     screenshot(l.win, "15-tv-off-button")
-    posted = []
-    real = hass.http_post
-    hass.http_post = lambda url, payload: posted.append((url, payload["event"]))
+    hass.http_post = lambda url, payload: None
     l.press()
 
 
@@ -704,9 +714,22 @@ def tv3():
     from htpc import home_assistant as hass
     check("'Desligar TV' sends tv_off to the Home Assistant webhook and leaves the marker",
           hass.tv_off_marker().exists())
+    l.open_settings(focus="tv_button")
+    l.press()
+    check("switched off again in Settings: hidden", l.cfg.get("tv_off_button") is False
+          and not l.btn_tv.get_visible() and l.btn_tv not in l.rows[-1])
+    while l.overlays:
+        l.pop_overlay()
     del l.cfg["home_assistant"]
+    l.cfg["tv_off_button"] = True
     l.build_ui()
     l.refresh_top_bar()
+    check("switched on but Home Assistant gone: hidden", not l.btn_tv.get_visible())
+    l.open_settings(focus="tv_button")
+    check("Settings says it needs Home Assistant",
+          l.settings_fields["tv_button"].value.get_label() == l.t("tv_button_needs_ha"))
+    while l.overlays:
+        l.pop_overlay()
     l.tiles[0].grab_focus()
 
 

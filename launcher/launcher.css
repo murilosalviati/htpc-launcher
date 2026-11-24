@@ -276,6 +276,16 @@ button.field:focus {
 .editor-buttons {
   margin-top: 8px;
 }
+.dialog.settings {
+  padding-top: 36px;
+  padding-bottom: 36px;
+}
+.dialog.settings button.field {
+  min-height: 64px;
+}
+.dialog.settings .editor-buttons {
+  margin-top: 14px;
+}
 
 /* on-screen keyboard */
 .keyboard-display {

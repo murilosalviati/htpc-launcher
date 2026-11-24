@@ -24,7 +24,7 @@ import gi
 gi.require_version("Gtk", "4.0")
 from gi.repository import GLib, Gtk  # noqa: E402
 
-from htpc import weather  # noqa: E402
+from htpc import home_assistant, weather  # noqa: E402
 from htpc.i18n import STRINGS, Translator  # noqa: E402
 
 UNITS = {"celsius": "°C", "fahrenheit": "°F"}
@@ -44,6 +44,7 @@ class SettingsMixin:
         box = self.dialog_box(self.t("settings"))
         box.add_css_class("editor")
         box.add_css_class("settings")
+        box.set_spacing(16)  # seven rows plus the buttons have to fit on a 1080p screen
         f = self.settings_fields = {
             "apps": self._field(self.t("settings_apps"), self._settings_apps, title_width=300),
             "background": self._field(self.t("background"), self.choose_background, title_width=300),
@@ -52,6 +53,7 @@ class SettingsMixin:
             "language": self._field(self.t("settings_language"), self._choose_language, title_width=300),
             "notifications": self._field(self.t("settings_notifications"), self._toggle_notifications,
                                          title_width=300),
+            "tv_button": self._field(self.t("settings_tv_button"), self._toggle_tv_button, title_width=300),
         }
         for w in f.values():
             box.append(w)
@@ -77,6 +79,10 @@ class SettingsMixin:
         f["unit"].value.set_label(UNITS[self._unit()])
         f["language"].value.set_label(self.t("language_name"))
         f["notifications"].value.set_label(self.t("on" if self.cfg.get("notifications", True) else "off"))
+        if not home_assistant.webhook_url(self.cfg):
+            f["tv_button"].value.set_label(self.t("tv_button_needs_ha"))
+        else:
+            f["tv_button"].value.set_label(self.t("on" if self.cfg.get("tv_off_button", False) else "off"))
 
     def _unit(self):
         unit = self.cfg.get("temperature_unit", "celsius")
@@ -106,6 +112,17 @@ class SettingsMixin:
     def _toggle_notifications(self):
         self.cfg["notifications"] = not self.cfg.get("notifications", True)
         self.save_config()
+        self.refresh_settings()
+
+    # --- "Turn off TV" button in the footer -----------------------------------------
+
+    def _toggle_tv_button(self):
+        if not home_assistant.webhook_url(self.cfg):
+            self._message(self.t("tv_button_needs_ha_text"))
+            return
+        self.cfg["tv_off_button"] = not self.cfg.get("tv_off_button", False)
+        self.save_config()
+        self.btn_tv.set_visible(self.tv_button_enabled())
         self.refresh_settings()
 
     # --- language ---------------------------------------------------------------------

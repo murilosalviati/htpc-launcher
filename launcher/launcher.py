@@ -405,6 +405,11 @@ class Launcher(EditorMixin, SettingsMixin):
         self._update_gamepads()
         self.show_weather()
 
+    def tv_button_enabled(self):
+        """The footer's "Turn off TV" shows only when it is switched on in Settings
+        (and Home Assistant is set up, since that is what it calls)."""
+        return bool(self.cfg.get("tv_off_button", False) and home_assistant.webhook_url(self.cfg))
+
     @property
     def rows(self):
         footer = [self.btn_tv] if self.btn_tv.get_visible() else []
@@ -550,7 +555,7 @@ class Launcher(EditorMixin, SettingsMixin):
 
         self.btn_tv = self._footer_button("tv-off.svg", self.t("tv_off"), self.turn_tv_off)
         self.btn_tv.set_valign(Gtk.Align.CENTER)
-        self.btn_tv.set_visible(bool(home_assistant.webhook_url(self.cfg)))
+        self.btn_tv.set_visible(self.tv_button_enabled())
         bar.set_center_widget(self.btn_tv)
 
         self.btn_settings = self._footer_button("settings.svg", self.t("settings"), self.settings_button)
