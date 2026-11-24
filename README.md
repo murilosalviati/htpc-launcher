@@ -44,7 +44,15 @@ On Wayland, a regular program cannot raise another app's window or find out whic
 
 ## Install
 
-Install in this order:
+Download the latest release from the [Releases page](https://github.com/murilosalviati/htpc-launcher/releases/latest), extract it and run:
+
+```bash
+./install.sh
+```
+
+It installs the three parts below in order. The first time, log out and back in afterwards so GNOME loads the extension, then run `gnome-extensions enable htpc-launcher@htpc`.
+
+To install the parts one by one instead, in this order:
 
 ```bash
 gnome-extension/install.sh   # then log out and back in, and run:
