@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Murilo Salviati
 """Shared apps.json handling for the launcher and the controller service.
 
 The file lives at ~/.config/htpc-launcher/apps.json. Older installs used

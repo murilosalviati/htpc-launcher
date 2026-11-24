@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Murilo Salviati
 # Quick checks of the extension over D-Bus.
 # Usage:
 #   ./test.sh                      list open windows and the focused app

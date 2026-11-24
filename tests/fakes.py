@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Murilo Salviati
 """Fake GNOME extension and MPRIS player, to test the controller and launcher on a real D-Bus."""
 import json
 import threading

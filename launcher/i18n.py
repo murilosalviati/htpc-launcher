@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Murilo Salviati
 """On-screen text of the launcher, per language.
 
 The language comes from "language" in apps.json ("en" or "pt-BR").

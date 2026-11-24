@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Murilo Salviati
 # Installs (or updates) everything: the GNOME extension, the controller service and the launcher.
 set -euo pipefail
 

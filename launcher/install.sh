@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Murilo Salviati
 # Installs (or updates) the HTPC launcher and makes it start on login.
 set -euo pipefail
 

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Murilo Salviati
 """Controller service tests against a fake GNOME extension and MPRIS player.
 
 Run: dbus-run-session -- python3 tests/test_controller.py

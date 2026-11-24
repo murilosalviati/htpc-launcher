@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Murilo Salviati
 """Launcher edit mode: add, edit and remove app shortcuts.
 
 Entered from the "Edit apps" button in the footer. There, Ⓐ on an app opens

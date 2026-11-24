@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Murilo Salviati
 """Launcher tests: runs the real launcher under Xvfb against a fake GNOME extension,
 drives it like a gamepad would, checks open/resume and edit mode, and saves screenshots.
 

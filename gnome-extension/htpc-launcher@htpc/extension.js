@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Murilo Salviati
 // HTPC Launcher Bridge
 //
 // On Wayland a regular program cannot raise windows or find out which window

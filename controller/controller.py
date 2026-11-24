@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Murilo Salviati
 """HTPC controller service.
 
 Reads every connected gamepad (Xbox, 8BitDo, PS4...) without taking the
