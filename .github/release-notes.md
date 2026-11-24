@@ -9,7 +9,7 @@ HTPC Launcher: a gamepad-driven TV home screen for Ubuntu with GNOME on Wayland.
 
 - **Gamepad batteries:** next to the gamepad icon, a battery icon for each wireless gamepad that reports its charge, from empty (red) to full, with a bolt while charging. Gamepads on a cable report no charge, so nothing is shown for them.
 
-Version 0.1.0-beta.3, a day earlier, brought the Settings menu, weather, full-screen apps, tile animations, sizes that follow the screen and gamepad support in Jellyfin Desktop. The full list is in [CHANGELOG.md](https://github.com/murilosalviati/htpc-launcher/blob/main/CHANGELOG.md).
+Version 0.1.0-beta.3, released just before this one, brought the Settings menu, weather, full-screen apps, tile animations, sizes that follow the screen and gamepad support in Jellyfin Desktop. The full list is in [CHANGELOG.md](https://github.com/murilosalviati/htpc-launcher/blob/main/CHANGELOG.md).
 
 ## Install or update
 
