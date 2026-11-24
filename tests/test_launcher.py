@@ -242,6 +242,44 @@ def e1():
     check("the button becomes 'Concluir'", l.btn_settings.label.get_label() == "Concluir")
 
 
+@step(300)
+def b1():
+    l = L()
+    check("the Background button only shows in edit mode", l.btn_background.get_visible() and l.btn_background in l.rows[-1])
+    l.btn_background.grab_focus()
+    l.press()
+    swatches = [b for row in l.overlays[-1]["rows"] for b in row]
+    check("the background picker offers 9 colors", len(swatches) == 9)
+    check("focus starts on the current color", l.win.get_focus() is swatches[0] and l.theme == "midnight")
+    l.move(1, 0)
+    check("moving the focus previews the color", l.theme == "ocean")
+    l.back()
+    check("Ⓑ goes back to the saved color", l.theme == "midnight" and not l.overlays)
+
+
+@step(300)
+def b2():
+    l = L()
+    l.press()
+    l.move(0, 1)  # second row, first column: aurora
+    l.press()
+    saved = json.load(open(f"{cfgdir}/htpc-launcher/apps.json"))
+    check("Ⓐ keeps the color and saves it to apps.json", l.theme == "aurora" and saved.get("background") == "aurora" and not l.overlays)
+
+
+@step(500)
+def b3():
+    screenshot(L().win, "5b-background-aurora")
+    L().press()
+
+
+@step(500)
+def b4():
+    l = L()
+    screenshot(l.win, "5c-background-picker")
+    l.back()
+
+
 @step(500)
 def e2():
     l = L()
@@ -353,6 +391,7 @@ def e9():
     screenshot(l.win, "11-after-remove")
     l.back()
     check("Ⓑ leaves edit mode", not l.editing and l.add_tile is None and l.btn_settings.label.get_label() == "Editar apps")
+    check("the Background button hides again", not l.btn_background.get_visible())
 
 
 @step(200)

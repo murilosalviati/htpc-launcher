@@ -27,7 +27,7 @@ if [ -d "$DATA/icones-apps" ]; then
 fi
 rm -rf "$DATA/icones" "$DATA/edicao.py"
 
-cp "$HERE/launcher.py" "$HERE/editor.py" "$HERE/i18n.py" "$HERE/launcher.css" \
+cp "$HERE/launcher.py" "$HERE/editor.py" "$HERE/i18n.py" "$HERE/themes.py" "$HERE/launcher.css" \
    "$HERE/../common/htpc_config.py" "$DATA/"
 rm -rf "$DATA/icons"
 cp -r "$HERE/icons" "$DATA/"

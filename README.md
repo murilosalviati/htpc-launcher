@@ -20,6 +20,7 @@ A gamepad-driven home screen for a living-room PC running Ubuntu with GNOME on W
   - Pick the application from the list of installed apps, including Flatpaks.
   - Pick the icon: the app's own, or any image in `~/.local/share/htpc-launcher/app-icons/`.
   - The grid wraps onto more rows after 5 apps and reflows when you remove one.
+  - Change the background color: 9 dark themes (Midnight, Ocean, Forest, Aurora, Plum, Wine, Ember, Graphite, Black), previewed live as you move between them.
 - **Restart and shut down** buttons in the footer, both with a confirmation that defaults to Cancel.
 - **English and Brazilian Portuguese** on-screen text (`"language": "en"` or `"pt-BR"` in `apps.json`).
 - **Steam opens in Big Picture.** It starts with `-gamepadui`, and if it is already running in desktop mode, the launcher switches it to Big Picture when you select it.
@@ -34,7 +35,7 @@ On Wayland, a regular program cannot raise another app's window or find out whic
 |---|---|
 | `gnome-extension/` | The `htpc-launcher@htpc` GNOME Shell extension. It runs inside GNOME and exposes window control on the session bus (`org.htpc.Launcher`): list windows, raise or close an app's windows, show the launcher. |
 | `controller/` | A systemd user service that reads the gamepads with evdev and handles the guide button and the close combo. |
-| `launcher/` | The home screen itself: Python and GTK 4 (`launcher.py`), with edit mode in `editor.py` and the on-screen text in `i18n.py`. |
+| `launcher/` | The home screen itself: Python and GTK 4 (`launcher.py`), with edit mode in `editor.py`, the on-screen text in `i18n.py` and the background colors in `themes.py`. |
 | `common/` | `htpc_config.py`, the `apps.json` reader and writer shared by the launcher and the service. |
 | `config/apps.json` | The example configuration, installed to `~/.config/htpc-launcher/apps.json`. |
 | `tests/` | Tests that run against a fake GNOME extension and a fake media player. |
@@ -100,7 +101,7 @@ You can edit apps from the launcher's edit mode, or by hand:
 | `icon` | A theme icon name or an image path. Without it, the launcher uses the icon the app installed. |
 | `desktop` | The `.desktop` file to take the icon from, when it differs from `id`. |
 
-At the top level, `language` sets the on-screen text (`en` or `pt-BR`), and `launcher.launch` is the command the service uses to start the launcher if it is not running. `launcher/install.sh` fills it in.
+At the top level, `language` sets the on-screen text (`en` or `pt-BR`), `background` sets the background color (`midnight`, `ocean`, `forest`, `aurora`, `plum`, `wine`, `ember`, `graphite` or `black`; see `launcher/themes.py`), and `launcher.launch` is the command the service uses to start the launcher if it is not running. `launcher/install.sh` fills it in.
 
 Older versions of this project used Portuguese field names (`nome`, `abrir`...). They are converted automatically the first time the launcher starts, and the on-screen text stays in Portuguese for those installs.
 

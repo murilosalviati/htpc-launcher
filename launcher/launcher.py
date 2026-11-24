@@ -52,6 +52,7 @@ sys.path.insert(1, str(HERE.parent / "common"))
 import htpc_config  # noqa: E402
 from editor import EditorMixin  # noqa: E402
 from i18n import Translator  # noqa: E402
+import themes  # noqa: E402
 
 CSS = HERE / "launcher.css"
 ICONS = HERE / "icons"
@@ -356,6 +357,12 @@ class Launcher(EditorMixin):
         self.t = Translator(self.cfg.get("language"))
         self.bridge = Bridge()
 
+        # Background color: its own CSS provider, above launcher.css, so it can change live.
+        self.theme_provider = Gtk.CssProvider()
+        Gtk.StyleContext.add_provider_for_display(
+            Gdk.Display.get_default(), self.theme_provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION + 1)
+        self.apply_theme(self.cfg.get("background", themes.DEFAULT_THEME))
+
         theme = Gtk.IconTheme.get_for_display(Gdk.Display.get_default())
         for base in FLATPAK_EXPORTS:
             if (base / "icons").is_dir():
@@ -409,7 +416,19 @@ class Launcher(EditorMixin):
 
     @property
     def rows(self):
-        return self.tile_rows + [[self.btn_settings, self.btn_restart, self.btn_power]]
+        footer = [self.btn_background] if self.editing else []
+        return self.tile_rows + [footer + [self.btn_settings, self.btn_restart, self.btn_power]]
+
+    def apply_theme(self, theme_id):
+        """Switch the background color right away (does not save it)."""
+        if theme_id not in themes.THEMES:
+            theme_id = themes.DEFAULT_THEME
+        self.theme = theme_id
+        css = themes.css(theme_id)
+        if hasattr(self.theme_provider, "load_from_string"):  # GTK 4.12+
+            self.theme_provider.load_from_string(css)
+        else:
+            self.theme_provider.load_from_data(css, -1)
 
     # --- app grid ------------------------------------------------------------
 
@@ -494,12 +513,15 @@ class Launcher(EditorMixin):
         self.hint.add_css_class("hint")
         bar.append(self.hint)
 
+        # Only shown in edit mode, next to "Done".
+        self.btn_background = self._footer_button("background.svg", self.t("background"), self.choose_background)
+        self.btn_background.set_visible(False)
         self.btn_settings = self._footer_button("settings.svg", self.t("edit_apps"), self.toggle_edit_mode)
         self.btn_restart = self._footer_button("restart.svg", self.t("restart"),
                                                lambda: self.confirm_power("restart"))
         self.btn_power = self._footer_button("power.svg", self.t("power_off"),
                                              lambda: self.confirm_power("power_off"))
-        for b in (self.btn_settings, self.btn_restart, self.btn_power):
+        for b in (self.btn_background, self.btn_settings, self.btn_restart, self.btn_power):
             bar.append(b)
         return bar
 
@@ -710,6 +732,9 @@ class Launcher(EditorMixin):
 
     def back(self):
         if self.overlays:
+            cancel = self.overlays[-1].get("cancel")
+            if cancel:
+                cancel()
             self.pop_overlay()
         elif self.editing:
             self.toggle_edit_mode()

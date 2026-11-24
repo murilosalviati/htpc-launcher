@@ -21,6 +21,8 @@ through the Launcher class itself (app_icon, desktop_info, app_icons_dir...).
 import os
 from pathlib import Path
 
+import themes
+
 import gi
 
 gi.require_version("Gtk", "4.0")
@@ -48,6 +50,7 @@ class EditorMixin:
     def toggle_edit_mode(self):
         self.editing = not self.editing
         self.hint.set_label(self.t("hint_edit") if self.editing else self.t("hint_normal"))
+        self.btn_background.set_visible(self.editing)
         if self.editing:
             self.hint.add_css_class("editing")
             self.btn_settings.label.set_label(self.t("done"))
@@ -418,3 +421,47 @@ class EditorMixin:
             draft.pop("icon", None)
         self.pop_overlay()
         self._refresh_editor()
+
+    # --- background color ------------------------------------------------------------------
+
+    def choose_background(self):
+        """Theme picker. Moving the focus previews the color; Ⓐ keeps it, Ⓑ goes back to the saved one."""
+        saved = self.theme
+        box = self.dialog_box(self.t("choose_background"))
+        grid = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=18, halign=Gtk.Align.CENTER)
+        rows, focus, row = [], None, []
+        row_box = None
+        for i, theme_id in enumerate(themes.THEMES):
+            if i % 3 == 0:
+                row_box = Gtk.Box(spacing=18, halign=Gtk.Align.CENTER)
+                grid.append(row_box)
+                row = []
+                rows.append(row)
+            b = Gtk.Button()
+            b.add_css_class("swatch")
+            b.set_focus_on_click(False)
+            inner = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+            sample = Gtk.Box()
+            sample.add_css_class("swatch-sample")
+            sample.add_css_class(f"swatch-{theme_id}")
+            sample.set_size_request(220, 110)
+            name = Gtk.Label(label=self.t(f"theme_{theme_id}"))
+            inner.append(sample)
+            inner.append(name)
+            b.set_child(inner)
+            b.connect("clicked", lambda _b, tid=theme_id: self._background_chosen(tid))
+            preview = Gtk.EventControllerFocus()
+            preview.connect("enter", lambda _c, tid=theme_id: self.apply_theme(tid))
+            b.add_controller(preview)
+            if theme_id == saved:
+                focus = b
+            row_box.append(b)
+            row.append(b)
+        box.append(grid)
+        self.push_overlay(box, rows, focus=focus, cancel=lambda: self.apply_theme(saved))
+
+    def _background_chosen(self, theme_id):
+        self.apply_theme(theme_id)
+        self.cfg["background"] = theme_id
+        self.save_config()
+        self.pop_overlay()
