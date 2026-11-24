@@ -359,26 +359,29 @@ class Launcher:
     # --- topo ---------------------------------------------------------------
 
     def _barra_superior(self):
-        barra = Gtk.Box(spacing=28, halign=Gtk.Align.END)
+        """Estilo console: relógio no canto esquerdo, internet sozinha no direito."""
+        barra = Gtk.Box()
         barra.add_css_class("barra")
 
-        self.rede_ponto = Gtk.Label(label="●")
-        self.rede_texto = Gtk.Label(label="")
-        rede = Gtk.Box(spacing=10, valign=Gtk.Align.CENTER)
-        rede.add_css_class("rede")
-        rede.append(self.rede_ponto)
-        rede.append(self.rede_texto)
-
-        relogio = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, valign=Gtk.Align.CENTER)
-        self.hora = Gtk.Label(label="", xalign=1)
+        relogio = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, valign=Gtk.Align.START, hexpand=True)
+        self.hora = Gtk.Label(label="", xalign=0)
         self.hora.add_css_class("hora")
-        self.data = Gtk.Label(label="", xalign=1)
+        self.data = Gtk.Label(label="", xalign=0)
         self.data.add_css_class("data")
         relogio.append(self.hora)
         relogio.append(self.data)
 
-        for w in (rede, relogio):
-            barra.append(w)
+        # Conectado: só o ícone. Texto só quando há problema.
+        rede = Gtk.Box(spacing=10, valign=Gtk.Align.START)
+        rede.add_css_class("rede")
+        self.rede_texto = Gtk.Label(label="")
+        self.rede_icone = Gtk.Image()
+        self.rede_icone.set_pixel_size(30)
+        rede.append(self.rede_texto)
+        rede.append(self.rede_icone)
+
+        barra.append(relogio)
+        barra.append(rede)
         return barra
 
     # --- rodapé -------------------------------------------------------------------
@@ -426,15 +429,19 @@ class Launcher:
     def _atualizar_rede(self):
         c = self.rede.get_connectivity()
         if not self.rede.get_network_available() or c == Gio.NetworkConnectivity.LOCAL:
-            texto, classe = "Sem internet", "off"
+            texto, icone, classe = "sem internet", "wifi-off.svg", "off"
         elif c == Gio.NetworkConnectivity.FULL:
-            texto, classe = "Internet", "on"
+            texto, icone, classe = "", "wifi.svg", "on"
         else:  # LIMITED ou PORTAL
-            texto, classe = "Internet limitada", "meio"
+            texto, icone, classe = "internet limitada", "wifi-limitado.svg", "meio"
+        self.rede_icone.set_from_file(str(ICONES / icone))
+        self.rede_icone.set_pixel_size(30)
         self.rede_texto.set_label(texto)
+        self.rede_texto.set_visible(bool(texto))
         for cl in ("on", "off", "meio"):
-            self.rede_ponto.remove_css_class(cl)
-        self.rede_ponto.add_css_class(classe)
+            self.rede_texto.remove_css_class(cl)
+        self.rede_texto.add_css_class(classe)
+        self.estado_rede = classe
 
     def _a_cada_3s(self):
         if self.win.is_active():

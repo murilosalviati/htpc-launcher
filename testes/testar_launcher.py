@@ -134,6 +134,32 @@ def p7():
     confere("Steam aberto: traz a janela 'Steam', não a 'Friends List'", falsos.estado.get("ativada") == "Steam")
     confere("Steam aberto não é aberto de novo", "com.valvesoftware.Steam" not in l.abrindo)
 
+@passo(300)
+def p8():
+    l = L()
+    from gi.repository import Gio
+    class Rede:
+        def __init__(self, ok, c): self.ok, self.c = ok, c
+        def get_network_available(self): return self.ok
+        def get_connectivity(self): return self.c
+    real = l.rede
+    l.rede = Rede(True, Gio.NetworkConnectivity.FULL); l._atualizar_rede()
+    confere("conectado: só o ícone, sem texto", l.estado_rede == "on" and not l.rede_texto.get_visible())
+    l.rede = Rede(True, Gio.NetworkConnectivity.LIMITED); l._atualizar_rede()
+    confere("internet limitada mostra texto", l.estado_rede == "meio" and l.rede_texto.get_label() == "internet limitada")
+    l.rede = Rede(False, Gio.NetworkConnectivity.LOCAL); l._atualizar_rede()
+    confere("sem internet mostra texto", l.estado_rede == "off" and l.rede_texto.get_visible())
+    estado["rede_real"] = real
+
+@passo(500)
+def p9():
+    capturar(L().win, "5-sem-internet")
+    L().rede = estado["rede_real"]; L()._atualizar_rede()
+
+@passo(500)
+def p10():
+    capturar(L().win, "6-conectado")
+
 @passo(200)
 def fim():
     L().win.get_application().quit()
