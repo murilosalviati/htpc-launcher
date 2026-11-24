@@ -39,7 +39,7 @@ def run(backend, poll_timeout=2.0):
     if not gamepads.available():
         raise SystemExit("This backend cannot read gamepads here (is python3-evdev installed?)")
     handler = GamepadShortcuts(Shortcuts(backend))
-    notifier = Notifier(backend)
+    notifier = Notifier(backend, gamepads)
     while True:
         for event in gamepads.poll(poll_timeout):
             if event.kind == "disconnected":

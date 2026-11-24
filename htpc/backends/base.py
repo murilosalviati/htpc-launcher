@@ -212,7 +212,8 @@ class Backend(ABC):
 
     @abstractmethod
     def gamepads(self):
-        """A Gamepads reader."""
+        """The Gamepads reader: always the same one per backend, since only poll()
+        keeps its list of gamepads up to date."""
 
     @abstractmethod
     def apps(self):

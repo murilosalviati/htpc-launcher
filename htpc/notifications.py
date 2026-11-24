@@ -41,8 +41,9 @@ def _battery_stage(b):
 
 
 class Notifier:
-    def __init__(self, backend, clock=time.monotonic, settings=None):
-        self.gamepads = backend.gamepads()
+    def __init__(self, backend, gamepads=None, clock=time.monotonic, settings=None):
+        # The reader the service polls: a reader nobody polls never sees a gamepad.
+        self.gamepads = gamepads or backend.gamepads()
         self.system = backend.system()
         self.backend = backend
         self._windows = None

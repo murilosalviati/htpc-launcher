@@ -26,8 +26,12 @@ class LinuxBackend(Backend):
         return MprisMedia()
 
     def gamepads(self):
-        from .gamepads import EvdevGamepads
-        return EvdevGamepads()
+        # One reader per process: its list of gamepads is only kept up to date by
+        # poll(), so everyone (shortcuts, notices, the launcher) must share it.
+        if getattr(self, "_gamepads", None) is None:
+            from .gamepads import EvdevGamepads
+            self._gamepads = EvdevGamepads()
+        return self._gamepads
 
     def apps(self):
         from .apps import DesktopCatalog

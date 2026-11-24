@@ -248,6 +248,11 @@ from htpc.backends.base import Battery  # noqa: E402
 check("battery: levels without a percentage still map to bars",
       [Battery("x", level=l).bars for l in ("full", "high", "normal", "low", "critical")] == [4, 3, 2, 1, 0])
 
+# 9b2b. one gamepad reader per backend: its list only updates through poll()
+from htpc.backends.linux import LinuxBackend  # noqa: E402
+lb = LinuxBackend()
+check("the Linux backend hands out the same gamepad reader every time", lb.gamepads() is lb.gamepads())
+
 # 9b3. on-screen notices: gamepads, batteries and internet
 from htpc import notifications as nt  # noqa: E402
 
