@@ -9,12 +9,17 @@ A gamepad-driven home screen for a living-room PC running Ubuntu with GNOME on W
 
 *The app icons in this screenshot are placeholders. On a real install the launcher shows each app's own icon, or images you choose.*
 
+![Settings menu](docs/settings.png)
+
+What changed in each version is in [CHANGELOG.md](CHANGELOG.md).
+
 ## Features
 
 - **Full-screen home screen** with one tile per app. Across the top:
   - on the left, the current weather (icon, temperature and place), once you set a location;
   - in the middle, the clock and date;
   - on the right, a gamepad icon that lights up when a gamepad is connected (USB, Bluetooth or wireless dongle) and shows how many there are when there is more than one, and the network icon: a cable symbol on a wired connection, Wi-Fi bars on Wi-Fi. It is just an icon while you are online and only shows text when the connection is limited or down.
+- **Made for a TV across the room:** the selected tile lifts and glows, pushing it plays a short "button pressed" animation, and a tile pulses green while its app is opening. The clock, weather, status icons, hints and footer grow with the screen (they keep the same share of a 1080p, 1440p or 4K screen), and every icon is drawn from vectors, so it stays sharp at any size.
 - **Apps open in full screen** (through the GNOME extension), except where an app's own full-screen mode is better, like Steam's Big Picture.
 - **Resume, never duplicate:** selecting an app that is already running brings its existing window back instead of starting a second copy.
 - **Guide button** (Xbox / Home / PS): pauses the video that is playing, if any, and returns to the launcher. The app keeps running behind it.
@@ -41,11 +46,12 @@ On Wayland, a regular program cannot raise another app's window or find out whic
 
 | Folder | What it is |
 |---|---|
-| `gnome-extension/` | The `htpc-launcher@htpc` GNOME Shell extension. It runs inside GNOME and exposes window control on the session bus (`org.htpc.Launcher`): list windows, raise or close an app's windows, show the launcher. |
+| `gnome-extension/` | The `htpc-launcher@htpc` GNOME Shell extension. It runs inside GNOME and exposes window control on the session bus (`org.htpc.Launcher`): list windows, raise, close or put an app's windows in full screen, show the launcher. |
 | `controller/` | The background service that reads the gamepads and runs the shortcuts (a systemd user service on Linux). |
 | `launcher/` | The home screen UI in GTK 4 (`launcher.py`), with the settings menu in `settings.py` and edit mode in `editor.py`. It only reaches the OS through the backend. |
 | `htpc/` | The shared Python package: `apps.json` handling (`config.py`), file locations per OS (`paths.py`), the guide and close-combo rules (`shortcuts.py`), on-screen text (`i18n.py`), background colors (`themes.py`) and the weather lookup (`weather.py`). |
-| `htpc/backends/` | Everything that talks to the operating system, behind the interface in `base.py`: window control, media pausing, gamepad input, the installed-apps list, and starting, force-closing, restart and shut down. `linux/` implements it; `windows/` is a documented placeholder. |
+| `htpc/backends/` | Everything that talks to the operating system, behind the interface in `base.py`: window control, media pausing, gamepad input, the installed-apps list, the connection type, and starting, force-closing, restart and shut down. `linux/` implements it; `windows/` is a documented placeholder. |
+| `extras/` | Files for other apps, such as a gamepad map for Jellyfin Desktop. |
 | `config/apps.json` | The example configuration, installed to `~/.config/htpc-launcher/apps.json`. |
 | `tests/` | Tests that run against a fake GNOME extension and a fake media player. |
 
@@ -125,7 +131,17 @@ journalctl --user -fu htpc-controller             # what the gamepad service is 
 journalctl --user -f -o cat /usr/bin/gnome-shell  # errors from the extension
 ```
 
-Over SSH, first export `XDG_RUNTIME_DIR=/run/user/$(id -u)`, `DBUS_SESSION_BUS_ADDRESS=unix:path=$XDG_RUNTIME_DIR/bus` and `WAYLAND_DISPLAY=wayland-0` so the commands reach the graphical session.
+Over SSH, first export `XDG_RUNTIME_DIR=/run/user/$(id -u)`, `DBUS_SESSION_BUS_ADDRESS=unix:path=$XDG_RUNTIME_DIR/bus` and `WAYLAND_DISPLAY=wayland-0` so the commands reach the graphical session. To restart the launcher from SSH, start it through your systemd user manager so it gets the session's `DISPLAY` and `XAUTHORITY` (X apps like Steam need them):
+
+```bash
+pkill -f "[h]tpc-launcher/launcher.py"; systemd-run --user --collect -p KillMode=process gtk-launch htpc-launcher
+```
+
+**Apps do not open in full screen:** the extension changed in 0.1.0-beta.3; GNOME only loads the new version after you log out and back in (or restart the machine).
+
+**A gamepad does nothing in a Flatpak app:** many Flatpaks cannot see input devices. Give the app access with `flatpak override --user --device=input <app id>` (`--device=all` on Flatpak older than 1.15.6).
+
+**Everything feels slow on a 4K TV:** many integrated GPUs and HDMI ports only drive 4K at 30 Hz, and big-screen interfaces like Steam's Big Picture feel sluggish at 30 frames per second. A 60 Hz mode such as 2560×1440 or 1920×1080 is much smoother, and the TV scales it up; the launcher adapts to the new size by itself. Check the modes your TV offers in GNOME's Display settings.
 
 ## Porting to another operating system
 
