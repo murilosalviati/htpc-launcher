@@ -27,6 +27,7 @@ What changed in each version is in [CHANGELOG.md](CHANGELOG.md).
 - **Resume, never duplicate:** selecting an app that is already running brings its existing window back instead of starting a second copy.
 - **Home + LB + RB** (PlayStation: PS + L1 + R1; Nintendo: Home + L + R): pauses the video that is playing, if any, and returns to the launcher. The app keeps running behind it. The guide button alone is left to the apps, so Steam can open its menu with it.
 - **Start + Select + LB + RB:** closes the focused app and returns to the launcher. For game streaming apps like Moonlight, the first press ends the stream (Moonlight's own shortcut) and a second press within 15 seconds closes the app.
+- **Start + Select + ↑ / ↓:** volume up / down, 5 points at a time (hold the arrow to keep going), with GNOME's volume indicator on screen over any app. Uses PipeWire (`wpctl`) or PulseAudio (`pactl`).
 - **Both shortcuts can be changed** in Settings → Gamepads: pick one and hold the new buttons together for 2 seconds.
 - **Pair Bluetooth gamepads** from Settings → Gamepads → Pair a gamepad: put the gamepad in pairing mode, pick it from the list, done. It is trusted, so next time it reconnects by itself. Paired gamepads can be forgotten from the same list. Needs a Bluetooth adapter (BlueZ); without one the screen says how to use a cable or the gamepad's own USB receiver instead.
 - **Settings** (the gear in the footer): apps, background color, weather location, temperature unit (°C or °F) and language, all from the couch. Settings also has a button to close the launcher; the "back to the launcher" shortcut opens it again.
@@ -142,7 +143,7 @@ Over SSH, first export `XDG_RUNTIME_DIR=/run/user/$(id -u)`, `DBUS_SESSION_BUS_A
 pkill -f "[h]tpc-launcher/launcher.py"; systemd-run --user --collect -p KillMode=process gtk-launch htpc-launcher
 ```
 
-**Apps do not open in full screen, the pointer does not hide or no notices show up:** after updating the extension (it changed in 0.1.0-beta.3 and again after 0.1.0-beta.4), GNOME only loads the new version after you log out and back in (or restart the machine).
+**Apps do not open in full screen, the pointer does not hide, no notices or no volume indicator show up:** after updating the extension (it changed in 0.1.0-beta.3, and twice after 0.1.0-beta.4: version 6 adds the volume indicator), GNOME only loads the new version after you log out and back in (or restart the machine).
 
 **A gamepad does nothing in a Flatpak app:** many Flatpaks cannot see input devices. Give the app access with `flatpak override --user --device=input <app id>` (`--device=all` on Flatpak older than 1.15.6).
 

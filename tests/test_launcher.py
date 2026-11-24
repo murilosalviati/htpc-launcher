@@ -882,7 +882,7 @@ def sc1():
     check("Settings has a gamepad shortcuts row", l.settings_fields["shortcuts"].value.get_label() == "Home + LB + RB")
     l.press()
     f = l.shortcut_fields
-    check("it opens the shortcuts menu", list(f) == ["pairing", "home", "close", "reset"]
+    check("it opens the shortcuts menu", list(f) == ["pairing", "home", "close", "volume", "reset"]
           and f["close"].value.get_label() == "Start + Select + LB + RB")
     f["home"].grab_focus()
     l.press()
@@ -933,6 +933,23 @@ def sc4():
     check("restore the defaults", "shortcuts" not in l.cfg and "Home + LB + RB" in l.hint.get_label())
     while l.overlays:
         l.pop_overlay()
+    l.tiles[0].grab_focus()
+
+
+@step(300)
+def vol1():
+    l = L()
+    from htpc.backends.base import GamepadEvent
+    nav = l.navigator
+    moved = []
+    real_move = nav.move
+    nav.move = lambda dx, dy: moved.append((dx, dy))
+    for name, value in (("start", 1), ("select", 1), ("up", 1), ("up", 0), ("down", 1), ("down", 0),
+                        ("start", 0), ("select", 0), ("down", 1), ("down", 0)):
+        nav.handle(GamepadEvent("pad", "button", name, value))
+    nav.move = real_move
+    check("Start + Select + ↑/↓ (volume) does not move the selection; ↓ alone still does",
+          moved == [(0, 1)])
     l.tiles[0].grab_focus()
 
 

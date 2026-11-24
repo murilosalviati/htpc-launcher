@@ -4,6 +4,7 @@ The project is in beta: every `0.x` version is a pre-release, and the configurat
 
 ## Unreleased
 
+- **Volume from the gamepad: Start + Select + ↑ / ↓**, 5 points per press, repeating while the arrow is held, up to 100%; raising unmutes. GNOME's own volume indicator shows the level over any app (GNOME extension version 6: log out and back in after updating). The launcher ignores the arrows while Start + Select are held, and a custom shortcut can't be just Start + Select.
 - **Back to the launcher is now Home + LB + RB** (PS + L1 + R1, Home + L + R). The guide button alone is left to the apps, so Steam's menu works again instead of throwing you back to the launcher.
 - **Pair Bluetooth gamepads from Settings → Gamepads → Pair a gamepad.** The launcher powers the adapter on and searches (BlueZ over D-Bus, no extra packages); gamepads in pairing mode show up in a list (other devices are left out), and picking one pairs, trusts and connects it, so it reconnects by itself later. Paired ones can be forgotten from the same list. Without an adapter the screen explains the alternatives (cable, the gamepad's own USB receiver).
 - **Settings → Gamepads:** change the "back to the launcher" and "close the app" combos by holding the new buttons for 2 seconds (hold B alone to cancel). A combo needs two buttons or more, and the two combos can't contain each other. The controller service picks up changes right away; the footer hints show the current combos.

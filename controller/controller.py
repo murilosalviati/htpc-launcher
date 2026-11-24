@@ -47,7 +47,7 @@ def run(backend, poll_timeout=2.0):
     tv = TvGate(home_assistant.settings, home_assistant.wake)
     tv.start()
     while True:
-        for event in gamepads.poll(poll_timeout):
+        for event in gamepads.poll(handler.timeout(poll_timeout)):
             if event.kind == "disconnected":
                 handler.forget(event.device)
             elif tv.blocks(event):
@@ -55,6 +55,7 @@ def run(backend, poll_timeout=2.0):
             else:
                 handler.handle(event)
                 home_assistant.button(event)
+        handler.tick()   # holding a volume combo keeps changing it
         for job in (notifier.tick, home_assistant.tick):
             try:
                 job()

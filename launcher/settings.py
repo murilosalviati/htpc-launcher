@@ -283,6 +283,9 @@ class SettingsMixin:
             "pairing": self._field(self.t("settings_pairing"), self.open_pairing, title_width=300),
             "home": self._field(self.t("shortcut_home"), lambda: self.record_shortcut("home"), title_width=300),
             "close": self._field(self.t("shortcut_close"), lambda: self.record_shortcut("close"), title_width=300),
+            "volume": self._field(self.t("shortcut_volume"),
+                                  lambda: self._message(self.t("shortcut_volume"), self.t("shortcut_volume_text")),
+                                  title_width=300),
             "reset": self._field(self.t("shortcuts_reset"), self._reset_shortcuts, title_width=300),
         }
         for w in f.values():
@@ -302,6 +305,7 @@ class SettingsMixin:
             f["pairing"].value.set_label(self.t("pairing_value"))
             f["home"].value.set_label(shortcuts.combo_label(current["home"]))
             f["close"].value.set_label(shortcuts.combo_label(current["close"]))
+            f["volume"].value.set_label(self.t("shortcut_volume_value"))
             d = shortcuts.DEFAULT_COMBOS
             f["reset"].value.set_label(self.t("shortcuts_reset_value", home=shortcuts.combo_label(d["home"]),
                                               close=shortcuts.combo_label(d["close"])))
@@ -394,6 +398,9 @@ class SettingsMixin:
         problem = shortcuts.combo_problem(combo, other)
         if problem == "bad_button":
             self._message(self.t("combo_bad_button"))
+            return
+        if problem == "volume":
+            self._message(self.t("combo_volume", combo=shortcuts.combo_label(combo)))
             return
         if problem:
             self._message(self.t("combo_overlap", combo=shortcuts.combo_label(combo & set(shortcuts.COMBO_BUTTONS)),

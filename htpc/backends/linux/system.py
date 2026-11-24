@@ -6,6 +6,8 @@ Also which kind of connection is in use, asked to NetworkManager."""
 import glob
 import logging
 import os
+import re
+import shutil
 import signal
 import subprocess
 import time
@@ -90,6 +92,39 @@ class LinuxSystem(System):
             log.info("SIGKILL to pid %d", pid)
         except ProcessLookupError:
             pass
+
+    # --- volume: PipeWire (wpctl), or PulseAudio (pactl) ------------------------------
+
+    def _run(self, command):
+        return subprocess.run(command, capture_output=True, text=True, timeout=3, check=True).stdout
+
+    def change_volume(self, step):
+        if shutil.which("wpctl"):
+            sink = "@DEFAULT_AUDIO_SINK@"
+            if step > 0:
+                self._run(["wpctl", "set-mute", sink, "0"])
+            self._run(["wpctl", "set-volume", "-l", "1.0", sink, f"{abs(step):.2f}{'+' if step > 0 else '-'}"])
+            out = self._run(["wpctl", "get-volume", sink])   # "Volume: 0.45" or "Volume: 0.45 [MUTED]"
+            match = re.search(r"([0-9.]+)", out)
+            return (min(1.0, float(match.group(1))) if match else 0.0), "MUTED" in out
+        if shutil.which("pactl"):
+            sink = "@DEFAULT_SINK@"
+            if step > 0:
+                self._run(["pactl", "set-sink-mute", sink, "0"])
+                current = self._pactl_level(sink)
+                points = min(100, round(current * 100 + step * 100))
+                self._run(["pactl", "set-sink-volume", sink, f"{points}%"])
+            else:
+                self._run(["pactl", "set-sink-volume", sink, f"-{round(abs(step) * 100)}%"])
+            muted = "yes" in self._run(["pactl", "get-sink-mute", sink])
+            return self._pactl_level(sink), muted
+        log.warning("no wpctl or pactl: can't change the volume")
+        return None
+
+    def _pactl_level(self, sink):
+        out = self._run(["pactl", "get-sink-volume", sink])   # "... front-left: 29491 /  45% / ..."
+        match = re.search(r"(\d+)%", out)
+        return int(match.group(1)) / 100 if match else 0.0
 
     def reboot(self):
         self.spawn(["systemctl", "reboot"])

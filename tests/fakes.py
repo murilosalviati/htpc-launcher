@@ -56,6 +56,9 @@ def shell():
                 state["focus"] = target["appId"]
                 state["activated"] = target["title"]
             r = new_method_return(m, "b", (target is not None,))
+        elif name == "ShowOsd":
+            state.setdefault("osd", []).append((args[0], round(args[1], 2)))
+            r = new_method_return(m, "b", (True,))
         elif name == "HidePointer":
             state["pointer_hidden"] = state.get("pointer_hidden", 0) + 1
             r = new_method_return(m, "b", (True,))

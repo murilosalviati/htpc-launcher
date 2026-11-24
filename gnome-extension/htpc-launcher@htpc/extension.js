@@ -68,6 +68,11 @@ const IFACE_XML = `
       <arg type="u" direction="in" name="seconds"/>
       <arg type="b" direction="out" name="shown"/>
     </method>
+    <method name="ShowOsd">
+      <arg type="s" direction="in" name="iconName"/>
+      <arg type="d" direction="in" name="level"/>
+      <arg type="b" direction="out" name="shown"/>
+    </method>
     <method name="HidePointer">
       <arg type="b" direction="out" name="hidden"/>
     </method>
@@ -329,6 +334,17 @@ class LauncherBridge {
     // used) until the mouse moves. GNOME 49 removed set_pointer_visible; its
     // replacement, inhibit_cursor_visibility, does not undo itself when the
     // mouse moves, so we watch the pointer position and undo it ourselves.
+    // GNOME's own level indicator (the one the volume keys show), on every monitor.
+    ShowOsd(iconName, level) {
+        const icon = Gio.ThemedIcon.new(iconName);
+        const osd = Main.osdWindowManager;
+        if (osd.showAll)
+            osd.showAll(icon, null, level, 1);
+        else
+            osd.show(-1, icon, null, level, 1);
+        return true;
+    }
+
     HidePointer() {
         const tracker = global.backend?.get_cursor_tracker?.() ??
             Meta.CursorTracker.get_for_display?.(global.display);

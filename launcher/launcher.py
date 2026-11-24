@@ -106,6 +106,7 @@ class Navigator:
         self.gamepads = gamepads
         self.blocked = blocked  # True while the TV is off: input is ignored (it only wakes the TV)
         self.capture = None     # set while Settings records a shortcut: gets every button event
+        self.held = {}          # device -> buttons held (Start + Select + ↑/↓ is the volume)
         self.active, self.move, self.press, self.back = active, move, press, back
         self.other_button = other_button  # called with "x" or "y"
         self.stick = {}         # (device, axis) -> -1 / 0 / 1
@@ -125,6 +126,13 @@ class Navigator:
         if self.capture is not None and ev.kind in ("button", "disconnected"):
             self.capture(ev)   # recording a new shortcut: buttons go there only
             return
+        if ev.kind == "button":
+            held = self.held.setdefault(ev.device, set())
+            (held.add if ev.value else held.discard)(ev.name)
+            if ev.value and {"start", "select"} <= held:
+                return   # a combo in progress (volume, close): the controller service handles it
+        elif ev.kind == "disconnected":
+            self.held.pop(ev.device, None)
         if home_assistant.is_press(ev, self.DEAD_ZONE) and self.blocked():
             return
         if ev.kind == "button":

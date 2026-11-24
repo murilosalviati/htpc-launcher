@@ -225,6 +225,73 @@ press2(*COMBO)
 check("with a custom home combo, the old one does nothing and the new one works",
       fired == ["home", "close"])
 
+# 9a1d. volume: Start + Select + Up / Down, repeating while held
+vol = []
+vclock = [0.0]
+stub3 = SimpleNamespace(windows=SimpleNamespace(hide_pointer=lambda: None), guide=lambda: vol.append("home"),
+                        close=lambda: vol.append("close"), volume=lambda d: vol.append(d))
+gs3 = sc.GamepadShortcuts(stub3, settings=lambda: {}, clock=lambda: vclock[0])
+
+
+def ev3(b, v):
+    gs3.handle(GamepadEvent("p", "button", b, v))
+
+
+ev3("start", 1); ev3("select", 1); ev3("up", 1)
+check("Start + Select + Up raises the volume once", vol == [1])
+check("while held, the service polls quickly", gs3.timeout(2.0) <= sc.REPEAT_DELAY)
+vclock[0] += sc.REPEAT_DELAY + 0.01
+gs3.tick()
+vclock[0] += sc.REPEAT_EVERY + 0.01
+gs3.tick()
+check("holding it keeps raising", vol == [1, 1, 1])
+ev3("up", 0)
+vclock[0] += 1
+gs3.tick()
+check("releasing the arrow stops it", vol == [1, 1, 1] and gs3.timeout(2.0) == 2.0)
+ev3("down", 1); ev3("down", 0)
+check("Start + Select + Down lowers it", vol[-1] == -1)
+ev3("start", 0); ev3("select", 0)
+ev3("up", 1); ev3("up", 0)
+check("the arrow alone does nothing", vol[-1] == -1 and len(vol) == 4)
+check("a custom combo can't be just Start + Select (it would fire on the way to the volume)",
+      sc.combo_problem({"start", "select"}, {"guide", "l1", "r1"}) == "volume")
+
+# the Linux side: wpctl (a fake one on PATH), unmuted when raising
+fakebin = pathlib.Path(tempfile.mkdtemp())
+volfile = fakebin / "vol"
+volfile.write_text("0.50 muted")
+(fakebin / "wpctl").write_text("""#!/bin/sh
+read v m < "$(dirname "$0")/vol"
+case "$1" in
+  set-mute) echo "$v unmuted" > "$(dirname "$0")/vol" ;;
+  set-volume) python3 -c "import sys; v=float(sys.argv[1]); s=sys.argv[2]; d=float(s[:-1]); v=v+d if s.endswith('+') else v-d; print(f'{min(1.0, max(0.0, v)):.2f}', sys.argv[3])" "$v" "$5" "$m" > "$(dirname "$0")/vol" ;;
+  get-volume) if [ "$m" = muted ]; then echo "Volume: $v [MUTED]"; else echo "Volume: $v"; fi ;;
+esac
+""")
+(fakebin / "wpctl").chmod(0o755)
+old_path = os.environ["PATH"]
+os.environ["PATH"] = f"{fakebin}:{old_path}"
+from htpc.backends.linux.system import LinuxSystem  # noqa: E402
+lin = LinuxSystem()
+down = lin.change_volume(-0.05)
+up = lin.change_volume(0.05)
+for _ in range(15):
+    top = lin.change_volume(0.05)
+os.environ["PATH"] = old_path
+check("Linux: lowering keeps it muted, raising unmutes, and it stops at 100%",
+      down == (0.45, True) and up == (0.5, False) and top == (1.0, False))
+
+# the whole thing through the real Shortcuts: level on GNOME's indicator
+fakes.state.pop("osd", None)
+real = sc.Shortcuts(backend)
+real.system = SimpleNamespace(change_volume=lambda step: (0.3, False))
+real.volume(1)
+real.system = SimpleNamespace(change_volume=lambda step: (0.0, True))
+real.volume(-1)
+check("the volume level shows on GNOME's indicator, with the right icon",
+      fakes.state.get("osd") == [("audio-volume-low-symbolic", 0.3), ("audio-volume-muted-symbolic", 0.0)])
+
 # 9a1c. Bluetooth pairing through BlueZ (a fake org.bluez on the session bus)
 from htpc.backends.linux import bluetooth as lbt  # noqa: E402
 bt = lbt.BluezBluetooth(bus="SESSION")

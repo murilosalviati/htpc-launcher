@@ -111,6 +111,11 @@ class WindowControl(ABC):
         None if the OS side cannot do it."""
         return None
 
+    def show_osd(self, icon_name, level):
+        """The desktop's own on-screen level indicator (volume), level 0..1.
+        Returns True when shown; None/False when the desktop can't."""
+        return None
+
     def hide_pointer(self):
         """Hide the mouse pointer on the whole screen until the mouse moves again.
         True if hidden, None if the OS side cannot do it."""
@@ -191,6 +196,11 @@ class System(ABC):
     def connectivity(self):
         """Whether the internet works: "full", "limited" (no internet, captive
         portal...), "none" (not connected), or None when the OS cannot tell."""
+        return None
+
+    def change_volume(self, step):
+        """Raise (step > 0) or lower the output volume by step (0.05 = 5 points),
+        unmuting when raising. Returns (level 0..1, muted) or None if it can't."""
         return None
 
     def connection_kind(self):

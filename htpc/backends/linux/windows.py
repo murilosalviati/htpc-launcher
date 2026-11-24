@@ -72,6 +72,10 @@ class ExtensionWindowControl(WindowControl):
         # Extension v5 and later.
         return self._call("Notify", "sssu", (title, body, icon_path, int(seconds)))
 
+    def show_osd(self, icon_name, level):
+        # Extension v6 and later.
+        return self._call("ShowOsd", "sd", (icon_name, float(level)))
+
     def hide_pointer(self):
         # Extension v4 and later.
         return self._call("HidePointer")

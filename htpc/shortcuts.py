@@ -6,7 +6,9 @@
     has "pause_on_home", then shows the launcher. The app keeps running behind
     it. The guide button alone is left to the apps (Steam opens its menu with it).
   * Close combo (Start + Select + L1 + R1 by default): closes the focused app
-    and returns to the launcher. Apps with "close_on_second_press" (Moonlight) get the first
+    and returns to the launcher.
+  * Volume: Start + Select + Up / Down raise or lower the output volume by 5
+    points (holding it keeps going), with GNOME's volume indicator on screen. Apps with "close_on_second_press" (Moonlight) get the first
     press themselves (it ends the stream); a second press within 15 s closes them.
 
 The controller service feeds normalized gamepad events into GamepadShortcuts;
@@ -27,6 +29,11 @@ DEFAULT_COMBOS = {
 CLOSE_COMBO = DEFAULT_COMBOS["close"]
 # Buttons a combo may use (the d-pad is for moving around).
 COMBO_BUTTONS = ("guide", "start", "select", "l1", "r1", "a", "b", "x", "y")
+# Volume: fixed combos. A custom combo can't be just Start + Select (it would fire with these).
+VOLUME_COMBOS = {"up": frozenset({"start", "select", "up"}), "down": frozenset({"start", "select", "down"})}
+VOLUME_STEP = 0.05
+REPEAT_DELAY = 0.45     # holding the volume combo: first repeat after this
+REPEAT_EVERY = 0.12     # then this often
 # How they are written on screen, Xbox style (PlayStation: PS, Options, Share,
 # L1, R1, ✕ ○ □ △; Nintendo: Home, +, -, L, R).
 BUTTON_LABELS = {"guide": "Home", "start": "Start", "select": "Select", "l1": "LB", "r1": "RB",
@@ -49,6 +56,8 @@ def combo_problem(combo, other):
         return "bad_button"
     if set(combo) <= set(other) or set(other) <= set(combo):
         return "overlap"   # pressing one would also fire the other
+    if any(set(combo) <= v for v in VOLUME_COMBOS.values()):
+        return "volume"    # Start + Select would fire on the way to the volume combos
     return None
 
 
@@ -133,6 +142,32 @@ class Shortcuts:
         else:
             log.warning("launcher is not running and there is no command to start it")
 
+    def volume(self, direction):
+        """direction +1 or -1: one step, and the level on screen."""
+        try:
+            result = self.system.change_volume(direction * VOLUME_STEP)
+        except Exception as e:  # noqa: BLE001 - no audio server, wpctl failed...
+            log.warning("volume: %s", e)
+            return
+        if result is None:
+            return
+        level, muted = result
+        if muted or level <= 0:
+            icon = "audio-volume-muted-symbolic"
+        elif level < 0.34:
+            icon = "audio-volume-low-symbolic"
+        elif level < 0.67:
+            icon = "audio-volume-medium-symbolic"
+        else:
+            icon = "audio-volume-high-symbolic"
+        log.info("volume %s: %d%%%s", "up" if direction > 0 else "down", round(level * 100),
+                 " (muted)" if muted else "")
+        try:
+            if not self.windows.show_osd(icon, level):
+                self._windows = None   # older extension: no indicator, the volume changed anyway
+        except Exception as e:  # noqa: BLE001
+            log.debug("volume indicator: %s", e)
+
     def guide(self):
         if not self._ready():
             return
@@ -203,10 +238,12 @@ class GamepadShortcuts:
     """Tracks held buttons per gamepad and fires the shortcuts. Using the gamepad
     also hides the mouse pointer (it comes back when the mouse moves)."""
 
-    def __init__(self, shortcuts, settings=None):
+    def __init__(self, shortcuts, settings=None, clock=time.monotonic):
         self.shortcuts = shortcuts
         self.settings = settings or (lambda: config.load()[0])
+        self.clock = clock
         self.held = {}  # device -> set of button names
+        self.repeat = None  # (device, direction, combo, when) while a volume combo is held
         self.pointer_hidden_at = -POINTER_EVERY
 
     def _hide_pointer(self):
@@ -227,6 +264,12 @@ class GamepadShortcuts:
             held.add(event.name)
             if len(held) < 2:
                 return   # every combo has at least two buttons: no need to read the config
+            for name, combo in VOLUME_COMBOS.items():
+                if event.name in combo and combo <= held:
+                    direction = 1 if name == "up" else -1
+                    self.shortcuts.volume(direction)
+                    self.repeat = (event.device, direction, combo, self.clock() + REPEAT_DELAY)
+                    return
             try:
                 current = combos(self.settings())
             except Exception as e:  # noqa: BLE001 - a broken apps.json: keep the defaults
@@ -238,6 +281,30 @@ class GamepadShortcuts:
                 self.shortcuts.close()
         else:
             held.discard(event.name)
+            if self.repeat and self.repeat[0] == event.device and event.name in self.repeat[2]:
+                self.repeat = None
 
     def forget(self, device):
         self.held.pop(device, None)
+        if self.repeat and self.repeat[0] == device:
+            self.repeat = None
+
+    def timeout(self, idle):
+        """How long the caller may wait for events: short while a volume combo repeats."""
+        if self.repeat is None:
+            return idle
+        return max(0.0, min(idle, self.repeat[3] - self.clock()))
+
+    def tick(self):
+        """Repeat the volume step while its combo is still held."""
+        if self.repeat is None:
+            return
+        device, direction, combo, when = self.repeat
+        if not combo <= self.held.get(device, set()):
+            self.repeat = None
+            return
+        now = self.clock()
+        if now >= when:
+            self.shortcuts.volume(direction)
+            nxt = when + REPEAT_EVERY
+            self.repeat = (device, direction, combo, nxt if nxt > now else now + REPEAT_EVERY)
