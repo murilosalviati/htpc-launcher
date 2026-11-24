@@ -16,6 +16,7 @@ fi
 
 mkdir -p "$DADOS" "$CONFIG" "$HOME/.local/share/applications" "$HOME/.config/autostart"
 cp "$AQUI/launcher.py" "$AQUI/launcher.css" "$DADOS/"
+cp -r "$AQUI/icones" "$DADOS/"
 
 if [ ! -f "$CONFIG/apps.json" ]; then
     cp "$AQUI/../config/apps.json" "$CONFIG/"

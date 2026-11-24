@@ -33,14 +33,16 @@ window.htpc {
   color: #8f9bb3;
 }
 
+/* ---------- rodapé: dica + reiniciar / desligar ---------- */
+
 button.energia {
-  min-width: 92px;
-  min-height: 84px;
-  border-radius: 22px;
+  min-height: 40px;
+  padding: 4px 18px;
+  border-radius: 999px;
   background: rgba(255, 255, 255, 0.05);
-  border: 3px solid transparent;
+  border: 2px solid transparent;
   box-shadow: none;
-  color: #c9d2e3;
+  color: #aeb8cc;
   outline: none;
   transition: all 120ms ease-out;
 }
@@ -50,7 +52,7 @@ button.energia:focus {
   color: #ffffff;
 }
 .energia-texto {
-  font-size: 11pt;
+  font-size: 12pt;
 }
 
 /* ---------- apps ---------- */

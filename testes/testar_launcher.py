@@ -87,13 +87,17 @@ def p4():
     l.mover(1, 0); l.mover(1, 0); l.mover(1, 0); l.mover(1, 0)
     confere("não passa do último app", l.win.get_focus() is l.tiles[-1])
     capturar(l.win, "2-ultimo-app")
-    l.mover(0, -1)
-    confere("cima vai para a barra (botão mais próximo)", l.win.get_focus() in (l.btn_reiniciar, l.btn_desligar))
+    l.mover(0, 1)
+    confere("baixo vai para os botões de energia (mais próximo)", l.win.get_focus() in (l.btn_reiniciar, l.btn_desligar))
+    l.mover(-1, 0)
     l.mover(1, 0)
     confere("direita na barra chega no Desligar", l.win.get_focus() is l.btn_desligar)
-    capturar(l.win, "3-desligar-em-foco")
 
-@passo(300)
+@passo(400)
+def p4b():
+    capturar(L().win, "3-desligar-em-foco")
+
+@passo(100)
 def p5():
     l = L()
     chamados = []
@@ -113,8 +117,10 @@ def p6():
     l.voltar()
     confere("B fecha a confirmação", l.modal is None)
     confere("foco volta ao Desligar", l.win.get_focus() is l.btn_desligar)
-    l.mover(0, 1)
-    confere("baixo volta aos apps", l.win.get_focus() in l.tiles)
+    l.mover(0, -1)
+    confere("cima volta aos apps", l.win.get_focus() in l.tiles)
+    l.mover(0, -1)
+    confere("cima nos apps não sai dos apps", l.win.get_focus() in l.tiles)
 
 @passo(200)
 def fim():

@@ -212,22 +212,49 @@ class Controle:
 # ---------------------------------------------------------------------------
 # Interface
 
+ICONES = Path(__file__).with_name("icones")
+
+# Onde o Flatpak publica os .desktop e os ícones dos apps instalados. Normalmente
+# já estão no XDG_DATA_DIRS da sessão; procurar aqui também cobre quando não estão.
+EXPORTS_FLATPAK = [Path.home() / ".local/share/flatpak/exports/share",
+                   Path("/var/lib/flatpak/exports/share")]
+
+
+def _info_desktop(nome):
+    try:
+        info = Gio.DesktopAppInfo.new(nome)
+    except TypeError:
+        info = None
+    if info:
+        return info
+    for base in EXPORTS_FLATPAK:
+        arquivo = base / "applications" / nome
+        if arquivo.exists():
+            return Gio.DesktopAppInfo.new_from_filename(str(arquivo))
+    return None
+
+
 def icone_do_app(app):
-    """Ícone do .desktop do app (Flatpak instala um), ou um genérico."""
+    """O ícone que o próprio app instalou (pelo .desktop dele), ou um genérico.
+
+    "icone" no apps.json troca por outro: nome de ícone do tema ou caminho de arquivo.
+    """
     if app.get("icone"):
-        icone = app["icone"]
+        icone = os.path.expanduser(app["icone"])
         if os.path.isabs(icone):
             return Gio.FileIcon.new(Gio.File.new_for_path(icone))
         return Gio.ThemedIcon.new(icone)
     for desktop in (app.get("desktop"), f"{app['id']}.desktop"):
         if not desktop:
             continue
-        try:
-            info = Gio.DesktopAppInfo.new(desktop)
-        except TypeError:
-            info = None
+        info = _info_desktop(desktop)
         if info and info.get_icon():
             return info.get_icon()
+    # O Flatpak também publica o ícone com o nome do próprio id.
+    tema = Gtk.IconTheme.get_for_display(Gdk.Display.get_default())
+    if tema.has_icon(app["id"]):
+        return Gio.ThemedIcon.new(app["id"])
+    log("sem ícone para", app["nome"], "- o app está instalado?")
     return Gio.ThemedIcon.new("application-x-executable")
 
 
@@ -264,6 +291,11 @@ class Launcher:
         self.gtk_app = app
         self.cfg = json.loads(CONFIG.read_text(encoding="utf-8"))
         self.ponte = Ponte()
+
+        tema = Gtk.IconTheme.get_for_display(Gdk.Display.get_default())
+        for base in EXPORTS_FLATPAK:
+            if (base / "icons").is_dir():
+                tema.add_search_path(str(base / "icons"))
         self.abrindo = {}           # app id -> momento em que mandou abrir
         self.modal = None           # (caixa, botões) da confirmação aberta
         self.foco_antes_do_modal = None
@@ -287,12 +319,10 @@ class Launcher:
             self.grade.append(t)
         raiz.append(self.grade)
 
-        dica = Gtk.Label(label="Ⓐ abrir    Ⓑ voltar    Guide: volta para cá    Start + Select + L1 + R1: fecha o app")
-        dica.add_css_class("dica")
-        raiz.append(dica)
+        raiz.append(self._barra_inferior())
 
         self.sobrepor = sobrepor
-        self.linhas = [[self.btn_reiniciar, self.btn_desligar], self.tiles]
+        self.linhas = [self.tiles, [self.btn_reiniciar, self.btn_desligar]]
 
         teclas = Gtk.EventControllerKey()
         teclas.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
@@ -340,22 +370,36 @@ class Launcher:
         relogio.append(self.hora)
         relogio.append(self.data)
 
-        self.btn_reiniciar = self._botao_energia("system-reboot-symbolic", "Reiniciar",
-                                                 lambda: self.confirmar_energia("reiniciar"))
-        self.btn_desligar = self._botao_energia("system-shutdown-symbolic", "Desligar",
-                                                lambda: self.confirmar_energia("desligar"))
-
-        for w in (rede, relogio, self.btn_reiniciar, self.btn_desligar):
+        for w in (rede, relogio):
             barra.append(w)
+        return barra
+
+    # --- rodapé -------------------------------------------------------------------
+
+    def _barra_inferior(self):
+        barra = Gtk.Box(spacing=14)
+        barra.add_css_class("rodape")
+
+        dica = Gtk.Label(label="Ⓐ abrir    Ⓑ voltar    Guide: volta para cá    Start + Select + L1 + R1: fecha o app",
+                         hexpand=True, xalign=0)
+        dica.add_css_class("dica")
+        barra.append(dica)
+
+        self.btn_reiniciar = self._botao_energia("reiniciar.svg", "Reiniciar",
+                                                 lambda: self.confirmar_energia("reiniciar"))
+        self.btn_desligar = self._botao_energia("desligar.svg", "Desligar",
+                                                lambda: self.confirmar_energia("desligar"))
+        barra.append(self.btn_reiniciar)
+        barra.append(self.btn_desligar)
         return barra
 
     def _botao_energia(self, icone, texto, acao):
         b = Gtk.Button()
         b.add_css_class("energia")
         b.set_focus_on_click(False)
-        caixa = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
-        img = Gtk.Image.new_from_icon_name(icone)
-        img.set_pixel_size(30)
+        caixa = Gtk.Box(spacing=8)
+        img = Gtk.Image.new_from_file(str(ICONES / icone))
+        img.set_pixel_size(20)
         rotulo = Gtk.Label(label=texto)
         rotulo.add_css_class("energia-texto")
         caixa.append(img)
