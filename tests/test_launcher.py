@@ -75,12 +75,16 @@ orig_init = launcher.Launcher.__init__
 
 
 def init(self, app):
+    # Endless CSS animations keep the software renderer under Xvfb busy;
+    # the tests check classes, not motion.
+    Gtk.Settings.get_default().set_property("gtk-enable-animations", False)
     orig_init(self, app)
     state["l"] = self
 
 
 launcher.Launcher.__init__ = init
 launcher.RESUME_DELAY = 300
+launcher.PRESS_DELAY = 0  # act right away; the push animation still plays
 
 steps = []
 
@@ -138,6 +142,8 @@ def s3():
     l.move(-1, 0)
     l.press()
     check("opening a closed app shows 'abrindo…'", l.tiles[0].status.get_label() == "abrindo…")
+    check("the opening tile pulses (css class 'opening')", l.tiles[0].has_css_class("opening"))
+    check("pushing a tile plays the press animation", l.tiles[0].has_css_class("pressed"))
     before = dict(l.opening)
     l.press()
     check("pressing again while it opens does not start another", l.opening == before)
@@ -156,6 +162,8 @@ def s3b():
     l.refresh_status()
     check("an app closed right after opening does not go back to 'abrindo…'",
           l.tiles[0].status.get_label() == "" and "rocks.shy.VacuumTube" not in l.opening)
+    check("and it stops pulsing", not l.tiles[0].has_css_class("opening"))
+    check("the press animation ends by itself", not l.tiles[0].has_css_class("pressed"))
 
 
 @step(300)

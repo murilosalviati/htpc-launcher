@@ -68,6 +68,9 @@ OPENING_GRACE = 20   # seconds an app counts as "opening" and is not started aga
 FULLSCREEN_FOR = 60  # seconds after starting an app during which its new windows go full screen
 RESUME_DELAY = 1500  # ms to wait after on_resume before raising the app's window
 COLUMNS = 5          # tiles per row; more apps wrap onto more rows
+PRESS_MS = 260       # length of the "button pushed" animation of a tile
+PRESS_DELAY = 140    # ms between pushing a tile and acting, so the push is seen
+                     # before an app window covers the screen (0: act right away)
 # Sizes of what sits on the edges (top bar and footer), for a 1920×1080 screen.
 # They are multiplied by how much bigger or smaller the screen is (see
 # apply_edge_scale), so they keep the same share of the screen on any TV.
@@ -181,6 +184,30 @@ def gicon(ref):
 # ---------------------------------------------------------------------------
 # Tiles
 
+def animate_press(button):
+    """Play the "pushed" animation (button.pressed in launcher.css)."""
+    button.remove_css_class("pressed")
+    button.add_css_class("pressed")
+
+    def done():
+        button.remove_css_class("pressed")
+        button.press_timer = 0
+        return False
+
+    if getattr(button, "press_timer", 0):
+        GLib.source_remove(button.press_timer)
+    button.press_timer = GLib.timeout_add(PRESS_MS, done)
+
+
+def pushed(button, action):
+    """Animate the push, then run the action a moment later."""
+    animate_press(button)
+    if PRESS_DELAY:
+        GLib.timeout_add(PRESS_DELAY, lambda: action() and False)
+    else:
+        action()
+
+
 class Tile(Gtk.Button):
     def __init__(self, app, icon, on_activate):
         super().__init__()
@@ -199,14 +226,17 @@ class Tile(Gtk.Button):
         for w in (image, name, self.status):
             box.append(w)
         self.set_child(box)
-        self.connect("clicked", lambda _b: on_activate(self))
+        self.connect("clicked", lambda _b: pushed(self, lambda: on_activate(self)))
 
-    def show_status(self, text, running=False):
+    def show_status(self, text, running=False, opening=False):
+        """opening: the app was started and its window has not shown up yet
+        (the tile pulses green meanwhile)."""
         self.status.set_label(text)
-        if running:
-            self.add_css_class("running")
-        else:
-            self.remove_css_class("running")
+        for css, on in (("running", running), ("opening", opening)):
+            if on:
+                self.add_css_class(css)
+            else:
+                self.remove_css_class(css)
 
 
 class AddTile(Gtk.Button):
@@ -225,7 +255,7 @@ class AddTile(Gtk.Button):
         box.append(plus)
         box.append(name)
         self.set_child(box)
-        self.connect("clicked", lambda _b: on_activate())
+        self.connect("clicked", lambda _b: pushed(self, on_activate))
 
 
 # ---------------------------------------------------------------------------
@@ -655,7 +685,7 @@ class Launcher(EditorMixin, SettingsMixin):
                 self.opening.pop(app_id, None)
                 tile.show_status(self.t("status_open"), running=True)
             elif self.opening.get(app_id) is not None and now - self.opening[app_id] < OPENING_GRACE:
-                tile.show_status(self.t("status_opening"), running=True)
+                tile.show_status(self.t("status_opening"), running=True, opening=True)
             else:
                 self.opening.pop(app_id, None)
                 tile.show_status("")
@@ -689,7 +719,7 @@ class Launcher(EditorMixin, SettingsMixin):
         log("starting", app["name"], command)
         if self._spawn(command):
             self.opening[app_id] = time.monotonic()
-            tile.show_status(self.t("status_opening"), running=True)
+            tile.show_status(self.t("status_opening"), running=True, opening=True)
 
     # --- things shown on top (confirmations, editor, lists) ------------------------
 
