@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=HTPC Launcher
+Comment=Tela inicial do HTPC, controlada pelo controle
+Exec=python3 @DADOS@/launcher.py
+Icon=video-display
+StartupWMClass=htpc-launcher
+Terminal=false
+X-GNOME-Autostart-enabled=true

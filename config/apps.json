@@ -1,0 +1,33 @@
+{
+  "launcher": {
+    "id": "htpc-launcher",
+    "abrir": null
+  },
+  "apps": [
+    {
+      "nome": "YouTube",
+      "id": "rocks.shy.VacuumTube",
+      "abrir": ["flatpak", "run", "rocks.shy.VacuumTube", "--ozone-platform=wayland"],
+      "pausar_ao_sair": true
+    },
+    {
+      "nome": "Jellyfin",
+      "id": "org.jellyfin.JellyfinDesktop",
+      "abrir": ["flatpak", "run", "org.jellyfin.JellyfinDesktop"],
+      "pausar_ao_sair": true
+    },
+    {
+      "nome": "Moonlight",
+      "id": "com.moonlight_stream.Moonlight",
+      "abrir": ["flatpak", "run", "com.moonlight_stream.Moonlight"],
+      "fechar_em_dois_toques": true
+    },
+    {
+      "nome": "Steam",
+      "id": "steam",
+      "abrir": ["steam", "-gamepadui"],
+      "fechar": ["steam", "-shutdown"],
+      "espera_fechar": 10
+    }
+  ]
+}
