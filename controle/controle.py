@@ -129,6 +129,26 @@ class Shell:
 # ---------------------------------------------------------------------------
 # Ações
 
+def ambiente_grafico():
+    """Ambiente para os programas que o serviço abre (launcher, Steam -shutdown).
+
+    O serviço roda no systemd do usuário, que nem sempre recebe as variáveis
+    da sessão gráfica. Completa só as que faltarem, sem trocar as que existem.
+    """
+    env = dict(os.environ)
+    runtime = env.setdefault("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
+    env.setdefault("WAYLAND_DISPLAY", "wayland-0")
+    env.setdefault("DISPLAY", ":0")
+    env.setdefault("DBUS_SESSION_BUS_ADDRESS", f"unix:path={runtime}/bus")
+    env.setdefault("XDG_SESSION_TYPE", "wayland")
+    return env
+
+
+def abrir(comando):
+    return subprocess.Popen(comando, start_new_session=True, env=ambiente_grafico(),
+                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
 def forcar_fechamento(app_id, pid):
     """Último recurso quando o app não fecha sozinho."""
     if app_id and subprocess.run(["flatpak", "info", app_id],
@@ -183,10 +203,10 @@ class Acoes:
     def _mostrar_launcher(self, cfg, shell):
         if shell.mostrar_launcher():
             return
-        abrir = cfg.get("launcher", {}).get("abrir")
-        if abrir:
+        comando_launcher = cfg.get("launcher", {}).get("abrir")
+        if comando_launcher:
             log.info("launcher não estava aberto; abrindo")
-            subprocess.Popen(abrir, start_new_session=True)
+            abrir(comando_launcher)
         else:
             log.warning("launcher não está aberto e não há comando para abri-lo")
 
@@ -236,7 +256,7 @@ class Acoes:
             comando = (app or {}).get("fechar")
             if comando:
                 log.info("fechando %s com %s", nome, comando)
-                subprocess.Popen(comando, start_new_session=True)
+                abrir(comando)
             else:
                 log.info("fechando %s (%d janela(s))", nome, shell.fechar(alvo))
 

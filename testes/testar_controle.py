@@ -75,5 +75,14 @@ E["foco"] = "org.jellyfin.JellyfinDesktop"; time.sleep(0.4)
 aperta(ecodes.BTN_START, ecodes.BTN_SELECT, ecodes.BTN_TL); time.sleep(0.4)
 confere("combo incompleto não fecha", "org.jellyfin.JellyfinDesktop" in abertos())
 
+# 8. serviço sem as variáveis da sessão gráfica: completa só as que faltam
+for v in ("DISPLAY", "WAYLAND_DISPLAY"):
+    os.environ.pop(v, None)
+os.environ["XDG_RUNTIME_DIR"] = "/run/user/1234"
+env = controle.ambiente_grafico()
+confere("completa DISPLAY e WAYLAND_DISPLAY que faltam", env["DISPLAY"] == ":0" and env["WAYLAND_DISPLAY"] == "wayland-0")
+os.environ["DISPLAY"] = ":1"
+confere("não troca DISPLAY que já existe", controle.ambiente_grafico()["DISPLAY"] == ":1")
+
 print("\nTUDO OK" if ok else "\nHOUVE FALHAS")
 sys.exit(0 if ok else 1)

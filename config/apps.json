@@ -24,9 +24,11 @@
     },
     {
       "nome": "Steam",
-      "id": "steam",
-      "abrir": ["steam", "-gamepadui"],
-      "fechar": ["steam", "-shutdown"],
+      "id": "com.valvesoftware.Steam",
+      "outros_ids": ["steam"],
+      "abrir": ["flatpak", "run", "com.valvesoftware.Steam", "-gamepadui"],
+      "fechar": ["flatpak", "run", "com.valvesoftware.Steam", "-shutdown"],
+      "janelas_preferidas": ["Steam Big Picture Mode", "Steam"],
       "espera_fechar": 10
     }
   ]

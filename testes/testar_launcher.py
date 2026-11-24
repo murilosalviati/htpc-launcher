@@ -16,6 +16,10 @@ os.environ["XDG_CONFIG_HOME"] = cfgdir
 import falsos
 falsos.estado["janelas"] = [j for j in falsos.estado["janelas"] if j["appId"] == "org.jellyfin.JellyfinDesktop"]
 falsos.estado["foco"] = "htpc-launcher"
+# o Steam abre três janelas; a última usada é a "Friends List"
+for titulo in ("Friends List", "Special Offers", "Steam"):
+    falsos.estado["janelas"].insert(0, {"appId": "com.valvesoftware.Steam", "ids": ["com.valvesoftware.steam", "steam", "steamwebhelper"],
+                                        "title": titulo, "pid": 0, "minimized": False})
 falsos.iniciar()
 time.sleep(0.4)
 
@@ -121,6 +125,14 @@ def p6():
     confere("cima volta aos apps", l.win.get_focus() in l.tiles)
     l.mover(0, -1)
     confere("cima nos apps não sai dos apps", l.win.get_focus() in l.tiles)
+
+@passo(300)
+def p7():
+    l = L()
+    steam = next(t for t in l.tiles if t.app["nome"] == "Steam")
+    steam.grab_focus(); l.confirmar()
+    confere("Steam aberto: traz a janela 'Steam', não a 'Friends List'", falsos.estado.get("ativada") == "Steam")
+    confere("Steam aberto não é aberto de novo", "com.valvesoftware.Steam" not in l.abrindo)
 
 @passo(200)
 def fim():

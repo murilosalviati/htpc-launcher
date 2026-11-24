@@ -42,10 +42,14 @@ def shell():
                 if not w.get("teimoso"):
                     estado["janelas"].remove(w)
             r = new_method_return(m, "u", (len(ws),))
-        elif nome == "Activate":
+        elif nome in ("Activate", "ActivatePreferring"):
             ws = achar(args[0])
-            if ws: estado["foco"] = ws[0]["appId"]
-            r = new_method_return(m, "b", (bool(ws),))
+            titulos = args[1] if nome == "ActivatePreferring" else []
+            alvo = next((w for t in titulos for w in ws if w["title"] == t), ws[0] if ws else None)
+            if alvo:
+                estado["foco"] = alvo["appId"]
+                estado["ativada"] = alvo["title"]
+            r = new_method_return(m, "b", (alvo is not None,))
         elif nome == "ShowLauncher":
             estado["foco"] = "htpc-launcher"
             r = new_method_return(m, "b", (True,))

@@ -41,6 +41,11 @@ const IFACE_XML = `
       <arg type="s" direction="in" name="appId"/>
       <arg type="b" direction="out" name="ok"/>
     </method>
+    <method name="ActivatePreferring">
+      <arg type="s" direction="in" name="appId"/>
+      <arg type="as" direction="in" name="titles"/>
+      <arg type="b" direction="out" name="ok"/>
+    </method>
     <method name="FocusedApp">
       <arg type="s" direction="out" name="appId"/>
     </method>
@@ -133,9 +138,24 @@ class LauncherBridge {
     // Traz para a frente a janela já aberta do app (retoma a sessão).
     // Devolve false se o app não tem janela — aí o launcher deve abri-lo.
     Activate(appId) {
-        const [win] = windowsOf(appId);
-        if (!win)
+        return this.ActivatePreferring(appId, []);
+    }
+
+    // Como Activate, mas para apps com várias janelas (o Steam abre "Steam",
+    // "Friends List", "Special Offers"...): traz a primeira janela cujo título
+    // esteja em `titles`, na ordem dada; se nenhuma bater, a usada por último.
+    ActivatePreferring(appId, titles) {
+        const wins = windowsOf(appId);
+        if (wins.length === 0)
             return false;
+        let win = wins[0];
+        for (const title of titles ?? []) {
+            const match = wins.find(w => w.get_title() === title);
+            if (match) {
+                win = match;
+                break;
+            }
+        }
         if (win.minimized)
             win.unminimize();
         Main.activateWindow(win, global.get_current_time());

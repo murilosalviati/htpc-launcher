@@ -75,7 +75,12 @@ class Ponte:
             log(f"extensão não respondeu a {metodo}:", e.message)
             return None
 
-    def ativar(self, app_id):
+    def ativar(self, app_id, titulos=None):
+        if titulos:
+            r = self.chamar("ActivatePreferring", "(sas)", app_id, list(titulos))
+            if r is not None:
+                return bool(r)
+            # extensão antiga, sem esse método: traz qualquer janela do app
         return bool(self.chamar("Activate", "(s)", app_id))
 
     def rodando(self, app_id):
@@ -453,7 +458,7 @@ class Launcher:
     def abrir_app(self, tile):
         app = tile.app
         app_id = app["id"]
-        if self.ponte.ativar(app_id):
+        if self.ponte.ativar(app_id, app.get("janelas_preferidas")):
             log("retomando", app["nome"])
             return
         if time.monotonic() - self.abrindo.get(app_id, -1e9) < TEMPO_ABRINDO:

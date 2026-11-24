@@ -9,7 +9,7 @@ Front end para um HTPC com Ubuntu e GNOME (Wayland), controlado por controle de 
 - **Guide** (botão Xbox / Home / PS): pausa o vídeo, se houver um tocando, e volta ao launcher. O app continua aberto por trás.
 - **Start + Select + L1 + R1:** fecha o app em foco. No Moonlight, o 1º toque encerra o stream e um 2º toque em até 15 s fecha o app.
 
-Apps configurados: VacuumTube (YouTube), Jellyfin Desktop, Moonlight e Steam Big Picture.
+Apps configurados: VacuumTube (YouTube), Jellyfin Desktop, Moonlight e Steam Big Picture (os quatro em Flatpak).
 
 ## Partes
 
@@ -54,6 +54,7 @@ No Steam, desligue a função do botão guide para ele não responder junto com 
 | `abrir` | Comando para abrir o app. |
 | `fechar` | Comando para fechar o app, quando fechar a janela não basta. |
 | `espera_fechar` | Segundos até forçar o fechamento (padrão: 3). |
+| `janelas_preferidas` | Para apps com várias janelas, como o Steam: títulos que o launcher prefere trazer para a frente, na ordem. Sem eles, vem a janela usada por último. |
 | `pausar_ao_sair` | Pausa o vídeo (MPRIS) quando o guide é apertado. |
 | `fechar_em_dois_toques` | O 1º toque do combo fica com o app; o 2º fecha. |
 | `icone`, `desktop` | Trocam o ícone usado no launcher. |
