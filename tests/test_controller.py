@@ -8,6 +8,7 @@ import json
 import logging
 import os
 import sys
+import pathlib
 import tempfile
 import time
 from types import SimpleNamespace
@@ -348,10 +349,24 @@ check("HA: and again after a minute", len(sent) == 2)
 pads_now = ["Xbox", "8BitDo"]
 h.tick()
 check("HA: a gamepad showing up sends gamepad_connected", sent[-1][1:] == ("gamepad_connected", "8BitDo"))
+marker = pathlib.Path(tempfile.mkdtemp()) / "tv-off"
+h.marker = lambda: marker
+hclock[0] += 5
+h.button(press)
+check("HA: within the minute, a press is not sent again", len(sent) == 3)
+import time as _time  # noqa: E402
+_time.sleep(0.02)
+marker.write_text("x")   # the launcher's "Turn off TV", after the last event sent
+_time.sleep(0.02)
+h.button(press)
+check("HA: but right after 'Turn off TV' the next press goes at once (to wake it)",
+      len(sent) == 4 and sent[-1][1] == "gamepad_activity")
+h.button(press)
+check("HA: and only that one", len(sent) == 4)
 ha_cfg["home_assistant"]["enabled"] = False
 hclock[0] += 120
 h.button(press)
-check("HA: nothing when turned off or not configured", len(sent) == 3)
+check("HA: nothing when turned off or not configured", len(sent) == 4)
 
 # 9c. weather: finding the place and reading the conditions (no network: a fake fetch)
 from htpc import weather  # noqa: E402

@@ -667,6 +667,49 @@ def w10():
           and l.settings_fields["location"].value.get_label() == "Off (weather hidden)")
 
 
+# ---------------- "Turn off TV" (Home Assistant) ----------------
+
+@step(300)
+def tv1():
+    l = L()
+    while l.overlays:
+        l.pop_overlay()
+    check("no Home Assistant set up: no 'Desligar TV' button", not l.btn_tv.get_visible()
+          and l.btn_tv not in l.rows[-1])
+    l.cfg["home_assistant"] = {"url": "http://ha.local:8123", "webhook_id": "htpc-test"}
+    l.build_ui()
+    l.refresh_top_bar()
+    l.btn_tv.grab_focus()
+
+
+@step(500)
+def tv2():
+    l = L()
+    from htpc import home_assistant as hass
+    ok, r = l.btn_tv.compute_bounds(l.win)
+    middle = r.get_x() + r.get_width() / 2
+    check("with Home Assistant: 'Desligar TV' in the middle of the footer",
+          l.btn_tv.get_visible() and abs(middle - l.win.get_width() / 2) < 4
+          and l.btn_tv.label.get_label() == l.t("tv_off") and l.rows[-1][0] is l.btn_tv)
+    screenshot(l.win, "15-tv-off-button")
+    posted = []
+    real = hass.http_post
+    hass.http_post = lambda url, payload: posted.append((url, payload["event"]))
+    l.press()
+
+
+@step(400)
+def tv3():
+    l = L()
+    from htpc import home_assistant as hass
+    check("'Desligar TV' sends tv_off to the Home Assistant webhook and leaves the marker",
+          hass.tv_off_marker().exists())
+    del l.cfg["home_assistant"]
+    l.build_ui()
+    l.refresh_top_bar()
+    l.tiles[0].grab_focus()
+
+
 @step(200)
 def finish():
     L().win.get_application().quit()

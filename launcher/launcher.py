@@ -55,7 +55,7 @@ HERE = Path(__file__).resolve().parent
 # Installed: the htpc package sits next to this file. In the repo: one folder up.
 sys.path.insert(0, str(HERE))
 sys.path.insert(1, str(HERE.parent))
-from htpc import config, paths, themes, weather  # noqa: E402
+from htpc import config, home_assistant, paths, themes, weather  # noqa: E402
 from htpc.backends import get_backend  # noqa: E402
 from htpc.i18n import Translator  # noqa: E402
 from editor import EditorMixin  # noqa: E402
@@ -407,7 +407,8 @@ class Launcher(EditorMixin, SettingsMixin):
 
     @property
     def rows(self):
-        return self.tile_rows + [[self.btn_settings, self.btn_restart, self.btn_power]]
+        footer = [self.btn_tv] if self.btn_tv.get_visible() else []
+        return self.tile_rows + [footer + [self.btn_settings, self.btn_restart, self.btn_power]]
 
     def apply_theme(self, theme_id):
         """Switch the background color right away (does not save it)."""
@@ -536,12 +537,21 @@ class Launcher(EditorMixin, SettingsMixin):
     # --- footer ----------------------------------------------------------------
 
     def _footer(self):
-        bar = Gtk.Box(spacing=14)
-        bar.add_css_class("footer")
+        """Hints on the left, "Turn off TV" in the middle (when Home Assistant is
+        set up), settings / restart / shut down on the right."""
+        bar = Gtk.CenterBox()
+        bar.add_css_class("footer-bar")
+        buttons = Gtk.Box(spacing=14, valign=Gtk.Align.CENTER)
+        buttons.add_css_class("footer")
 
-        self.hint = Gtk.Label(label=self.t("hint_normal"), hexpand=True, xalign=0)
+        self.hint = Gtk.Label(label=self.t("hint_normal"), xalign=0, valign=Gtk.Align.CENTER)
         self.hint.add_css_class("hint")
-        bar.append(self.hint)
+        bar.set_start_widget(self.hint)
+
+        self.btn_tv = self._footer_button("tv-off.svg", self.t("tv_off"), self.turn_tv_off)
+        self.btn_tv.set_valign(Gtk.Align.CENTER)
+        self.btn_tv.set_visible(bool(home_assistant.webhook_url(self.cfg)))
+        bar.set_center_widget(self.btn_tv)
 
         self.btn_settings = self._footer_button("settings.svg", self.t("settings"), self.settings_button)
         self.btn_restart = self._footer_button("restart.svg", self.t("restart"),
@@ -549,8 +559,15 @@ class Launcher(EditorMixin, SettingsMixin):
         self.btn_power = self._footer_button("power.svg", self.t("power_off"),
                                              lambda: self.confirm_power("power_off"))
         for b in (self.btn_settings, self.btn_restart, self.btn_power):
-            bar.append(b)
+            buttons.append(b)
+        bar.set_end_widget(buttons)
         return bar
+
+    def turn_tv_off(self):
+        """Asks Home Assistant to turn the TV off (the "tv_off" webhook event).
+        Any gamepad button wakes it again through the same automation."""
+        log("asking Home Assistant to turn the TV off")
+        home_assistant.turn_tv_off(self.cfg)
 
     def _footer_button(self, icon, text, action):
         b = Gtk.Button()

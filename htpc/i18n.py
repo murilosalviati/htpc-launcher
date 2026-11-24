@@ -8,7 +8,7 @@ To add a language, copy the "en" block, translate it, and use its code.
 
 STRINGS = {
     "en": {
-        "hint_normal": "Ⓐ open    Ⓑ back    Guide: come back here    Start + Select + L1 + R1: close the app",
+        "hint_normal": "Ⓐ open    Ⓑ back\nGuide: come back here    Start + Select + L1 + R1: close the app",
         "hint_edit": "Edit mode    Ⓐ edit or add    Ⓑ leave edit mode",
         "background": "Background",
         "choose_background": "Choose the background",
@@ -31,6 +31,7 @@ STRINGS = {
         "language_name": "English",
         "choose_language": "Choose the language",
         "close": "Close",
+        "tv_off": "Turn off TV",
         "notify_pad_connected": "Gamepad connected",
         "notify_pad_disconnected": "Gamepad disconnected",
         "notify_battery_low": "Gamepad battery low",
@@ -99,7 +100,7 @@ STRINGS = {
         "keyboard_rows": ["1234567890", "qwertyuiop", "asdfghjkl", "zxcvbnm-.'&"],
     },
     "pt-BR": {
-        "hint_normal": "Ⓐ abrir    Ⓑ voltar    Guide: volta para cá    Start + Select + L1 + R1: fecha o app",
+        "hint_normal": "Ⓐ abrir    Ⓑ voltar\nGuide: volta para cá    Start + Select + L1 + R1: fecha o app",
         "hint_edit": "Modo de edição    Ⓐ editar ou adicionar    Ⓑ sair da edição",
         "background": "Plano de fundo",
         "choose_background": "Escolha o fundo",
@@ -122,6 +123,7 @@ STRINGS = {
         "language_name": "Português (Brasil)",
         "choose_language": "Escolha o idioma",
         "close": "Fechar",
+        "tv_off": "Desligar TV",
         "notify_pad_connected": "Controle conectado",
         "notify_pad_disconnected": "Controle desconectado",
         "notify_battery_low": "Bateria do controle fraca",

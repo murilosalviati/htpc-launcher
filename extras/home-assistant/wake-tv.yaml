@@ -1,8 +1,10 @@
-# Home Assistant automation: the gamepad wakes the TV and picks the HTPC input.
+# Home Assistant automation: the gamepad wakes the TV and picks the HTPC input,
+# and the launcher's "Turn off TV" button turns it off.
 #
 # The HTPC's controller service calls this webhook when a gamepad connects or a
-# button is pressed (at most once a minute); see htpc/home_assistant.py and the
-# "home_assistant" entry of apps.json.
+# button is pressed (at most once a minute, and right away after "Turn off
+# TV"); the launcher calls it with {"event": "tv_off"}. See
+# htpc/home_assistant.py and the "home_assistant" entry of apps.json.
 #
 # Needs the LG webOS TV integration, with an automation that turns the TV on
 # when Home Assistant asks for it (webostv.turn_on trigger -> Wake-on-LAN).
@@ -14,9 +16,11 @@
 #   media_player.tv the TV's entity
 #   "HDMI 3"        the input the HTPC is on, exactly as in the TV's source list
 alias: "HTPC: gamepad wakes the TV"
-description: Turns the TV on and switches it to the HTPC input when the gamepad is used.
-mode: single
-max_exceeded: silent
+description: >-
+  Turns the TV on and switches it to the HTPC input when the gamepad is used;
+  turns it off from the launcher's button.
+mode: queued   # "tv_off" and the press on the button arrive together: keep both, in order
+max: 5
 triggers:
   - trigger: webhook
     webhook_id: WEBHOOK_ID
@@ -25,7 +29,22 @@ triggers:
 variables:
   tv: media_player.tv
   htpc_input: "HDMI 3"
+  event: "{{ (trigger.json or {}).get('event', '') }}"
 actions:
+  - if:
+      - condition: template
+        value_template: "{{ event == 'tv_off' }}"
+    then:
+      - action: media_player.turn_off
+        target:
+          entity_id: "{{ tv }}"
+      - stop: TV turned off from the launcher
+  # The press on "Turn off TV" itself also arrives as gamepad activity: do not
+  # wake a TV that went off a moment ago.
+  - condition: template
+    value_template: >-
+      {{ is_state(tv, 'on') or
+         (now() - states[tv].last_changed).total_seconds() > 15 }}
   - if:
       - condition: template
         value_template: "{{ not is_state(tv, 'on') }}"
