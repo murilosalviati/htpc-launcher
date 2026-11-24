@@ -1,5 +1,8 @@
 # HTPC Launcher
 
+> [!WARNING]
+> **Beta, not a finished product.** Versions are `0.x` pre-releases (`0.1.0-beta.1`, ...). It is built and tested on one home setup, parts of it have only been tested against simulated hardware, and the configuration format or install steps may still change. Back up `~/.config/htpc-launcher/apps.json` before updating.
+
 A gamepad-driven home screen for a living-room PC running Ubuntu with GNOME on Wayland. It works with Xbox, 8BitDo and PlayStation controllers, and looks and behaves like a TV or console home screen.
 
 ![Launcher home screen](docs/preview.png)
@@ -44,7 +47,7 @@ On Wayland, a regular program cannot raise another app's window or find out whic
 
 ## Install
 
-Download the latest release from the [Releases page](https://github.com/murilosalviati/htpc-launcher/releases/latest), extract it and run:
+Download the newest beta from the [Releases page](https://github.com/murilosalviati/htpc-launcher/releases) (they are marked as pre-releases), extract it and run:
 
 ```bash
 ./install.sh

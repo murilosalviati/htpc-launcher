@@ -1,3 +1,6 @@
+> [!WARNING]
+> **Beta, not a finished product.** This is an early version built and tested on one home setup. Expect rough edges: some features have only been tested against simulated hardware, and file formats or install steps may still change between versions. Back up `~/.config/htpc-launcher/apps.json` before updating, and please report problems in [Issues](https://github.com/murilosalviati/htpc-launcher/issues).
+
 HTPC Launcher: a gamepad-driven TV home screen for Ubuntu with GNOME on Wayland.
 
 ## Install

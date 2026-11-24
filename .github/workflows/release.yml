@@ -1,13 +1,16 @@
-# Publishes a release: Actions tab -> "Release" -> "Run workflow", type the version (e.g. 1.0.0).
-# Creates the vX.Y.Z tag on the latest main, builds htpc-launcher-X.Y.Z.tar.gz and attaches it.
+# Publishes a release: Actions tab -> "Release" -> "Run workflow", type the version.
+# Creates the v<version> tag on the latest main, builds htpc-launcher-<version>.tar.gz and attaches it.
+# The project is in beta: versions are 0.x, and any version with a suffix
+# (0.1.0-beta.1, 0.2.0-rc.1...) is published as a pre-release.
 name: Release
 
 on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Version without the v (e.g. 1.0.0)"
+        description: "Version without the v (beta: 0.1.0-beta.1, 0.1.0-beta.2...)"
         required: true
+        default: "0.1.0-beta.1"
 
 permissions:
   contents: write
@@ -29,7 +32,13 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           VERSION="${{ inputs.version }}"
+          FLAGS=()
+          TITLE="HTPC Launcher $VERSION"
+          case "$VERSION" in
+            0.*|*-*) FLAGS+=(--prerelease); TITLE="$TITLE (beta)" ;;
+          esac
           gh release create "v$VERSION" "htpc-launcher-$VERSION.tar.gz" \
             --target "$GITHUB_SHA" \
-            --title "HTPC Launcher $VERSION" \
-            --notes-file .github/release-notes.md
+            --title "$TITLE" \
+            --notes-file .github/release-notes.md \
+            "${FLAGS[@]}"
