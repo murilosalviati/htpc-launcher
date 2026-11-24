@@ -154,18 +154,33 @@ class Shortcuts:
             log.error("close failed: %s", e)
 
 
+POINTER_EVERY = 3.0  # seconds: at most one "hide the pointer" request per this
+
+
 class GamepadShortcuts:
-    """Tracks held buttons per gamepad and fires the shortcuts."""
+    """Tracks held buttons per gamepad and fires the shortcuts. Using the gamepad
+    also hides the mouse pointer (it comes back when the mouse moves)."""
 
     def __init__(self, shortcuts):
         self.shortcuts = shortcuts
         self.held = {}  # device -> set of button names
+        self.pointer_hidden_at = -POINTER_EVERY
+
+    def _hide_pointer(self):
+        now = time.monotonic()
+        if now - self.pointer_hidden_at >= POINTER_EVERY:
+            self.pointer_hidden_at = now
+            try:
+                self.shortcuts.windows.hide_pointer()
+            except Exception as e:  # noqa: BLE001 - never let this stop the shortcuts
+                log.warning("could not hide the pointer: %s", e)
 
     def handle(self, event):
         if event.kind != "button":
             return
         held = self.held.setdefault(event.device, set())
         if event.value:
+            self._hide_pointer()
             held.add(event.name)
             if event.name == GUIDE:
                 self.shortcuts.guide()

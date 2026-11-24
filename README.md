@@ -20,6 +20,7 @@ What changed in each version is in [CHANGELOG.md](CHANGELOG.md).
   - in the middle, the clock and date;
   - on the right, a gamepad icon that lights up when a gamepad is connected (USB, Bluetooth or wireless dongle) and shows how many there are when there is more than one, with a battery icon for each wireless gamepad that reports its charge (a gamepad on a cable reports none), and the network icon: a cable symbol on a wired connection, Wi-Fi bars on Wi-Fi. It is just an icon while you are online and only shows text when the connection is limited or down.
 - **Made for a TV across the room:** the selected tile lifts and glows, pushing it plays a short "button pressed" animation, and a tile pulses green while its app is opening. The clock, weather, status icons, hints and footer grow with the screen (they keep the same share of a 1080p, 1440p or 4K screen), and every icon is drawn from vectors, so it stays sharp at any size.
+- **No stray mouse pointer:** using the gamepad hides the pointer on the whole screen, apps included; moving the mouse brings it back.
 - **Apps open in full screen** (through the GNOME extension), except where an app's own full-screen mode is better, like Steam's Big Picture.
 - **Resume, never duplicate:** selecting an app that is already running brings its existing window back instead of starting a second copy.
 - **Guide button** (Xbox / Home / PS): pauses the video that is playing, if any, and returns to the launcher. The app keeps running behind it.
@@ -46,7 +47,7 @@ On Wayland, a regular program cannot raise another app's window or find out whic
 
 | Folder | What it is |
 |---|---|
-| `gnome-extension/` | The `htpc-launcher@htpc` GNOME Shell extension. It runs inside GNOME and exposes window control on the session bus (`org.htpc.Launcher`): list windows, raise, close or put an app's windows in full screen, show the launcher. |
+| `gnome-extension/` | The `htpc-launcher@htpc` GNOME Shell extension. It runs inside GNOME and exposes window control on the session bus (`org.htpc.Launcher`): list windows, raise, close or put an app's windows in full screen, hide the mouse pointer, show the launcher. |
 | `controller/` | The background service that reads the gamepads and runs the shortcuts (a systemd user service on Linux). |
 | `launcher/` | The home screen UI in GTK 4 (`launcher.py`), with the settings menu in `settings.py` and edit mode in `editor.py`. It only reaches the OS through the backend. |
 | `htpc/` | The shared Python package: `apps.json` handling (`config.py`), file locations per OS (`paths.py`), the guide and close-combo rules (`shortcuts.py`), on-screen text (`i18n.py`), background colors (`themes.py`) and the weather lookup (`weather.py`). |
@@ -137,7 +138,7 @@ Over SSH, first export `XDG_RUNTIME_DIR=/run/user/$(id -u)`, `DBUS_SESSION_BUS_A
 pkill -f "[h]tpc-launcher/launcher.py"; systemd-run --user --collect -p KillMode=process gtk-launch htpc-launcher
 ```
 
-**Apps do not open in full screen:** the extension changed in 0.1.0-beta.3; GNOME only loads the new version after you log out and back in (or restart the machine).
+**Apps do not open in full screen, or the pointer does not hide:** after updating the extension (it changed in 0.1.0-beta.3 and again after 0.1.0-beta.4), GNOME only loads the new version after you log out and back in (or restart the machine).
 
 **A gamepad does nothing in a Flatpak app:** many Flatpaks cannot see input devices. Give the app access with `flatpak override --user --device=input <app id>` (`--device=all` on Flatpak older than 1.15.6).
 

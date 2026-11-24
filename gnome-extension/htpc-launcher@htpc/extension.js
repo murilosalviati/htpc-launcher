@@ -59,6 +59,9 @@ const IFACE_XML = `
       <arg type="u" direction="in" name="seconds"/>
       <arg type="u" direction="out" name="windowsNow"/>
     </method>
+    <method name="HidePointer">
+      <arg type="b" direction="out" name="hidden"/>
+    </method>
     <method name="ShowLauncher">
       <arg type="b" direction="out" name="ok"/>
     </method>
@@ -227,6 +230,50 @@ class LauncherBridge {
         });
     }
 
+    // Hides the mouse pointer on the whole screen (asked when the gamepad is
+    // used) until the mouse moves. GNOME 49 removed set_pointer_visible; its
+    // replacement, inhibit_cursor_visibility, does not undo itself when the
+    // mouse moves, so we watch the pointer position and undo it ourselves.
+    HidePointer() {
+        const tracker = global.backend?.get_cursor_tracker?.() ??
+            Meta.CursorTracker.get_for_display?.(global.display);
+        if (!tracker)
+            return false;
+        if (tracker.set_pointer_visible && !tracker.inhibit_cursor_visibility) {
+            tracker.set_pointer_visible(false);  // older GNOME: shows itself on motion
+            return true;
+        }
+        if (!tracker.inhibit_cursor_visibility)
+            return false;
+        if (!this._pointerInhibited) {
+            tracker.inhibit_cursor_visibility();
+            this._pointerInhibited = true;
+        }
+        const [x0, y0] = global.get_pointer();
+        if (this._pointerWatch)
+            GLib.source_remove(this._pointerWatch);
+        this._pointerWatch = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 200, () => {
+            const [x, y] = global.get_pointer();
+            if (x === x0 && y === y0)
+                return GLib.SOURCE_CONTINUE;
+            this._pointerWatch = 0;
+            this.showPointer(tracker);
+            return GLib.SOURCE_REMOVE;
+        });
+        return true;
+    }
+
+    showPointer(tracker = global.backend?.get_cursor_tracker?.()) {
+        if (this._pointerWatch) {
+            GLib.source_remove(this._pointerWatch);
+            this._pointerWatch = 0;
+        }
+        if (this._pointerInhibited && tracker?.uninhibit_cursor_visibility) {
+            tracker.uninhibit_cursor_visibility();
+            this._pointerInhibited = false;
+        }
+    }
+
     ShowLauncher() {
         return this.Activate(LAUNCHER_ID);
     }
@@ -253,6 +300,7 @@ export default class HtpcLauncherExtension extends Extension {
     }
 
     disable() {
+        this._impl?.showPointer?.();
         if (this._createdId) {
             global.display.disconnect(this._createdId);
             this._createdId = 0;

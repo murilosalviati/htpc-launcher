@@ -106,6 +106,11 @@ class WindowControl(ABC):
     def show_launcher(self):
         """Raise the launcher. False if it is not running."""
 
+    def hide_pointer(self):
+        """Hide the mouse pointer on the whole screen until the mouse moves again.
+        True if hidden, None if the OS side cannot do it."""
+        return None
+
     def fullscreen_on_open(self, app_id, seconds=60):
         """Put the app's windows in full screen, including the ones it opens in the
         next `seconds`. Returns how many windows went full screen right away, or None

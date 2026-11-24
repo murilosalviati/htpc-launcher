@@ -170,6 +170,21 @@ check("evdev: the d-pad hat becomes right press, right release, left press",
 ev = pads.translate("p", dev, raw(ecodes.EV_ABS, ecodes.ABS_X, 32767))
 check("evdev: the left stick becomes a -1..1 axis", ev[0].name == "lx" and abs(ev[0].value - 1.0) < 0.01)
 
+# 9a1. using the gamepad hides the mouse pointer, at most once every few seconds
+from htpc import shortcuts as sc  # noqa: E402
+hidden = []
+stub = SimpleNamespace(windows=SimpleNamespace(hide_pointer=lambda: hidden.append(1)),
+                       guide=lambda: None, close=lambda: None)
+gs = sc.GamepadShortcuts(stub)
+from htpc.backends.base import GamepadEvent  # noqa: E402
+for _ in range(5):
+    gs.handle(GamepadEvent("p", "button", "a", 1))
+    gs.handle(GamepadEvent("p", "button", "a", 0))
+check("gamepad use hides the pointer once, not on every press", hidden == [1])
+gs.pointer_hidden_at -= sc.POINTER_EVERY
+gs.handle(GamepadEvent("p", "button", "down", 1))
+check("and again after a while (the mouse may have shown it)", hidden == [1, 1])
+
 # 9a2. X and Y by gamepad: Xbox-style drivers send them swapped by position
 from htpc.backends.linux import gamepads as lg  # noqa: E402
 pads = EvdevGamepads()
