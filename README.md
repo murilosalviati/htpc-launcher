@@ -11,7 +11,7 @@ A gamepad-driven home screen for a living-room PC running Ubuntu with GNOME on W
 
 ## Features
 
-- **Full-screen home screen** with one tile per app, a clock in the top-left corner and a network indicator in the top-right. The indicator is just an icon while you are online and only shows text when the connection is limited or down.
+- **Full-screen home screen** with one tile per app, a clock in the top-left corner and a network indicator in the top-right. The indicator is just an icon while you are online and only shows text when the connection is limited or down. Next to it, a gamepad icon lights up when a gamepad is connected (USB, Bluetooth or wireless dongle) and shows how many there are when there is more than one.
 - **Resume, never duplicate:** selecting an app that is already running brings its existing window back instead of starting a second copy.
 - **Guide button** (Xbox / Home / PS): pauses the video that is playing, if any, and returns to the launcher. The app keeps running behind it.
 - **Start + Select + L1 + R1:** closes the focused app and returns to the launcher. For game streaming apps like Moonlight, the first press ends the stream (Moonlight's own shortcut) and a second press within 15 seconds closes the app.

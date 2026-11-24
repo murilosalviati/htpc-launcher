@@ -148,6 +148,20 @@ check("evdev: the d-pad hat becomes right press, right release, left press",
 ev = pads.translate("p", dev, raw(ecodes.EV_ABS, ecodes.ABS_X, 32767))
 check("evdev: the left stick becomes a -1..1 axis", ev[0].name == "lx" and abs(ev[0].value - 1.0) < 0.01)
 
+# 9b. counting connected gamepads: one per physical gamepad, virtual ones left out
+pads = EvdevGamepads()
+pads.devs = {
+    "/dev/input/event5": SimpleNamespace(name="Xbox Wireless Controller", uniq="aa:bb"),
+    "/dev/input/event6": SimpleNamespace(name="8BitDo Pro 2", uniq=""),
+    "/dev/input/event7": SimpleNamespace(name="Xbox Wireless Controller", uniq="aa:bb"),
+    "/dev/input/event9": SimpleNamespace(name="Microsoft X-Box 360 pad 0", uniq=""),
+}
+pads.virtual = {"/dev/input/event9": True}
+check("gamepads: counts each physical gamepad once and skips virtual ones",
+      pads.connected() == ["Xbox Wireless Controller", "8BitDo Pro 2"])
+pads.devs = {}
+check("gamepads: none connected", pads.connected() == [])
+
 # 10. the Windows backend is a documented placeholder for now
 from htpc.backends.windows import WindowsBackend  # noqa: E402
 try:

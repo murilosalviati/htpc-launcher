@@ -7,6 +7,7 @@ A logged-in user can read gamepads without extra groups (udev's uaccess rule).
 """
 
 import logging
+import os
 import select
 import time
 
@@ -42,15 +43,36 @@ def is_gamepad(dev):
     return ecodes.BTN_SOUTH in keys and ecodes.BTN_START in keys
 
 
+def is_virtual(path):
+    """True for gamepads made by software (uinput), e.g. Steam Input's virtual pads."""
+    name = os.path.basename(path)  # eventN
+    real = os.path.realpath(f"/sys/class/input/{name}/device")
+    return "/devices/virtual/" in real
+
+
 class EvdevGamepads(Gamepads):
     def __init__(self):
         self.devs = {}       # path -> InputDevice
         self.ignored = set()
         self.hats = {}       # (path, hat axis) -> -1 / 0 / 1
         self.next_scan = 0.0
+        self.virtual = {}    # path -> made by software (not counted in connected())
 
     def available(self):
         return evdev is not None
+
+    def connected(self):
+        seen, names = set(), []
+        for path, dev in sorted(self.devs.items()):
+            if self.virtual.get(path):
+                continue
+            # A gamepad that shows up as more than one device still counts once.
+            key = getattr(dev, "uniq", "") or path
+            if key in seen:
+                continue
+            seen.add(key)
+            names.append(dev.name)
+        return names
 
     def _rescan(self, events):
         paths = set(evdev.list_devices())
@@ -63,13 +85,16 @@ class EvdevGamepads(Gamepads):
                 continue
             if is_gamepad(dev):
                 self.devs[path] = dev
-                log.info("gamepad connected: %s (%s)", dev.name, path)
+                self.virtual[path] = is_virtual(path)
+                log.info("gamepad connected: %s (%s)%s", dev.name, path,
+                         " [virtual]" if self.virtual[path] else "")
             else:
                 dev.close()
                 self.ignored.add(path)
 
     def _remove(self, path, events):
         dev = self.devs.pop(path, None)
+        self.virtual.pop(path, None)
         for key in [k for k in self.hats if k[0] == path]:
             del self.hats[key]
         if dev:

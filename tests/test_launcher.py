@@ -416,6 +416,31 @@ def n1():
     nav.handle(E("pad", "button", "b", 1))
     check("gamepad: B goes back", not l.overlays)
 
+    # Gamepad indicator next to the Wi-Fi icon.
+    real = l.gamepads.connected
+    l.gamepads.connected = lambda: []
+    l._update_gamepads()
+    check("indicator: no gamepad shows the dimmed icon without a number",
+          not l.pad_count.get_visible())
+    l.gamepads.connected = lambda: ["Xbox"]
+    l._update_gamepads()
+    check("indicator: one gamepad shows the icon without a number", not l.pad_count.get_visible())
+    l.gamepads.connected = lambda: ["Xbox", "8BitDo", "PS4"]
+    l._update_gamepads()
+    check("indicator: three gamepads show 3",
+          l.pad_count.get_visible() and l.pad_count.get_label() == "3")
+    l.gamepads.connected = lambda: ["Xbox", "8BitDo"]
+    l._update_gamepads()
+    l.tiles[0].grab_focus()
+
+
+@step(300)
+def n2():
+    l = L()
+    screenshot(l.win, "9-two-gamepads")
+    l.gamepads.connected = lambda: []
+    l._update_gamepads()
+
 
 @step(200)
 def finish():

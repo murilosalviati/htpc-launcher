@@ -32,6 +32,11 @@ window.htpc {
 }
 .network label.limited { color: #facc15; }
 .network label.off  { color: #f87171; }
+.gamepad-count {
+  font-size: 15pt;
+  font-weight: 700;
+  color: #4ade80;
+}
 
 /* ---------- footer: hint + edit apps / restart / shut down ---------- */
 

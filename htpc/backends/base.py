@@ -108,6 +108,12 @@ class Gamepads(ABC):
         """False when this backend cannot read gamepads here (e.g. a missing library)."""
         return True
 
+    def connected(self):
+        """Names of the physical gamepads connected right now (USB, Bluetooth or a
+        wireless dongle), one entry per gamepad. Virtual gamepads, like the ones
+        Steam Input creates, are left out. Updated by poll()."""
+        return []
+
 
 class AppCatalog(ABC):
     @abstractmethod

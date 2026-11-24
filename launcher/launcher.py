@@ -7,7 +7,7 @@ A full-screen home screen driven by a gamepad (or a keyboard):
   * in the middle, one tile per app in apps.json; if the app is already
     running, its tile brings the existing window back (resumes it) instead
     of starting a second copy;
-  * clock in the top-left corner, network status in the top-right;
+  * clock in the top-left corner, network and gamepad status in the top-right;
   * in the footer, on the right: edit apps, restart and shut down (the last
     two ask for confirmation). "Edit apps" opens edit mode (see editor.py),
     where shortcuts can be added, edited and removed.
@@ -262,6 +262,10 @@ class Launcher(EditorMixin):
         self.network.connect("notify::connectivity", lambda *_: self._update_network())
         self.network.connect("network-changed", lambda *_: self._update_network())
         self._update_network()
+        self.gamepads = self.navigator.gamepads
+        self.gamepad_count = None
+        self._update_gamepads()
+        GLib.timeout_add_seconds(1, self._update_gamepads)
         GLib.timeout_add_seconds(3, self._every_3s)
 
         self.win.set_cursor(Gdk.Cursor.new_from_name("none", None))
@@ -355,6 +359,19 @@ class Launcher(EditorMixin):
         self.net_text = Gtk.Label(label="")
         self.net_icon = Gtk.Image()
         self.net_icon.set_pixel_size(30)
+
+        # Gamepads: lit when at least one is connected, with the count when there are more.
+        pads = Gtk.Box(spacing=4, valign=Gtk.Align.CENTER)
+        pads.add_css_class("gamepads")
+        self.pad_icon = Gtk.Image()
+        self.pad_icon.set_pixel_size(30)
+        self.pad_count = Gtk.Label(label="")
+        self.pad_count.add_css_class("gamepad-count")
+        pads.append(self.pad_icon)
+        pads.append(self.pad_count)
+        pads.set_margin_end(14)
+
+        net.append(pads)
         net.append(self.net_text)
         net.append(self.net_icon)
 
@@ -421,6 +438,17 @@ class Launcher(EditorMixin):
             self.net_text.remove_css_class(s)
         self.net_text.add_css_class(state)
         self.network_state = state
+
+    def _update_gamepads(self):
+        """The gamepad list is kept up to date by the Navigator's polling (every 2 s)."""
+        n = len(self.gamepads.connected())
+        if n != self.gamepad_count:
+            self.gamepad_count = n
+            self.pad_icon.set_from_file(str(ICONS / ("gamepad.svg" if n else "gamepad-off.svg")))
+            self.pad_icon.set_pixel_size(30)
+            self.pad_count.set_label(str(n) if n > 1 else "")
+            self.pad_count.set_visible(n > 1)
+        return True
 
     def _every_3s(self):
         if self.win.is_active() and not self.overlays:
