@@ -368,6 +368,80 @@ hclock[0] += 120
 h.button(press)
 check("HA: nothing when turned off or not configured", len(sent) == 4)
 
+# 9b2. the TV's state: while it is off, input only wakes it
+tv_cfg = {"home_assistant": {"url": "http://ha.local:8123", "webhook_id": "htpc-test",
+                             "token": "tok", "tv_entity": "media_player.tv"}}
+tv_state = ["on"]
+asked = []
+
+
+def fake_get(url, token):
+    asked.append((url, token))
+    if url.endswith("/api/states"):
+        return [{"entity_id": "media_player.tv", "attributes": {"friendly_name": "Sala"}},
+                {"entity_id": "light.sala"}, {"entity_id": "media_player.alexa"}]
+    return {"state": tv_state[0]}
+
+
+check("HA: reading the TV's state needs the token and the entity",
+      hass.fetch_tv_state(ha_cfg) is None and hass.fetch_tv_state(tv_cfg, fake_get) == "on"
+      and asked[-1] == ("http://ha.local:8123/api/states/media_player.tv", "tok"))
+tv_state[0] = "standby"
+s_off = hass.fetch_tv_state(tv_cfg, fake_get)
+tv_state[0] = "unavailable"
+check("HA: off/standby is off; unavailable is unknown (never blocks)",
+      s_off == "off" and hass.fetch_tv_state(tv_cfg, fake_get) is None)
+check("HA: the media players listed for the TV picker",
+      hass.media_players(tv_cfg, fake_get) == [("media_player.alexa", "media_player.alexa"),
+                                               ("media_player.tv", "Sala")])
+gate_path = pathlib.Path(tempfile.mkdtemp()) / "tv-gate"
+woken = []
+gclock = [100.0]
+gate = hass.TvGate(lambda: tv_cfg, woken.append, get=fake_get, clock=lambda: gclock[0],
+                   gate=lambda blocked: hass.write_gate(blocked, gate_path))
+tv_state[0] = "on"
+gate.check()
+a_press = GamepadEvent("pad", "button", "a", 1)
+a_release = GamepadEvent("pad", "button", "a", 0)
+check("TV on: nothing is blocked", not gate.blocks(a_press) and not hass.input_blocked(gate_path))
+tv_state[0] = "off"
+gate.check()
+check("TV off: the launcher sees the gate closed", hass.input_blocked(gate_path))
+first = gate.blocks(a_press)
+check("TV off: the first press is swallowed and wakes the TV", first and woken == [a_press])
+gclock[0] += 2
+check("TV off: more presses are swallowed but do not ask again right away",
+      gate.blocks(GamepadEvent("pad", "button", "b", 1)) and gate.blocks(GamepadEvent("pad", "axis", "lx", 0.9))
+      and len(woken) == 1)
+check("TV off: releases and a stick back in the middle go through",
+      not gate.blocks(a_release) and not gate.blocks(GamepadEvent("pad", "axis", "lx", 0.1)))
+gclock[0] += hass.WAKE_RETRY
+gate.blocks(a_press)
+check("TV still off a while later: a press asks again", len(woken) == 2)
+tv_state[0] = "on"
+gate.check()
+check("TV on again: input goes through and the gate opens",
+      not gate.blocks(a_press) and not hass.input_blocked(gate_path) and len(woken) == 2)
+tv_state[0] = "off"
+gate.check()
+
+
+def unreachable(url, token):
+    raise OSError("no route")
+
+
+gate.get = unreachable
+gate.check()
+check("HA unreachable: unknown, nothing blocked", not gate.blocks(a_press) and not hass.input_blocked(gate_path))
+hass.write_gate(True, gate_path, now=lambda: time.time() - 60)
+check("an old gate file (service not running) does not block the launcher", not hass.input_blocked(gate_path))
+h.last_activity = hclock[0]
+before = len(sent)
+ha_cfg["home_assistant"]["enabled"] = True
+h.wake(a_press)
+check("HA: a wake press is sent even inside the once-a-minute limit",
+      len(sent) == before + 1 and sent[-1][1] == "gamepad_activity")
+
 # 9c. weather: finding the place and reading the conditions (no network: a fake fetch)
 from htpc import weather  # noqa: E402
 

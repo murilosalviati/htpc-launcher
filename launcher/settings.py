@@ -153,6 +153,9 @@ class SettingsMixin:
             "enabled": self._field(self.t("ha_enabled"), self._ha_toggle_enabled, title_width=300),
             "url": self._field(self.t("ha_url"), self._ha_edit_url, title_width=300),
             "webhook": self._field(self.t("ha_webhook"), self._ha_edit_webhook, title_width=300),
+            "token": self._field(self.t("ha_token"), lambda: self._message(self.t("ha_token"), self.t("ha_token_text")),
+                                 title_width=300),
+            "tv": self._field(self.t("ha_tv"), self._ha_choose_tv, title_width=300),
             "tv_button": self._field(self.t("settings_tv_button"), self._toggle_tv_button, title_width=300),
             "test": self._field(self.t("ha_test"), self._ha_test, title_width=300),
         }
@@ -174,6 +177,11 @@ class SettingsMixin:
         f["enabled"].value.set_label(self.t("on" if ha.get("enabled", True) else "off"))
         f["url"].value.set_label(ha.get("url") or "—")
         f["webhook"].value.set_label(ha.get("webhook_id") or "—")
+        f["token"].value.set_label(self.t("ha_token_set" if ha.get("token") else "ha_token_missing"))
+        if not ha.get("token"):
+            f["tv"].value.set_label(self.t("ha_tv_needs_token"))
+        else:
+            f["tv"].value.set_label(ha.get("tv_name") or ha.get("tv_entity") or self.t("ha_tv_none"))
         if not home_assistant.webhook_url(self.cfg):
             f["tv_button"].value.set_label(self.t("tv_button_needs_ha"))
         else:
@@ -212,45 +220,96 @@ class SettingsMixin:
         self.btn_tv.set_visible(self.tv_button_enabled())
         self.refresh_home_assistant()
 
+    def _ha_ask(self, job, done):
+        """Run job() in a thread behind a "Calling Home Assistant…" box (with Cancel),
+        then done(result) on the main loop; result is an exception if job failed."""
+        box = self.dialog_box(self.t("ha_testing"))
+        token = object()
+        self.ha_request = token
+
+        def give_up():
+            self.ha_request = None
+
+        cancel = self.dialog_button(self.t("cancel"), lambda: (give_up(), self.pop_overlay()))
+        box.append(cancel)
+        self.push_overlay(box, [[cancel]], focus=cancel, cancel=give_up)
+
+        def arrived(result):
+            if self.ha_request is token:
+                self.ha_request = None
+                self.pop_overlay()
+                done(result)
+            return False
+
+        def work():
+            try:
+                result = job()
+            except Exception as e:  # noqa: BLE001 - shown to the user
+                result = e
+            GLib.idle_add(arrived, result)
+
+        threading.Thread(target=work, daemon=True).start()
+
+    @staticmethod
+    def _reason(error):
+        return str(getattr(error, "reason", None) or error)[:80]
+
     def _ha_test(self):
         url = home_assistant.webhook_url(self.cfg)
         if not url:
             self._message(self.t("tv_button_needs_ha_text"))
             return
-        box = self.dialog_box(self.t("ha_testing"))
-        token = object()
-        self.ha_test_token = token
-
-        def give_up():
-            self.ha_test_token = None
-
-        cancel = self.dialog_button(self.t("cancel"), lambda: (give_up(), self.pop_overlay()))
-        box.append(cancel)
-        self.push_overlay(box, [[cancel]], focus=cancel, cancel=give_up)
         post = getattr(self, "ha_post", None) or home_assistant.http_post
-        payload = {"event": "test", "gamepad": "", "host": "launcher"}
+        get = getattr(self, "ha_get", None)
+        cfg = dict(self.cfg)
 
-        def work():
-            try:
-                post(url, payload)
-                result = None
-            except Exception as e:  # noqa: BLE001 - shown to the user below
-                result = e
-            GLib.idle_add(self._ha_tested, token, result)
+        def job():
+            post(url, {"event": "test", "gamepad": "", "host": "launcher"})
+            return home_assistant.fetch_tv_state(cfg, get) if home_assistant.api_ready(cfg) else False
 
-        threading.Thread(target=work, daemon=True).start()
+        def done(result):
+            if isinstance(result, Exception):
+                self._message(self.t("ha_test_failed", error=self._reason(result)))
+            elif result is False:  # no token or TV: only the webhook was tested
+                self._message(self.t("ha_test_ok"))
+            else:
+                state = self.t({"on": "ha_tv_on", "off": "ha_tv_off"}.get(result, "ha_tv_unknown"))
+                self._message(self.t("ha_test_ok") + " " + self.t("ha_tv_is", state=state))
 
-    def _ha_tested(self, token, error):
-        if self.ha_test_token is not token:
-            return False
-        self.ha_test_token = None
-        self.pop_overlay()  # "Calling Home Assistant…"
-        if error is None:
-            self._message(self.t("ha_test_ok"))
-        else:
-            reason = getattr(error, "reason", None) or error
-            self._message(self.t("ha_test_failed", error=str(reason)[:80]))
-        return False
+        self._ha_ask(job, done)
+
+    def _ha_choose_tv(self):
+        ha = self._ha()
+        if not ha.get("url") or not ha.get("token"):
+            self._message(self.t("ha_token"), self.t("ha_token_text"))
+            return
+        get = getattr(self, "ha_get", None)
+        cfg = dict(self.cfg)
+        self._ha_ask(lambda: home_assistant.media_players(cfg, get), self._ha_players_arrived)
+
+    def _ha_players_arrived(self, result):
+        if isinstance(result, Exception):
+            self._message(self.t("ha_list_failed", error=self._reason(result)))
+            return
+        if not result:
+            self._message(self.t("ha_no_players"))
+            return
+        box = self.dialog_box(self.t("ha_choose_tv"))
+        box.add_css_class("editor")
+        rows, focus = [], None
+        current = self._ha().get("tv_entity")
+        for entity, name in result[:8]:
+            b = self._field(name, lambda e=entity, n=name: self._ha_tv_chosen(e, n), title_width=380)
+            b.value.set_label(entity)
+            if entity == current:
+                focus = b
+            box.append(b)
+            rows.append([b])
+        self.push_overlay(box, rows, focus=focus)
+
+    def _ha_tv_chosen(self, entity, name):
+        self.pop_overlay()
+        self._ha_set(tv_entity=entity, tv_name=name)
 
     # --- language ---------------------------------------------------------------------
 
@@ -342,8 +401,8 @@ class SettingsMixin:
         self.update_weather()
         self.refresh_settings()
 
-    def _message(self, text):
-        box = self.dialog_box(text)
+    def _message(self, text, body=None):
+        box = self.dialog_box(text, body)
         ok = self.dialog_button(self.t("ok"), self.pop_overlay)
         box.append(ok)
         self.push_overlay(box, [[ok]], focus=ok)

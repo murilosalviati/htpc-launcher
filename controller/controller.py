@@ -30,7 +30,7 @@ sys.path.insert(1, str(HERE.parent))
 
 from htpc import config  # noqa: E402
 from htpc.backends import get_backend  # noqa: E402
-from htpc.home_assistant import HomeAssistant  # noqa: E402
+from htpc.home_assistant import HomeAssistant, TvGate  # noqa: E402
 from htpc.notifications import Notifier  # noqa: E402
 from htpc.shortcuts import GamepadShortcuts, Shortcuts  # noqa: E402
 
@@ -44,10 +44,14 @@ def run(backend, poll_timeout=2.0):
     handler = GamepadShortcuts(Shortcuts(backend))
     notifier = Notifier(backend, gamepads)
     home_assistant = HomeAssistant(gamepads)
+    tv = TvGate(home_assistant.settings, home_assistant.wake)
+    tv.start()
     while True:
         for event in gamepads.poll(poll_timeout):
             if event.kind == "disconnected":
                 handler.forget(event.device)
+            elif tv.blocks(event):
+                continue   # the TV is off: this press only woke it
             else:
                 handler.handle(event)
                 home_assistant.button(event)

@@ -706,7 +706,9 @@ def tv1():
     l.press()
     f = l.ha_fields
     check("it opens the Home Assistant menu", len(l.overlays) == 2
-          and list(f) == ["enabled", "url", "webhook", "tv_button", "test"]
+          and list(f) == ["enabled", "url", "webhook", "token", "tv", "tv_button", "test"]
+          and f["token"].value.get_label() == l.t("ha_token_missing")
+          and f["tv"].value.get_label() == l.t("ha_tv_needs_token")
           and f["tv_button"].value.get_label() == l.t("tv_button_needs_ha"))
     l.pop_overlay()
     ha_type(l, "url", "192.168.0.22:8123")
@@ -796,6 +798,65 @@ def tv5():
     check("and with both empty the entry is gone", "home_assistant" not in l.cfg)
     while l.overlays:
         l.pop_overlay()
+    # the token goes in apps.json; then the TV is picked from Home Assistant's list
+    l.cfg["home_assistant"] = {"url": "http://ha.local:8123", "webhook_id": "w", "token": "tok"}
+    state = {"now": "off"}
+
+    def fake_get(url, token):
+        if url.endswith("/api/states"):
+            return [{"entity_id": "media_player.lg", "attributes": {"friendly_name": "TV da sala"}},
+                    {"entity_id": "media_player.alexa", "attributes": {"friendly_name": "Alexa"}}]
+        return {"state": state["now"]}
+    l.ha_get = fake_get
+    l.ha_post = lambda url, payload: None
+    l.open_home_assistant(focus="tv")
+    check("with the token: Token says so and the TV is still to be chosen",
+          l.ha_fields["token"].value.get_label() == l.t("ha_token_set")
+          and l.ha_fields["tv"].value.get_label() == l.t("ha_tv_none"))
+    l.press()
+
+
+@step(400)
+def tv6():
+    l = L()
+    top = l.overlays[-1]
+    names = label_texts(top["backdrop"])
+    check("the TV picker lists Home Assistant's media players", "TV da sala" in names and "Alexa" in names
+          and len(top["rows"]) == 2)
+    top["rows"][1][0].grab_focus()  # sorted by name: Alexa, TV da sala
+    l.press()
+    check("choosing one saves its entity and shows its name",
+          l.cfg["home_assistant"]["tv_entity"] == "media_player.lg"
+          and l.ha_fields["tv"].value.get_label() == "TV da sala")
+    l.ha_fields["test"].grab_focus()
+    l.press()
+
+
+@step(400)
+def tv7():
+    l = L()
+    check("the connection test also says whether the TV is on",
+          l.t("ha_tv_is", state=l.t("ha_tv_off")) in label_texts(l.overlays[-1]["backdrop"]))
+    while l.overlays:
+        l.pop_overlay()
+    from htpc.backends.base import GamepadEvent
+    nav = l.navigator
+    moved = []
+    real_move, real_blocked = nav.move, nav.blocked
+    nav.move = lambda dx, dy: moved.append((dx, dy))
+    nav.blocked = lambda: True
+    nav.handle(GamepadEvent("pad", "button", "right", 1))
+    nav.handle(GamepadEvent("pad", "button", "right", 0))
+    nav.handle(GamepadEvent("pad", "axis", "lx", 0.9))
+    nav.handle(GamepadEvent("pad", "axis", "lx", 0.0))
+    blocked_moves = list(moved)
+    nav.blocked = lambda: False
+    nav.handle(GamepadEvent("pad", "button", "right", 1))
+    nav.handle(GamepadEvent("pad", "button", "right", 0))
+    nav.move, nav.blocked = real_move, real_blocked
+    check("TV off (gate closed): the launcher ignores the gamepad; on: it moves again",
+          blocked_moves == [] and moved == [(1, 0)])
+    del l.cfg["home_assistant"]
     l.tiles[0].grab_focus()
 
 

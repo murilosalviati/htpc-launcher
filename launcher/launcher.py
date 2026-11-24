@@ -102,8 +102,9 @@ class Navigator:
     POLL_MS = 16          # how often to read the gamepads (about 60 times a second)
     DIRECTIONS = {"left": (-1, 0), "right": (1, 0), "up": (0, -1), "down": (0, 1)}
 
-    def __init__(self, gamepads, active, move, press, back, other_button):
+    def __init__(self, gamepads, active, move, press, back, other_button, blocked=lambda: False):
         self.gamepads = gamepads
+        self.blocked = blocked  # True while the TV is off: input is ignored (it only wakes the TV)
         self.active, self.move, self.press, self.back = active, move, press, back
         self.other_button = other_button  # called with "x" or "y"
         self.stick = {}         # (device, axis) -> -1 / 0 / 1
@@ -120,6 +121,8 @@ class Navigator:
         return True
 
     def handle(self, ev):
+        if home_assistant.is_press(ev, self.DEAD_ZONE) and self.blocked():
+            return
         if ev.kind == "button":
             if ev.name in self.DIRECTIONS:
                 self._hold(self.DIRECTIONS[ev.name] if ev.value else None)
@@ -318,7 +321,7 @@ class Launcher(EditorMixin, SettingsMixin):
         self.win.connect("notify::is-active", lambda *_: self.win.is_active() and self.refresh_status())
 
         self.navigator = Navigator(backend.gamepads(), self.win.is_active, self.move, self.press,
-                                   self.back, self.other_button)
+                                   self.back, self.other_button, blocked=home_assistant.input_blocked)
         self.gamepads = self.navigator.gamepads
 
         GLib.timeout_add_seconds(1, self._update_clock)

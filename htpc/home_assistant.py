@@ -9,6 +9,8 @@ then switch it to the HTPC's HDMI input). Configured in apps.json:
     "home_assistant": {
         "url": "http://192.168.0.10:8123",
         "webhook_id": "htpc-gamepad-...",
+        "token": "<long-lived access token>",     (optional, see TvGate)
+        "tv_entity": "media_player.living_room_tv", (optional, see TvGate)
         "enabled": true
     }
 
@@ -139,6 +141,12 @@ class HomeAssistant:
         self.last_sent_wall = time.time()
         self._send("gamepad_activity", self._name(event.device))
 
+    def wake(self, event):
+        """A press while the TV is off: always sent, whatever the once-a-minute limit."""
+        self.last_activity = self.clock()
+        self.last_sent_wall = time.time()
+        self._send("gamepad_activity", self._name(event.device))
+
     def tick(self):
         now = Counter(self.gamepads.connected())
         if self.pads is not None:
@@ -151,3 +159,145 @@ class HomeAssistant:
     def _name(self, device):
         dev = getattr(self.gamepads, "devs", {}).get(device)
         return getattr(dev, "name", "") if dev is not None else ""
+
+
+# --- the TV's state, read from Home Assistant -------------------------------------
+#
+# With a long-lived access token ("token") and the TV's entity ("tv_entity") in
+# the same "home_assistant" entry, the controller service asks Home Assistant
+# for the TV's state every few seconds. While the TV is off, gamepad input is
+# not used for anything (neither the launcher nor the shortcuts): the first
+# press only wakes the TV, through the same webhook. The service writes what it
+# knows to a small file the launcher reads ("tv-gate").
+
+STATE_EVERY = 3.0     # seconds between state checks
+WAKE_RETRY = 8.0      # a press this long after the last wake asks again
+GATE_FRESH = 10.0     # the launcher ignores a gate file older than this
+OFF_STATES = {"off", "standby"}
+
+
+def api_ready(cfg):
+    """Can we read states? (enabled, address, token and TV entity set)"""
+    ha = (cfg or {}).get("home_assistant") or {}
+    return bool(ha.get("enabled", True) and ha.get("url") and ha.get("token") and ha.get("tv_entity"))
+
+
+def http_get(url, token):
+    request = urllib.request.Request(url, headers={
+        "Authorization": f"Bearer {token}", "Content-Type": "application/json",
+        "User-Agent": f"htpc-launcher/{__version__}"})
+    with urllib.request.urlopen(request, timeout=TIMEOUT) as response:
+        return json.loads(response.read().decode("utf-8"))
+
+
+def _api(cfg, path, get=None):
+    ha = cfg["home_assistant"]
+    return (get or http_get)(f"{ha['url'].rstrip('/')}/api/{path}", ha["token"])
+
+
+def fetch_tv_state(cfg, get=None):
+    """"on", "off", or None when unknown (not set up, unavailable, unreachable)."""
+    if not api_ready(cfg):
+        return None
+    state = _api(cfg, "states/" + cfg["home_assistant"]["tv_entity"], get).get("state")
+    if state in OFF_STATES:
+        return "off"
+    if state in ("unavailable", "unknown", None):
+        return None
+    return "on"
+
+
+def media_players(cfg, get=None):
+    """[(entity_id, friendly name)] of the media players Home Assistant knows."""
+    states = _api(cfg, "states", get)
+    found = [(s["entity_id"], (s.get("attributes") or {}).get("friendly_name") or s["entity_id"])
+             for s in states if str(s.get("entity_id", "")).startswith("media_player.")]
+    return sorted(found, key=lambda item: item[1].lower())
+
+
+def gate_file():
+    return paths.data_dir() / "tv-gate"
+
+
+def write_gate(blocked, path=None, now=time.time):
+    path = path or gate_file()
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_suffix(".tmp")
+        tmp.write_text(json.dumps({"blocked": bool(blocked), "at": now()}))
+        tmp.replace(path)
+    except OSError as e:
+        log.warning("could not write the tv gate: %s", e)
+
+
+def input_blocked(path=None, now=time.time):
+    """For the launcher: is the TV off (so gamepad input must be ignored)?
+    A missing, broken or old file (the service is not running) means no."""
+    try:
+        data = json.loads((path or gate_file()).read_text())
+    except (OSError, ValueError):
+        return False
+    return bool(data.get("blocked")) and now() - float(data.get("at", 0)) < GATE_FRESH
+
+
+def is_press(event, dead_zone=0.55):
+    if event.kind == "button":
+        return bool(event.value)
+    if event.kind == "axis":
+        return abs(event.value) > dead_zone
+    return False
+
+
+class TvGate:
+    """In the controller service: keeps the TV's state and swallows input while it is off."""
+
+    def __init__(self, settings, send_wake, get=None, clock=time.monotonic, gate=write_gate):
+        self.settings = settings
+        self.send_wake = send_wake      # called with the event that should wake the TV
+        self.get = get
+        self.clock = clock
+        self.gate = gate
+        self.state = None               # "on" / "off" / None
+        self.last_wake = None
+        self._lock = threading.Lock()
+
+    def check(self):
+        """Ask Home Assistant once (runs in its own thread in the service)."""
+        try:
+            cfg = self.settings()
+            state = fetch_tv_state(cfg, self.get)
+        except Exception as e:  # noqa: BLE001 - unreachable: we just don't know
+            log.debug("tv state: %s", e)
+            state = None
+        with self._lock:
+            if state != self.state:
+                log.info("tv: %s", state or "unknown")
+            self.state = state
+            if state != "off":
+                self.last_wake = None
+        self.gate(state == "off")
+
+    def run_forever(self):
+        while True:
+            self.check()
+            time.sleep(STATE_EVERY)
+
+    def start(self):
+        threading.Thread(target=self.run_forever, daemon=True, name="tv-state").start()
+
+    def blocks(self, event):
+        """True when the event must not be used. The first press while the TV is
+        off wakes it (again after WAKE_RETRY if it is still off)."""
+        with self._lock:
+            if self.state != "off":
+                return False
+            if not is_press(event):
+                return False   # releases and a stick going back to the middle are harmless
+            now = self.clock()
+            wake = self.last_wake is None or now - self.last_wake >= WAKE_RETRY
+            if wake:
+                self.last_wake = now
+        if wake:
+            log.info("tv is off: this press only wakes it")
+            self.send_wake(event)
+        return True
