@@ -272,12 +272,17 @@ def e1():
     l.press()
     f = l.settings_fields
     check("the gear opens Settings with apps, background, location, temperature and language",
-          len(l.overlays) == 1 and list(f) == ["apps", "background", "location", "unit", "language"])
+          len(l.overlays) == 1 and list(f) == ["apps", "background", "location", "unit", "language", "notifications"])
     check("Settings shows the current values",
           f["background"].value.get_label() == "Meia-noite" and f["unit"].value.get_label() == "°C"
           and f["language"].value.get_label() == "Português (Brasil)"
           and f["location"].value.get_label() == "Desligado (sem clima)")
     check("focus starts on Apps", l.win.get_focus() is f["apps"])
+    check("on-screen notices start on", f["notifications"].value.get_label() == "Ligado")
+    l._toggle_notifications()
+    check("Ⓐ on notices turns them off and saves it", f["notifications"].value.get_label() == "Desligado"
+          and json.load(open(f"{cfgdir}/htpc-launcher/apps.json"))["notifications"] is False)
+    l._toggle_notifications()
     check("Settings has a 'Fechar o launcher' button next to Close",
           l.settings_quit.get_label() == "Fechar o launcher" and l.settings_quit in l.overlays[-1]["rows"][-1])
     quits = []

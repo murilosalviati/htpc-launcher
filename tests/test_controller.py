@@ -248,6 +248,77 @@ from htpc.backends.base import Battery  # noqa: E402
 check("battery: levels without a percentage still map to bars",
       [Battery("x", level=l).bars for l in ("full", "high", "normal", "low", "critical")] == [4, 3, 2, 1, 0])
 
+# 9b3. on-screen notices: gamepads, batteries and internet
+from htpc import notifications as nt  # noqa: E402
+
+
+class FakeBackend:
+    def __init__(self):
+        self.pads, self.bats, self.net, self.kind, self.shown = [], [], "full", "wired", []
+        outer = self
+        self._g = SimpleNamespace(connected=lambda: list(outer.pads), batteries=lambda: list(outer.bats))
+        self._s = SimpleNamespace(connectivity=lambda: outer.net, connection_kind=lambda: outer.kind)
+        self._w = SimpleNamespace(notify=lambda t, b, i, s: outer.shown.append((t, b, i.rsplit("/", 1)[-1])))
+
+    def gamepads(self): return self._g
+    def system(self): return self._s
+    def window_control(self): return self._w
+
+
+clock = [100.0]
+fb = FakeBackend()
+fb.pads = ["Xbox Series"]
+lang = {"language": "pt-BR"}
+n = nt.Notifier(fb, clock=lambda: clock[0], settings=lambda: lang)
+n.tick()
+check("notices: nothing for what was already there at start", fb.shown == [])
+fb.pads = ["Xbox Series", "8BitDo Pro 2"]
+n.tick()
+check("notices: a gamepad connecting", fb.shown[-1] == ("Controle conectado", "8BitDo Pro 2", "gamepad.svg"))
+fb.pads = ["Xbox Series"]
+n.tick()
+check("notices: a gamepad disconnecting", fb.shown[-1] == ("Controle desconectado", "8BitDo Pro 2", "gamepad-off.svg"))
+count = len(fb.shown)
+fb.bats = [Battery("Xbox Series", 35)]
+n.tick()
+fb.bats = [Battery("Xbox Series", 19)]
+n.tick()
+n.tick()
+check("notices: battery low once, with the percentage",
+      fb.shown[count:] == [("Bateria do controle fraca", "Xbox Series: 19%", "battery-1.svg")])
+fb.bats = [Battery("Xbox Series", 9)]
+n.tick()
+check("notices: and again when almost empty", fb.shown[-1][0] == "Bateria do controle acabando")
+count = len(fb.shown)
+fb.bats = [Battery("Xbox Series", 9, charging=True)]
+n.tick()
+fb.bats = [Battery("Xbox Series", 9)]
+n.tick()
+check("notices: after charging it may warn again", len(fb.shown) == count + 1)
+count = len(fb.shown)
+fb.net = "none"
+n.tick()
+clock[0] += 3
+fb.net = "full"
+n.tick()
+check("notices: a short internet blip shows nothing", len(fb.shown) == count)
+fb.net = "none"
+n.tick()
+clock[0] += 10
+n.tick()
+check("notices: internet down after it lasts a few seconds",
+      fb.shown[-1] == ("Sem internet", "", "wired-off.svg"))
+fb.net = "full"
+n.tick()
+clock[0] += 10
+n.tick()
+check("notices: internet back", fb.shown[-1] == ("A internet voltou", "", "wired.svg"))
+count = len(fb.shown)
+lang["notifications"] = False
+fb.pads = []
+n.tick()
+check("notices: turned off in apps.json, nothing is shown", len(fb.shown) == count)
+
 # 9c. weather: finding the place and reading the conditions (no network: a fake fetch)
 from htpc import weather  # noqa: E402
 

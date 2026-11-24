@@ -4,6 +4,7 @@ The project is in beta: every `0.x` version is a pre-release, and the configurat
 
 ## Unreleased
 
+- **On-screen notices over whatever is playing** (Moonlight, YouTube, Jellyfin, games): a gamepad connected or disconnected, a gamepad battery low (20%) or almost empty (10%), the internet dropping, limited or back. They appear in the top-right corner for a few seconds, without taking the focus or pausing anything, sized for the screen. A switch in Settings turns them off. Drawn by the GNOME extension (version 5: log out and back in once after updating); test one with `gnome-extension/test.sh notify "Title" "text"`.
 - **The mouse pointer hides when the gamepad is used**, on the whole screen (apps included), and comes back as soon as the mouse moves. Needs version 4 of the GNOME extension: log out and back in once after updating.
 - **Fixed:** on Xbox controllers (and others on Xbox drivers, like 8BitDo in XInput mode) X and Y were swapped, so Y deleted on the on-screen keyboard instead of typing a space. Xbox drivers send X and Y with the kernel codes meant for the opposite positions; the launcher now recognizes them (by driver or by name) and swaps them back. PlayStation and Nintendo-style pads already followed the positions and are unchanged.
 

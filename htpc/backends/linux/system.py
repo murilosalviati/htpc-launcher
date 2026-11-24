@@ -102,12 +102,21 @@ class LinuxSystem(System):
     WIFI_TYPES = ("802-11-wireless", "802-11-olpc-mesh", "wifi-p2p")
 
     def connection_kind(self):
-        kind = self._nm_primary_type()
+        kind = self._nm_property("PrimaryConnectionType")
         if not kind:
             return None
         return "wifi" if kind in self.WIFI_TYPES else "wired"
 
+    # NetworkManager's Connectivity: 0 unknown, 1 none, 2 portal, 3 limited, 4 full.
+    CONNECTIVITY = {1: "none", 2: "limited", 3: "limited", 4: "full"}
+
+    def connectivity(self):
+        return self.CONNECTIVITY.get(self._nm_property("Connectivity"))
+
     def _nm_primary_type(self):
+        return self._nm_property("PrimaryConnectionType")
+
+    def _nm_property(self, name):
         try:
             from jeepney import DBusAddress, Properties
             from jeepney.io.blocking import open_dbus_connection
@@ -117,7 +126,7 @@ class LinuxSystem(System):
             addr = DBusAddress("/org/freedesktop/NetworkManager",
                                bus_name="org.freedesktop.NetworkManager",
                                interface="org.freedesktop.NetworkManager")
-            reply = self._nm.send_and_get_reply(Properties(addr).get("PrimaryConnectionType"), timeout=1)
+            reply = self._nm.send_and_get_reply(Properties(addr).get(name), timeout=1)
             return unwrap_msg(reply)[0][1]
         except Exception as e:  # no NetworkManager, no system bus...
             if getattr(self, "_nm", None) is not None:

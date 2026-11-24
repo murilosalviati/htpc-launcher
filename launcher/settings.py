@@ -9,6 +9,7 @@
     coordinates; empty hides the weather;
   * Temperature: °C or °F, switched with Ⓐ;
   * Language: rebuilds the screen in the chosen language right away;
+  * On-screen notices: turns the gamepad, battery and internet notices on or off;
   * Close the launcher: quits it, after a confirmation (the guide button opens
     it again, through the controller service).
 
@@ -49,6 +50,8 @@ class SettingsMixin:
             "location": self._field(self.t("settings_location"), self._edit_location, title_width=300),
             "unit": self._field(self.t("settings_unit"), self._toggle_unit, title_width=300),
             "language": self._field(self.t("settings_language"), self._choose_language, title_width=300),
+            "notifications": self._field(self.t("settings_notifications"), self._toggle_notifications,
+                                         title_width=300),
         }
         for w in f.values():
             box.append(w)
@@ -73,6 +76,7 @@ class SettingsMixin:
         f["location"].value.set_label(place["name"] if place else self.t("weather_off"))
         f["unit"].value.set_label(UNITS[self._unit()])
         f["language"].value.set_label(self.t("language_name"))
+        f["notifications"].value.set_label(self.t("on" if self.cfg.get("notifications", True) else "off"))
 
     def _unit(self):
         unit = self.cfg.get("temperature_unit", "celsius")
@@ -96,6 +100,13 @@ class SettingsMixin:
         self.refresh_settings()
         self.conditions = None  # the old number is in the other unit
         self.update_weather()
+
+    # --- on-screen notices (shown by the controller service) ----------------------
+
+    def _toggle_notifications(self):
+        self.cfg["notifications"] = not self.cfg.get("notifications", True)
+        self.save_config()
+        self.refresh_settings()
 
     # --- language ---------------------------------------------------------------------
 

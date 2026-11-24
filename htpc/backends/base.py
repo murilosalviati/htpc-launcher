@@ -106,6 +106,11 @@ class WindowControl(ABC):
     def show_launcher(self):
         """Raise the launcher. False if it is not running."""
 
+    def notify(self, title, body, icon_path, seconds=6):
+        """Show a short notice over whatever is on screen, full-screen apps included.
+        None if the OS side cannot do it."""
+        return None
+
     def hide_pointer(self):
         """Hide the mouse pointer on the whole screen until the mouse moves again.
         True if hidden, None if the OS side cannot do it."""
@@ -182,6 +187,11 @@ class System(ABC):
     @abstractmethod
     def power_off(self):
         """Shut the machine down."""
+
+    def connectivity(self):
+        """Whether the internet works: "full", "limited" (no internet, captive
+        portal...), "none" (not connected), or None when the OS cannot tell."""
+        return None
 
     def connection_kind(self):
         """How the machine reaches the network right now: "wired", "wifi", or None when

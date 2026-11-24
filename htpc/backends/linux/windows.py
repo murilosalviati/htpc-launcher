@@ -68,6 +68,10 @@ class ExtensionWindowControl(WindowControl):
     def show_launcher(self):
         return bool(self._call("ShowLauncher"))
 
+    def notify(self, title, body, icon_path, seconds=6):
+        # Extension v5 and later.
+        return self._call("Notify", "sssu", (title, body, icon_path, int(seconds)))
+
     def hide_pointer(self):
         # Extension v4 and later.
         return self._call("HidePointer")

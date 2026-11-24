@@ -26,6 +26,10 @@ case "${1:-list}" in
     running)  call IsRunning "$2" ;;
     close)    call Close "$2" ;;
     launcher) call ShowLauncher ;;
+    notify)
+        # A test notice over whatever is on screen: test.sh notify "Title" "text"
+        call Notify "${2:-Test notice}" "${3:-}" "$HOME/.local/share/htpc-launcher/icons/gamepad.svg" 6
+        ;;
     focus)
         # Stops after N seconds (60 by default) so it is not left running on the machine.
         timeout "${2:-60}" gdbus monitor --session --dest org.htpc.Launcher \

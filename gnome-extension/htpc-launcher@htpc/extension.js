@@ -16,7 +16,9 @@
 
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
+import Clutter from 'gi://Clutter';
 import Meta from 'gi://Meta';
+import St from 'gi://St';
 import Shell from 'gi://Shell';
 
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
@@ -58,6 +60,13 @@ const IFACE_XML = `
       <arg type="s" direction="in" name="appId"/>
       <arg type="u" direction="in" name="seconds"/>
       <arg type="u" direction="out" name="windowsNow"/>
+    </method>
+    <method name="Notify">
+      <arg type="s" direction="in" name="title"/>
+      <arg type="s" direction="in" name="body"/>
+      <arg type="s" direction="in" name="iconPath"/>
+      <arg type="u" direction="in" name="seconds"/>
+      <arg type="b" direction="out" name="shown"/>
     </method>
     <method name="HidePointer">
       <arg type="b" direction="out" name="hidden"/>
@@ -135,6 +144,7 @@ function fullscreenable(win) {
 class LauncherBridge {
     constructor() {
         this._fullscreenWanted = new Map();  // appId (lowercase) -> until when (µs, monotonic)
+        this._toasts = [];                   // notices on screen, top to bottom
     }
 
     ListWindows() {
@@ -230,6 +240,91 @@ class LauncherBridge {
         });
     }
 
+    // A short notice in the top-right corner, above everything, full-screen
+    // apps included (GNOME holds back ordinary notification banners while
+    // something is full screen). Several stack downwards. Sized for the screen.
+    Notify(title, body, iconPath, seconds) {
+        const monitor = Main.layoutManager.primaryMonitor;
+        if (!monitor)
+            return false;
+        const k = Math.max(0.6, monitor.height / 1080);
+        const toast = new St.BoxLayout({
+            opacity: 0,
+            style: `background-color: rgba(16, 22, 36, 0.94); border-radius: ${Math.round(26 * k)}px;
+                    border: ${Math.max(1, Math.round(2 * k))}px solid rgba(124, 183, 255, 0.45);
+                    padding: ${Math.round(18 * k)}px ${Math.round(28 * k)}px;
+                    spacing: ${Math.round(20 * k)}px;
+                    box-shadow: 0 ${Math.round(10 * k)}px ${Math.round(40 * k)}px rgba(0, 0, 0, 0.55);`,
+        });
+        if (iconPath && GLib.file_test(iconPath, GLib.FileTest.EXISTS)) {
+            toast.add_child(new St.Icon({
+                gicon: Gio.FileIcon.new(Gio.File.new_for_path(iconPath)),
+                icon_size: Math.round(52 * k),
+                y_align: Clutter.ActorAlign.CENTER,
+            }));
+        }
+        const text = new St.BoxLayout({vertical: true, y_align: Clutter.ActorAlign.CENTER});
+        text.add_child(new St.Label({
+            text: title,
+            style: `font-size: ${(20 * k).toFixed(1)}pt; font-weight: bold; color: #ffffff;`,
+        }));
+        if (body) {
+            text.add_child(new St.Label({
+                text: body,
+                style: `font-size: ${(15 * k).toFixed(1)}pt; color: #aab4c8;`,
+            }));
+        }
+        toast.add_child(text);
+
+        Main.layoutManager.uiGroup.add_child(toast);
+        // Keep it drawn over a full-screen app (it may be scanned out directly).
+        if (this._toasts.length === 0)
+            global.compositor?.disable_unredirect?.();
+        this._toasts.push(toast);
+        this._placeToasts();
+        toast.ease({opacity: 255, duration: 250, mode: Clutter.AnimationMode.EASE_OUT_QUAD});
+
+        toast._timer = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, Math.max(2, seconds || 6), () => {
+            toast._timer = 0;
+            toast.ease({
+                opacity: 0, duration: 400, mode: Clutter.AnimationMode.EASE_IN_QUAD,
+                onComplete: () => this._dropToast(toast),
+            });
+            return GLib.SOURCE_REMOVE;
+        });
+        return true;
+    }
+
+    _placeToasts() {
+        const monitor = Main.layoutManager.primaryMonitor;
+        if (!monitor)
+            return;
+        const k = Math.max(0.6, monitor.height / 1080);
+        const margin = Math.round(40 * k);
+        let y = monitor.y + Math.round(150 * k);  // below the clock and status icons
+        for (const toast of this._toasts) {
+            const [, width] = toast.get_preferred_width(-1);
+            const [, height] = toast.get_preferred_height(width);
+            toast.set_position(monitor.x + monitor.width - width - margin, y);
+            y += height + Math.round(16 * k);
+        }
+    }
+
+    _dropToast(toast) {
+        if (toast._timer)
+            GLib.source_remove(toast._timer);
+        this._toasts = this._toasts.filter(t => t !== toast);
+        toast.destroy();
+        if (this._toasts.length === 0)
+            global.compositor?.enable_unredirect?.();
+        this._placeToasts();
+    }
+
+    clearToasts() {
+        for (const toast of [...this._toasts])
+            this._dropToast(toast);
+    }
+
     // Hides the mouse pointer on the whole screen (asked when the gamepad is
     // used) until the mouse moves. GNOME 49 removed set_pointer_visible; its
     // replacement, inhibit_cursor_visibility, does not undo itself when the
@@ -301,6 +396,7 @@ export default class HtpcLauncherExtension extends Extension {
 
     disable() {
         this._impl?.showPointer?.();
+        this._impl?.clearToasts?.();
         if (this._createdId) {
             global.display.disconnect(this._createdId);
             this._createdId = 0;
