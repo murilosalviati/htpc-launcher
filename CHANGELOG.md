@@ -2,6 +2,10 @@
 
 The project is in beta: every `0.x` version is a pre-release, and the configuration format or install steps may still change.
 
+## Unreleased
+
+- **Gamepad batteries:** next to the gamepad icon, a battery icon (with a bolt while charging) for each wireless gamepad that reports its charge to Linux. Gamepads on a cable report none, so nothing is shown for them.
+
 ## 0.1.0-beta.3
 
 Update by running `./install.sh` again, then **log out and back in once** so GNOME loads version 3 of the extension (needed for full-screen apps). Your `apps.json` is kept.

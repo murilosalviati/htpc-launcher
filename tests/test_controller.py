@@ -184,6 +184,40 @@ check("gamepads: counts each physical gamepad once and skips virtual ones",
 pads.devs = {}
 check("gamepads: none connected", pads.connected() == [])
 
+# 9b2. gamepad batteries: matched to the gamepad by sysfs path
+import os as _os  # noqa: E402
+ps = tempfile.mkdtemp()
+dev_root = tempfile.mkdtemp()
+hid = _os.path.join(dev_root, "0005:045E:0B13.0001")
+_os.makedirs(_os.path.join(hid, "input", "input40"))
+mouse = _os.path.join(dev_root, "mouse")
+_os.makedirs(mouse)
+
+
+def supply(name, device, **files):
+    d = _os.path.join(ps, name)
+    _os.makedirs(d)
+    _os.symlink(device, _os.path.join(d, "device"))
+    for k, v in files.items():
+        open(_os.path.join(d, k), "w").write(v + "\n")
+
+
+supply("hid-aa-battery", hid, type="Battery", scope="Device", capacity="42", status="Discharging")
+supply("hid-mouse-battery", mouse, type="Battery", scope="Device", capacity_level="Low", status="Discharging")
+supply("BAT0", dev_root, type="Battery", scope="System", capacity="90")
+pads = EvdevGamepads()
+pads.devs = {"/dev/input/event40": SimpleNamespace(name="Xbox Wireless Controller", uniq="aa"),
+             "/dev/input/event41": SimpleNamespace(name="Wired pad", uniq="")}
+pads.sysfs = {"/dev/input/event40": _os.path.join(hid, "input", "input40"),
+              "/dev/input/event41": _os.path.join(dev_root, "usb", "input41")}
+pads.virtual = {}
+bats = pads.batteries(ps)
+check("battery: the wireless pad's battery is found through its parent device, the wired one has none",
+      [(b.name, b.percent, b.bars) for b in bats] == [("Xbox Wireless Controller", 42, 2)])
+from htpc.backends.base import Battery  # noqa: E402
+check("battery: levels without a percentage still map to bars",
+      [Battery("x", level=l).bars for l in ("full", "high", "normal", "low", "critical")] == [4, 3, 2, 1, 0])
+
 # 9c. weather: finding the place and reading the conditions (no network: a fake fetch)
 from htpc import weather  # noqa: E402
 

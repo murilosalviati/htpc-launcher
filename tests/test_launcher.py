@@ -485,8 +485,17 @@ def n1():
     l._update_gamepads()
     check("indicator: three gamepads show 3",
           l.pad_count.get_visible() and l.pad_count.get_label() == "3")
+    from htpc.backends.base import Battery
+    l.gamepads.batteries = lambda: [Battery("Xbox", 80), Battery("8BitDo", level="low", charging=True)]
     l.gamepads.connected = lambda: ["Xbox", "8BitDo"]
     l._update_gamepads()
+    icons = []
+    c = l.battery_box.get_first_child()
+    while c is not None:
+        icons.append(c.get_gicon().get_file().get_basename())
+        c = c.get_next_sibling()
+    check("one battery icon per wireless gamepad, charging shown with a bolt",
+          icons == ["battery-3.svg", "battery-charging.svg"] and l.battery_box.get_visible())
     l.tiles[0].grab_focus()
 
 
@@ -494,6 +503,7 @@ def n1():
 def n2():
     l = L()
     screenshot(l.win, "9-two-gamepads")
+    l.gamepads.batteries = lambda: []
     l.gamepads.connected = lambda: []
     l._update_gamepads()
 

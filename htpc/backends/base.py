@@ -49,6 +49,23 @@ class InstalledApp:
 
 
 @dataclass
+class Battery:
+    """Charge of a wireless gamepad, as the OS reports it."""
+    name: str                   # the gamepad's name
+    percent: int = None         # 0..100, or None when only a level is known
+    level: str = ""             # "full", "high", "normal", "low", "critical" (when percent is None)
+    charging: bool = False
+
+    @property
+    def bars(self):
+        """0..4, for the icon."""
+        if self.percent is not None:
+            p = self.percent
+            return 4 if p >= 90 else 3 if p >= 60 else 2 if p >= 35 else 1 if p >= 15 else 0
+        return {"full": 4, "high": 3, "normal": 2, "low": 1, "critical": 0}.get(self.level, 2)
+
+
+@dataclass
 class GamepadEvent:
     device: str                 # stable id of the gamepad while it is connected
     kind: str                   # "button", "axis" or "disconnected"
@@ -118,6 +135,11 @@ class Gamepads(ABC):
         """Names of the physical gamepads connected right now (USB, Bluetooth or a
         wireless dongle), one entry per gamepad. Virtual gamepads, like the ones
         Steam Input creates, are left out. Updated by poll()."""
+        return []
+
+    def batteries(self):
+        """List[Battery] for the connected gamepads that report one (wireless ones,
+        usually; a gamepad on a cable reports nothing)."""
         return []
 
 

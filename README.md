@@ -18,7 +18,7 @@ What changed in each version is in [CHANGELOG.md](CHANGELOG.md).
 - **Full-screen home screen** with one tile per app. Across the top:
   - on the left, the current weather (icon, temperature and place), once you set a location;
   - in the middle, the clock and date;
-  - on the right, a gamepad icon that lights up when a gamepad is connected (USB, Bluetooth or wireless dongle) and shows how many there are when there is more than one, and the network icon: a cable symbol on a wired connection, Wi-Fi bars on Wi-Fi. It is just an icon while you are online and only shows text when the connection is limited or down.
+  - on the right, a gamepad icon that lights up when a gamepad is connected (USB, Bluetooth or wireless dongle) and shows how many there are when there is more than one, with a battery icon for each wireless gamepad that reports its charge (a gamepad on a cable reports none), and the network icon: a cable symbol on a wired connection, Wi-Fi bars on Wi-Fi. It is just an icon while you are online and only shows text when the connection is limited or down.
 - **Made for a TV across the room:** the selected tile lifts and glows, pushing it plays a short "button pressed" animation, and a tile pulses green while its app is opening. The clock, weather, status icons, hints and footer grow with the screen (they keep the same share of a 1080p, 1440p or 4K screen), and every icon is drawn from vectors, so it stays sharp at any size.
 - **Apps open in full screen** (through the GNOME extension), except where an app's own full-screen mode is better, like Steam's Big Picture.
 - **Resume, never duplicate:** selecting an app that is already running brings its existing window back instead of starting a second copy.

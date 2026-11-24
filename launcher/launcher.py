@@ -391,12 +391,17 @@ class Launcher(EditorMixin, SettingsMixin):
         self.weather_icon.set_pixel_size(self.px("weather_icon"))
         self.net_icon.set_pixel_size(self.px("status_icon"))
         self.pad_icon.set_pixel_size(self.px("status_icon"))
+        image = self.battery_box.get_first_child()
+        while image is not None:
+            image.set_pixel_size(self.px("status_icon"))
+            image = image.get_next_sibling()
         log(f"screen {self.screen_size}: edge scale {scale:.2f}")
 
     def refresh_top_bar(self):
         self._update_clock()
         self._update_network()
         self.gamepad_count = None
+        self.battery_state = None
         self._update_gamepads()
         self.show_weather()
 
@@ -512,6 +517,11 @@ class Launcher(EditorMixin, SettingsMixin):
         self.pad_count.add_css_class("gamepad-count")
         pads.append(self.pad_icon)
         pads.append(self.pad_count)
+        # One battery per wireless gamepad that reports one (nothing on a cable).
+        self.battery_box = Gtk.Box(spacing=6, valign=Gtk.Align.CENTER)
+        self.battery_box.set_margin_start(6)
+        self.battery_state = None
+        pads.append(self.battery_box)
         pads.set_margin_end(14)
 
         net.append(pads)
@@ -607,8 +617,28 @@ class Launcher(EditorMixin, SettingsMixin):
                 del self.opening[app_id]     # never showed up
         return True
 
+    def _update_batteries(self):
+        batteries = self.gamepads.batteries()[:4]
+        state = tuple((b.bars, b.charging) for b in batteries)
+        if state == self.battery_state:
+            return
+        self.battery_state = state
+        child = self.battery_box.get_first_child()
+        while child is not None:
+            following = child.get_next_sibling()
+            self.battery_box.remove(child)
+            child = following
+        for b in batteries:
+            image = Gtk.Image.new_from_gicon(
+                svg_icon("battery-charging.svg" if b.charging else f"battery-{b.bars}.svg"))
+            image.set_pixel_size(self.px("status_icon"))
+            image.set_tooltip_text(f"{b.name}: {b.percent}%" if b.percent is not None else b.name)
+            self.battery_box.append(image)
+        self.battery_box.set_visible(bool(batteries))
+
     def _update_gamepads(self):
         """The gamepad list is kept up to date by the Navigator's polling (every 2 s)."""
+        self._update_batteries()
         n = len(self.gamepads.connected())
         if n != self.gamepad_count:
             self.gamepad_count = n
