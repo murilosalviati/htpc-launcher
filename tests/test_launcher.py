@@ -115,6 +115,9 @@ def s1():
     l.apply_edge_scale(2.0)
     check("on a screen twice as big, the edge icons double", l.weather_icon.get_pixel_size() == 144
           and l.net_icon.get_pixel_size() == 84 and all(i.get_pixel_size() == 56 for i in l.footer_images))
+    from gi.repository import Gio as _Gio
+    check("edge icons are drawn from the vector at their size (GIcon, not a stretched file)",
+          all(isinstance(i.get_gicon(), _Gio.FileIcon) for i in [l.net_icon, l.pad_icon, *l.footer_images]))
     l.apply_edge_scale(1.0)
 
 

@@ -164,6 +164,13 @@ class Navigator:
         return True
 
 
+def svg_icon(name):
+    """One of our own icons (launcher/icons/*.svg) as a GIcon. GTK draws a GIcon
+    from the vector at the size it is shown at; Gtk.Image.set_from_file would
+    rasterize the SVG at its 24 px and then stretch it (blurry on a 4K TV)."""
+    return Gio.FileIcon.new(Gio.File.new_for_path(str(ICONS / name)))
+
+
 def gicon(ref):
     """Backend IconRef -> Gio icon for GTK."""
     if ref.path:
@@ -510,7 +517,7 @@ class Launcher(EditorMixin, SettingsMixin):
         b.add_css_class("footer-button")
         b.set_focus_on_click(False)
         box = Gtk.Box(spacing=8)
-        image = Gtk.Image.new_from_file(str(ICONS / icon))
+        image = Gtk.Image.new_from_gicon(svg_icon(icon))
         image.set_pixel_size(self.px("footer_icon"))
         image.add_css_class("footer-icon")
         self.footer_images.append(image)
@@ -543,7 +550,7 @@ class Launcher(EditorMixin, SettingsMixin):
         # Without a connection the OS reports no kind: keep showing the last one, crossed out.
         icon = (kind or self.last_kind) + {"on": "", "limited": "-limited", "off": "-off"}[state]
         self.net_icon_name = icon
-        self.net_icon.set_from_file(str(ICONS / f"{icon}.svg"))
+        self.net_icon.set_from_gicon(svg_icon(f"{icon}.svg"))
         self.net_icon.set_pixel_size(self.px("status_icon"))
         self.net_text.set_label(text)
         self.net_text.set_visible(bool(text))
@@ -575,7 +582,7 @@ class Launcher(EditorMixin, SettingsMixin):
         n = len(self.gamepads.connected())
         if n != self.gamepad_count:
             self.gamepad_count = n
-            self.pad_icon.set_from_file(str(ICONS / ("gamepad.svg" if n else "gamepad-off.svg")))
+            self.pad_icon.set_from_gicon(svg_icon("gamepad.svg" if n else "gamepad-off.svg"))
             self.pad_icon.set_pixel_size(self.px("status_icon"))
             self.pad_count.set_label(str(n) if n > 1 else "")
             self.pad_count.set_visible(n > 1)
@@ -624,7 +631,7 @@ class Launcher(EditorMixin, SettingsMixin):
         if not place or not c:
             self.weather_box.set_visible(False)
             return
-        self.weather_icon.set_from_file(str(ICONS / c.icon))
+        self.weather_icon.set_from_gicon(svg_icon(c.icon))
         self.weather_icon.set_pixel_size(self.px("weather_icon"))
         self.weather_temp.set_label(f"{c.temperature}°")
         self.weather_place.set_label(place.get("name", ""))
