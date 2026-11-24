@@ -26,9 +26,13 @@ if [ -d "$DATA/icones-apps" ]; then
     echo "Moved your icons from icones-apps/ to app-icons/."
 fi
 rm -rf "$DATA/icones" "$DATA/edicao.py"
+# Before 0.1.0-beta.3 the shared modules were loose files; they now live in the htpc package.
+rm -f "$DATA/htpc_config.py" "$DATA/i18n.py" "$DATA/themes.py"
 
-cp "$HERE/launcher.py" "$HERE/editor.py" "$HERE/i18n.py" "$HERE/themes.py" "$HERE/launcher.css" \
-   "$HERE/../common/htpc_config.py" "$DATA/"
+cp "$HERE/launcher.py" "$HERE/editor.py" "$HERE/launcher.css" "$DATA/"
+rm -rf "$DATA/htpc"
+cp -r "$HERE/../htpc" "$DATA/"
+find "$DATA/htpc" -name __pycache__ -prune -exec rm -rf {} +
 rm -rf "$DATA/icons"
 cp -r "$HERE/icons" "$DATA/"
 # Icons chosen by you (kept out of the public repository).
@@ -48,11 +52,11 @@ python3 - "$CONFIG/apps.json" "$DATA/launcher.py" "$DATA" <<'EOF'
 import sys
 config_path, launcher, data = sys.argv[1:]
 sys.path.insert(0, data)
-import htpc_config
-cfg, _ = htpc_config.load(config_path)
+from htpc import config
+cfg, _ = config.load(config_path)
 cfg.setdefault("launcher", {})["launch"] = ["python3", launcher]
 cfg["launcher"].setdefault("id", "htpc-launcher")
-htpc_config.save(cfg, config_path)
+config.save(cfg, config_path)
 print("apps.json is up to date (language: %s)" % cfg.get("language"))
 EOF
 

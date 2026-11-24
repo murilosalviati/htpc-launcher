@@ -14,20 +14,23 @@ fields:
 
 Everything is saved to apps.json, which the controller service reads too.
 
-This file does not import launcher.py: what it needs from there comes
-through the Launcher class itself (app_icon, desktop_info, app_icons_dir...).
+This file does not import launcher.py: what it needs comes through the
+Launcher instance (self.apps for the installed apps and icons, self.icon_for,
+self.app_icons_dir...), and nothing here is specific to an operating system.
 """
 
 import os
 from pathlib import Path
 
-import themes
+from htpc import themes
 
 import gi
 
 gi.require_version("Gtk", "4.0")
 gi.require_version("Pango", "1.0")
-from gi.repository import Gio, Gtk, Pango  # noqa: E402
+from gi.repository import Gtk, Pango  # noqa: E402
+
+from htpc.backends.base import IconRef  # noqa: E402
 
 # Settings that only make sense for the shortcut's original application.
 # If the shortcut is switched to another application, they are dropped.
@@ -124,11 +127,10 @@ class EditorMixin:
         return b
 
     def _describe_app(self, draft):
-        for name in (draft.get("desktop"), f"{draft['id']}.desktop" if draft.get("id") else None):
+        if draft.get("id") or draft.get("desktop"):
+            name = self.apps.describe(draft)
             if name:
-                info = self.desktop_info(name)
-                if info:
-                    return info.get_display_name()
+                return name
         if draft.get("launch"):
             return " ".join(draft["launch"])
         return self.t("choose")
@@ -139,7 +141,7 @@ class EditorMixin:
         self.field_app.value.set_label(self._describe_app(draft))
         icon = draft.get("icon")
         self.field_icon.value.set_label(Path(os.path.expanduser(icon)).name if icon else self.t("own_icon"))
-        self.editor_preview.set_from_gicon(self.app_icon(draft))
+        self.editor_preview.set_from_gicon(self.icon_for(draft))
         self.editor_preview.set_pixel_size(112)
         self.editor_error.set_visible(False)
 
@@ -283,27 +285,8 @@ class EditorMixin:
 
     # --- application: list of installed apps ---------------------------------------------
 
-    def _installed_apps(self):
-        seen = {}
-        for info in Gio.AppInfo.get_all():
-            if isinstance(info, Gio.DesktopAppInfo) and info.should_show():
-                seen[info.get_id()] = info
-        # Flatpak apps, in case the session is not looking at their folder.
-        for base in self.flatpak_exports:
-            folder = base / "applications"
-            if not folder.is_dir():
-                continue
-            for path in folder.glob("*.desktop"):
-                if path.name in seen:
-                    continue
-                info = Gio.DesktopAppInfo.new_from_filename(str(path))
-                if info and info.should_show():
-                    seen[path.name] = info
-        seen.pop(f"{self.launcher_id}.desktop", None)
-        return sorted(seen.values(), key=lambda i: i.get_display_name().casefold())
-
     def _choose_app(self):
-        infos = self._installed_apps()
+        infos = self.apps.installed()
         box = self.dialog_box(self.t("choose_app"))
         box.add_css_class("picker")
 
@@ -320,15 +303,15 @@ class EditorMixin:
                 b.set_size_request(280, -1)
                 b.set_hexpand(False)
                 inner = Gtk.Box(spacing=16)
-                image = Gtk.Image.new_from_gicon(info.get_icon() or Gio.ThemedIcon.new("application-x-executable"))
+                image = Gtk.Image.new_from_gicon(self.gicon(info.icon))
                 image.set_pixel_size(48)
-                name = Gtk.Label(label=info.get_display_name(), xalign=0, hexpand=True,
+                name = Gtk.Label(label=info.name, xalign=0, hexpand=True,
                                  ellipsize=Pango.EllipsizeMode.END, width_chars=14, max_width_chars=14)
                 inner.append(image)
                 inner.append(name)
                 b.set_child(inner)
                 b.connect("clicked", lambda _b, info=info: self._app_chosen(info))
-                if current and info.get_id() == f"{current}.desktop":
+                if current and info.id.lower() == current.lower():
                     focus = b
                 row_box.append(b)
                 row.append(b)
@@ -351,25 +334,24 @@ class EditorMixin:
         self.push_overlay(box, rows, focus=focus)
 
     def _app_chosen(self, info):
+        """info: an InstalledApp from the backend."""
         draft, original = self.editor["draft"], self.editor["original"]
-        desktop_id = info.get_id()
-        app_id = desktop_id[:-len(".desktop")] if desktop_id.endswith(".desktop") else desktop_id
         for k in ("launch", *APP_SPECIFIC_KEYS):
             draft.pop(k, None)
-        if app_id == original.get("id"):
+        if info.id == original.get("id"):
             # Back to the app it had: keep its command and settings.
             for k in ("launch", *APP_SPECIFIC_KEYS):
                 if k in original:
                     draft[k] = original[k]
         else:
-            draft["launch"] = ["gio", "launch", info.get_filename()]
-            draft["desktop"] = desktop_id
-            wm_class = info.get_startup_wm_class()
-            if wm_class:
-                draft["extra_ids"] = [wm_class]
-        draft["id"] = app_id
+            draft["launch"] = list(info.launch)
+            if info.desktop:
+                draft["desktop"] = info.desktop
+            if info.extra_ids:
+                draft["extra_ids"] = list(info.extra_ids)
+        draft["id"] = info.id
         if not draft["name"].strip():
-            draft["name"] = info.get_display_name()
+            draft["name"] = info.name
         self.pop_overlay()
         self._refresh_editor()
 
@@ -378,13 +360,12 @@ class EditorMixin:
     def _choose_icon(self):
         draft = self.editor["draft"]
         without_icon = {k: v for k, v in draft.items() if k != "icon"}
-        options = [(None, self.t("own_icon_short"), self.app_icon(without_icon))]
+        options = [(None, self.t("own_icon_short"), self.icon_for(without_icon))]
         folder = self.app_icons_dir
         if folder.is_dir():
             for path in sorted(folder.iterdir()):
                 if path.suffix.lower() in ICON_EXTENSIONS:
-                    options.append((_with_tilde(path), path.stem,
-                                    Gio.FileIcon.new(Gio.File.new_for_path(str(path)))))
+                    options.append((_with_tilde(path), path.stem, self.gicon(IconRef(path=str(path)))))
 
         box = self.dialog_box(self.t("choose_icon"), self.t("icon_hint", path=_with_tilde(folder)))
         grid = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=16, halign=Gtk.Align.CENTER)

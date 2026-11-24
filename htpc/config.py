@@ -1,8 +1,9 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Murilo Salviati
-"""Shared apps.json handling for the launcher and the controller service.
+"""apps.json handling, shared by the launcher and the controller service.
 
-The file lives at ~/.config/htpc-launcher/apps.json. Older installs used
+The file lives in paths.config_file() (~/.config/htpc-launcher/apps.json on
+Linux). Older installs used
 Portuguese keys ("nome", "abrir", ...); load() translates them to the
 current English keys, so an old file keeps working without manual edits.
 A migrated file defaults to the Portuguese UI ("language": "pt-BR"),
@@ -13,8 +14,7 @@ import json
 import os
 from pathlib import Path
 
-CONFIG_PATH = (Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
-               / "htpc-launcher" / "apps.json")
+from . import paths
 
 DEFAULT_LANGUAGE = "en"
 
@@ -74,7 +74,7 @@ def migrate(cfg):
 
 def load(path=None):
     """Read apps.json. Returns (config, migrated)."""
-    path = Path(path or CONFIG_PATH)
+    path = Path(path or paths.config_file())
     with open(path, encoding="utf-8") as f:
         cfg = json.load(f)
     migrated = migrate(cfg)
@@ -84,7 +84,11 @@ def load(path=None):
 
 def save(cfg, path=None):
     """Write apps.json atomically (temporary file + rename)."""
-    path = Path(path or CONFIG_PATH)
+    path = Path(path or paths.config_file())
     temp = path.with_suffix(".json.tmp")
     temp.write_text(json.dumps(cfg, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     os.replace(temp, path)
+
+
+def exists():
+    return paths.config_file().exists()

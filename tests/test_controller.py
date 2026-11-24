@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Murilo Salviati
-"""Controller service tests against a fake GNOME extension and MPRIS player.
+"""Shortcut and Linux backend tests against a fake GNOME extension and MPRIS player.
 
 Run: dbus-run-session -- python3 tests/test_controller.py
 """
@@ -13,7 +13,7 @@ import time
 from types import SimpleNamespace
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, os.path.join(ROOT, "controller"))
+sys.path.insert(0, ROOT)
 sys.path.insert(0, os.path.dirname(__file__))
 
 # Start from a config in the OLD (Portuguese) format, to check that it still works.
@@ -28,37 +28,22 @@ cfg["apps"] = [{legacy.get(k, k): v for k, v in a.items()} for a in cfg["apps"]]
 json.dump(cfg, open(f"{cfgdir}/htpc-launcher/apps.json", "w"))
 os.environ["XDG_CONFIG_HOME"] = cfgdir
 
-import controller  # noqa: E402
 import fakes  # noqa: E402
+from htpc import config, shortcuts  # noqa: E402
+from htpc.backends import get_backend  # noqa: E402
+from htpc.backends.base import Backend, GamepadEvent  # noqa: E402
+from htpc.backends.linux import system as linux_system  # noqa: E402
+from htpc.backends.linux.gamepads import EvdevGamepads  # noqa: E402
 from evdev import ecodes  # noqa: E402
 
 logging.basicConfig(level="INFO", format="  [log] %(message)s")
-controller.MIN_INTERVAL = 0.3
-controller.DEFAULT_CLOSE_TIMEOUT = 1.0
+shortcuts.MIN_INTERVAL = 0.3
+shortcuts.DEFAULT_CLOSE_TIMEOUT = 1.0
 killed = []
-controller.force_close = lambda app, pid: killed.append(app) or [fakes.state["windows"].remove(w) for w in fakes.find(app)]
+linux_system.LinuxSystem.force_close = lambda self, app, pid: killed.append(app) or [fakes.state["windows"].remove(w) for w in fakes.find(app)]
 
 fakes.start()
 time.sleep(0.5)
-
-pads = controller.Gamepads(controller.Actions())
-pads.pressed["pad"] = set()
-
-
-def press(*buttons):
-    for b in buttons:
-        pads.handle("pad", SimpleNamespace(type=ecodes.EV_KEY, code=b, value=1))
-    for b in buttons:
-        pads.handle("pad", SimpleNamespace(type=ecodes.EV_KEY, code=b, value=0))
-
-
-COMBO = (ecodes.BTN_START, ecodes.BTN_SELECT, ecodes.BTN_TL, ecodes.BTN_TR)
-S = fakes.state
-
-
-def running():
-    return [w["appId"] for w in S["windows"]]
-
 
 ok = True
 
@@ -69,20 +54,41 @@ def check(name, cond):
     ok &= bool(cond)
 
 
+backend = get_backend()
+check("Linux picks the Linux backend", backend.name == "linux" and isinstance(backend, Backend))
+
+handler = shortcuts.GamepadShortcuts(shortcuts.Shortcuts(backend))
+
+
+def press(*buttons):
+    for b in buttons:
+        handler.handle(GamepadEvent("pad", "button", b, 1))
+    for b in buttons:
+        handler.handle(GamepadEvent("pad", "button", b, 0))
+
+
+COMBO = ("start", "select", "l1", "r1")
+S = fakes.state
+
+
+def running():
+    return [w["appId"] for w in S["windows"]]
+
+
 # 0. the old config format is read as the new one
-cfg_loaded = controller.load_config()
+cfg_loaded = config.load()[0]
 check("old Portuguese apps.json is translated on load",
       cfg_loaded["apps"][0]["name"] == "YouTube" and cfg_loaded["apps"][0]["pause_on_home"] is True
       and cfg_loaded["language"] == "pt-BR")
 
 # 1. guide on Jellyfin while it plays: pauses, shows the launcher, Jellyfin stays open
-press(ecodes.BTN_MODE); time.sleep(0.2)
+press("guide"); time.sleep(0.2)
 check("guide pauses the video", S["player"] == "Paused")
 check("guide shows the launcher", S["focus"] == "htpc-launcher")
 check("Jellyfin stays open", "org.jellyfin.JellyfinDesktop" in running())
 
 # 2. the repeat from Steam's virtual gamepad is ignored
-n = len(S["log"]); press(ecodes.BTN_MODE); time.sleep(0.1)
+n = len(S["log"]); press("guide"); time.sleep(0.1)
 check("a guide repeated right away is ignored", len(S["log"]) == n)
 time.sleep(0.4)
 
@@ -112,17 +118,43 @@ check("an app that does not close is forced", killed == ["game"] and "game" not 
 
 # 7. only three of the combo buttons do not close
 S["focus"] = "org.jellyfin.JellyfinDesktop"; time.sleep(0.4)
-press(ecodes.BTN_START, ecodes.BTN_SELECT, ecodes.BTN_TL); time.sleep(0.4)
+press("start", "select", "l1"); time.sleep(0.4)
 check("incomplete combo does not close", "org.jellyfin.JellyfinDesktop" in running())
 
 # 8. service without the graphical session's variables: only missing ones are filled
 for v in ("DISPLAY", "WAYLAND_DISPLAY"):
     os.environ.pop(v, None)
 os.environ["XDG_RUNTIME_DIR"] = "/run/user/1234"
-env = controller.graphical_env()
+env = linux_system.graphical_env()
 check("fills in missing DISPLAY and WAYLAND_DISPLAY", env["DISPLAY"] == ":0" and env["WAYLAND_DISPLAY"] == "wayland-0")
 os.environ["DISPLAY"] = ":1"
-check("keeps a DISPLAY that already exists", controller.graphical_env()["DISPLAY"] == ":1")
+check("keeps a DISPLAY that already exists", linux_system.graphical_env()["DISPLAY"] == ":1")
+
+# 9. evdev events become normalized gamepad events
+pads = EvdevGamepads()
+dev = SimpleNamespace(absinfo=lambda code: SimpleNamespace(min=-32768, max=32767))
+
+
+def raw(type_, code, value):
+    return SimpleNamespace(type=type_, code=code, value=value)
+
+
+ev = pads.translate("p", dev, raw(ecodes.EV_KEY, ecodes.BTN_MODE, 1))
+check("evdev: BTN_MODE becomes 'guide'", [(e.kind, e.name, e.value) for e in ev] == [("button", "guide", 1)])
+ev = pads.translate("p", dev, raw(ecodes.EV_ABS, ecodes.ABS_HAT0X, 1)) + \
+    pads.translate("p", dev, raw(ecodes.EV_ABS, ecodes.ABS_HAT0X, -1))
+check("evdev: the d-pad hat becomes right press, right release, left press",
+      [(e.name, e.value) for e in ev] == [("right", 1), ("right", 0), ("left", 1)])
+ev = pads.translate("p", dev, raw(ecodes.EV_ABS, ecodes.ABS_X, 32767))
+check("evdev: the left stick becomes a -1..1 axis", ev[0].name == "lx" and abs(ev[0].value - 1.0) < 0.01)
+
+# 10. the Windows backend is a documented placeholder for now
+from htpc.backends.windows import WindowsBackend  # noqa: E402
+try:
+    WindowsBackend().window_control()
+    check("Windows backend says what is missing", False)
+except NotImplementedError as e:
+    check("Windows backend says what is missing", "window control" in str(e))
 
 print("\nALL OK" if ok else "\nSOME CHECKS FAILED")
 sys.exit(0 if ok else 1)

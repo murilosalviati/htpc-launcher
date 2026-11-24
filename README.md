@@ -29,14 +29,17 @@ The default configuration has VacuumTube (YouTube's TV interface), Jellyfin Desk
 
 ## How it works
 
-On Wayland, a regular program cannot raise another app's window or find out which window has focus. So the project has three parts:
+The code is split into a shared, OS-independent part and a backend per operating system. Today there is a Linux backend (GNOME on Wayland); a Windows backend is planned and its design is written down in `htpc/backends/windows/`.
+
+On Wayland, a regular program cannot raise another app's window or find out which window has focus, so on Linux there is also a small GNOME Shell extension that does it.
 
 | Folder | What it is |
 |---|---|
 | `gnome-extension/` | The `htpc-launcher@htpc` GNOME Shell extension. It runs inside GNOME and exposes window control on the session bus (`org.htpc.Launcher`): list windows, raise or close an app's windows, show the launcher. |
-| `controller/` | A systemd user service that reads the gamepads with evdev and handles the guide button and the close combo. |
-| `launcher/` | The home screen itself: Python and GTK 4 (`launcher.py`), with edit mode in `editor.py`, the on-screen text in `i18n.py` and the background colors in `themes.py`. |
-| `common/` | `htpc_config.py`, the `apps.json` reader and writer shared by the launcher and the service. |
+| `controller/` | The background service that reads the gamepads and runs the shortcuts (a systemd user service on Linux). |
+| `launcher/` | The home screen UI in GTK 4 (`launcher.py`), with edit mode in `editor.py`. It only reaches the OS through the backend. |
+| `htpc/` | The shared Python package: `apps.json` handling (`config.py`), file locations per OS (`paths.py`), the guide and close-combo rules (`shortcuts.py`), on-screen text (`i18n.py`) and background colors (`themes.py`). |
+| `htpc/backends/` | Everything that talks to the operating system, behind the interface in `base.py`: window control, media pausing, gamepad input, the installed-apps list, and starting, force-closing, restart and shut down. `linux/` implements it; `windows/` is a documented placeholder. |
 | `config/apps.json` | The example configuration, installed to `~/.config/htpc-launcher/apps.json`. |
 | `tests/` | Tests that run against a fake GNOME extension and a fake media player. |
 
@@ -101,7 +104,7 @@ You can edit apps from the launcher's edit mode, or by hand:
 | `icon` | A theme icon name or an image path. Without it, the launcher uses the icon the app installed. |
 | `desktop` | The `.desktop` file to take the icon from, when it differs from `id`. |
 
-At the top level, `language` sets the on-screen text (`en` or `pt-BR`), `background` sets the background color (`midnight`, `ocean`, `forest`, `aurora`, `plum`, `wine`, `ember`, `graphite` or `black`; see `launcher/themes.py`), and `launcher.launch` is the command the service uses to start the launcher if it is not running. `launcher/install.sh` fills it in.
+At the top level, `language` sets the on-screen text (`en` or `pt-BR`), `background` sets the background color (`midnight`, `ocean`, `forest`, `aurora`, `plum`, `wine`, `ember`, `graphite` or `black`; see `htpc/themes.py`), and `launcher.launch` is the command the service uses to start the launcher if it is not running. `launcher/install.sh` fills it in.
 
 Older versions of this project used Portuguese field names (`nome`, `abrir`...). They are converted automatically the first time the launcher starts, and the on-screen text stays in Portuguese for those installs.
 
@@ -116,6 +119,10 @@ journalctl --user -f -o cat /usr/bin/gnome-shell  # errors from the extension
 
 Over SSH, first export `XDG_RUNTIME_DIR=/run/user/$(id -u)`, `DBUS_SESSION_BUS_ADDRESS=unix:path=$XDG_RUNTIME_DIR/bus` and `WAYLAND_DISPLAY=wayland-0` so the commands reach the graphical session.
 
+## Porting to another operating system
+
+Implement the classes in `htpc/backends/base.py` (`WindowControl`, `Media`, `Gamepads`, `AppCatalog`, `System`) in `htpc/backends/<os>/`, and add the OS to `get_backend()` in `htpc/backends/__init__.py`. The launcher UI, edit mode, configuration and shortcut rules then work unchanged. `htpc/backends/windows/__init__.py` lists how each piece would be done on Windows.
+
 ## Tests
 
 ```bash
@@ -123,7 +130,7 @@ dbus-run-session -- python3 tests/test_controller.py
 xvfb-run -s "-screen 0 1920x1080x24" dbus-run-session -- python3 tests/test_launcher.py
 ```
 
-`tests/test_launcher.py` explains the files it expects in `HOME` for the icon and app-list checks.
+`tests/test_controller.py` covers the shortcut rules, the Linux backend's D-Bus and evdev handling, and config migration. `tests/test_launcher.py` drives the UI with normalized gamepad events and explains the files it expects in `HOME` for the icon and app-list checks.
 
 ## License
 

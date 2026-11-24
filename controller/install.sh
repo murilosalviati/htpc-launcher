@@ -15,7 +15,10 @@ if ! python3 -c 'import evdev, jeepney' 2>/dev/null; then
 fi
 
 mkdir -p "$DATA" "$CONFIG" "$UNITS"
-cp "$HERE/controller.py" "$HERE/../common/htpc_config.py" "$DATA/"
+cp "$HERE/controller.py" "$DATA/"
+rm -rf "$DATA/htpc" "$DATA/htpc_config.py"
+cp -r "$HERE/../htpc" "$DATA/"
+find "$DATA/htpc" -name __pycache__ -prune -exec rm -rf {} +
 
 if [ -f "$CONFIG/apps.json" ]; then
     echo "Kept the existing $CONFIG/apps.json."

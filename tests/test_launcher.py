@@ -394,6 +394,29 @@ def e9():
     check("the Background button hides again", not l.btn_background.get_visible())
 
 
+@step(300)
+def n1():
+    """Gamepad navigation through the backend's normalized events."""
+    from htpc.backends.base import GamepadEvent as E
+    l = L()
+    nav = l.navigator
+    nav.active = lambda: True
+    l.tiles[0].grab_focus()
+    nav.handle(E("pad", "button", "right", 1)); nav.handle(E("pad", "button", "right", 0))
+    check("gamepad: d-pad right moves to the next app", l.win.get_focus() is l.tiles[1])
+    nav.handle(E("pad", "axis", "lx", -0.9)); nav.handle(E("pad", "axis", "lx", 0.0))
+    check("gamepad: left stick moves back", l.win.get_focus() is l.tiles[0])
+    nav.handle(E("pad", "axis", "lx", 0.3))
+    check("gamepad: a small stick movement is ignored", l.win.get_focus() is l.tiles[0])
+    nav.handle(E("pad", "button", "down", 1)); nav.handle(E("pad", "button", "down", 0))
+    check("gamepad: d-pad down reaches the footer", l.win.get_focus() in l.rows[-1])
+    l.btn_power.grab_focus()
+    nav.handle(E("pad", "button", "a", 1))
+    check("gamepad: A presses the focused button", len(l.overlays) == 1)
+    nav.handle(E("pad", "button", "b", 1))
+    check("gamepad: B goes back", not l.overlays)
+
+
 @step(200)
 def finish():
     L().win.get_application().quit()

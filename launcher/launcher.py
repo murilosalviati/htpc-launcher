@@ -12,16 +12,18 @@ A full-screen home screen driven by a gamepad (or a keyboard):
     two ask for confirmation). "Edit apps" opens edit mode (see editor.py),
     where shortcuts can be added, edited and removed.
 
-The window uses the app id "htpc-launcher", which is what the GNOME
-extension looks for when the guide button asks to show the launcher.
+Everything that depends on the operating system (finding and raising
+windows, reading gamepads, the installed-apps list, restart and shut down)
+goes through the backend from htpc.backends; this file is only the GTK UI.
+
+The window uses the app id "htpc-launcher", which is what the window control
+looks for when the guide button asks to show the launcher.
 
 Gamepad:  d-pad or left stick moves, A selects, B goes back;
           on the on-screen keyboard, X deletes and Y types a space.
 Keyboard: arrows move, Enter selects, Esc goes back.
 """
 
-import os
-import subprocess
 import sys
 import time
 from pathlib import Path
@@ -39,34 +41,21 @@ gi.require_version("Gdk", "4.0")
 gi.require_version("Pango", "1.0")
 from gi.repository import Gdk, Gio, Gtk, Pango  # noqa: E402
 
-try:
-    import evdev
-    from evdev import ecodes
-except ImportError:  # without evdev the launcher still works with a keyboard
-    evdev = None
-
 HERE = Path(__file__).resolve().parent
-# Installed side by side; in the repo, htpc_config.py lives in common/.
+# Installed: the htpc package sits next to this file. In the repo: one folder up.
 sys.path.insert(0, str(HERE))
-sys.path.insert(1, str(HERE.parent / "common"))
-import htpc_config  # noqa: E402
+sys.path.insert(1, str(HERE.parent))
+from htpc import config, paths, themes  # noqa: E402
+from htpc.backends import get_backend  # noqa: E402
+from htpc.i18n import Translator  # noqa: E402
 from editor import EditorMixin  # noqa: E402
-from i18n import Translator  # noqa: E402
-import themes  # noqa: E402
 
 CSS = HERE / "launcher.css"
 ICONS = HERE / "icons"
-# Icons chosen by the user; offered as options in the app editor.
-APP_ICONS = Path.home() / ".local/share/htpc-launcher/app-icons"
 LAUNCHER_ID = "htpc-launcher"
 OPENING_GRACE = 20   # seconds an app counts as "opening" and is not started again
 RESUME_DELAY = 1500  # ms to wait after on_resume before raising the app's window
 COLUMNS = 5          # tiles per row; more apps wrap onto more rows
-
-# Where Flatpak publishes the .desktop files and icons of installed apps. They are
-# usually on the session's XDG_DATA_DIRS already; looking here too covers when not.
-FLATPAK_EXPORTS = [Path.home() / ".local/share/flatpak/exports/share",
-                   Path("/var/lib/flatpak/exports/share")]
 
 
 def log(*args):
@@ -74,151 +63,58 @@ def log(*args):
 
 
 # ---------------------------------------------------------------------------
-# GNOME extension (D-Bus org.htpc.Launcher)
+# Gamepad navigation. The backend gives normalized events; this turns them into
+# moves, with key repeat while a direction is held. Only acts while the launcher is in front.
 
-class Bridge:
-    def __init__(self):
-        self.proxy = None
-        try:
-            self.proxy = Gio.DBusProxy.new_for_bus_sync(
-                Gio.BusType.SESSION,
-                Gio.DBusProxyFlags.DO_NOT_AUTO_START | Gio.DBusProxyFlags.DO_NOT_LOAD_PROPERTIES,
-                None, "org.htpc.Launcher", "/org/htpc/Launcher", "org.htpc.Launcher", None)
-        except GLib.Error as e:
-            log("no D-Bus:", e.message)
-
-    def call(self, method, signature=None, *args):
-        if self.proxy is None:
-            return None
-        params = GLib.Variant(signature, args) if signature else None
-        try:
-            r = self.proxy.call_sync(method, params, Gio.DBusCallFlags.NONE, 2000, None)
-            return r.unpack()[0] if r is not None else None
-        except GLib.Error as e:
-            log(f"extension did not answer {method}:", e.message)
-            return None
-
-    def activate(self, app_id, titles=None):
-        if titles:
-            r = self.call("ActivatePreferring", "(sas)", app_id, list(titles))
-            if r is not None:
-                return bool(r)
-            # older extension without that method: bring any window of the app
-        return bool(self.call("Activate", "(s)", app_id))
-
-    def is_running(self, app_id):
-        return bool(self.call("IsRunning", "(s)", app_id))
-
-    def on_focus_changed(self, callback):
-        if self.proxy is not None:
-            self.proxy.connect("g-signal", lambda _p, _s, signal, _a:
-                               signal == "FocusChanged" and callback())
-
-
-# ---------------------------------------------------------------------------
-# Gamepad (evdev). The launcher only acts on buttons while it is in front.
-
-class Gamepad:
+class Navigator:
     DEAD_ZONE = 0.55      # how far the stick must go to count as a press
     REPEAT_AFTER = 0.40   # holding a direction repeats after this...
     REPEAT_EVERY = 0.14   # ...at this pace
+    POLL_MS = 16          # how often to read the gamepads (about 60 times a second)
+    DIRECTIONS = {"left": (-1, 0), "right": (1, 0), "up": (0, -1), "down": (0, 1)}
 
-    def __init__(self, active, move, press, back, other_button=None):
+    def __init__(self, gamepads, active, move, press, back, other_button):
+        self.gamepads = gamepads
         self.active, self.move, self.press, self.back = active, move, press, back
-        self.other_button = other_button or (lambda _name: None)  # "x" or "y"
-        self.devs, self.ignored, self.watches = {}, set(), {}
-        self.axes = {}          # (path, axis) -> current direction (-1, 0, 1)
+        self.other_button = other_button  # called with "x" or "y"
+        self.stick = {}         # (device, axis) -> -1 / 0 / 1
         self.direction = None   # (dx, dy) being held
         self.repeat = 0
-        if evdev is None:
-            log("python3-evdev not installed: keyboard only")
+        if not gamepads.available():
+            log("gamepads not available (is python3-evdev installed?): keyboard only")
             return
-        self.rescan()
-        GLib.timeout_add_seconds(2, self.rescan)
+        GLib.timeout_add(self.POLL_MS, self._poll)
 
-    def rescan(self):
-        paths = set(evdev.list_devices())
-        self.ignored &= paths
-        for path in paths - self.devs.keys() - self.ignored:
-            try:
-                dev = evdev.InputDevice(path)
-            except OSError:
-                self.ignored.add(path)
-                continue
-            keys = dev.capabilities().get(ecodes.EV_KEY, [])
-            if ecodes.BTN_SOUTH in keys and ecodes.BTN_START in keys:
-                self.devs[path] = dev
-                self.watches[path] = GLib.io_add_watch(
-                    dev.fd, GLib.PRIORITY_DEFAULT,
-                    GLib.IOCondition.IN | GLib.IOCondition.HUP | GLib.IOCondition.ERR,
-                    self._read, path)
-                log("gamepad:", dev.name)
-            else:
-                dev.close()
-                self.ignored.add(path)
+    def _poll(self):
+        for ev in self.gamepads.poll(0):
+            self.handle(ev)
         return True
 
-    def _remove(self, path):
-        dev = self.devs.pop(path, None)
-        self.watches.pop(path, None)
-        for key in [k for k in self.axes if k[0] == path]:
-            del self.axes[key]
-        if dev:
-            try:
-                dev.close()
-            except OSError:
-                pass
-
-    def _read(self, _fd, _cond, path):
-        dev = self.devs.get(path)
-        if dev is None:
-            return False
-        try:
-            events = list(dev.read())
-        except BlockingIOError:
-            return True
-        except OSError:
-            self._remove(path)
-            return False
-        for ev in events:
-            self._event(path, dev, ev)
-        return True
-
-    def _event(self, path, dev, ev):
-        if ev.type == ecodes.EV_KEY and ev.value in (0, 1):
-            dpad = {ecodes.BTN_DPAD_LEFT: (-1, 0), ecodes.BTN_DPAD_RIGHT: (1, 0),
-                    ecodes.BTN_DPAD_UP: (0, -1), ecodes.BTN_DPAD_DOWN: (0, 1)}
-            if ev.code in dpad:
-                self._hold(dpad[ev.code] if ev.value else None)
-            elif ev.value == 1 and self.active():
-                if ev.code == ecodes.BTN_SOUTH:
+    def handle(self, ev):
+        if ev.kind == "button":
+            if ev.name in self.DIRECTIONS:
+                self._hold(self.DIRECTIONS[ev.name] if ev.value else None)
+            elif ev.value and self.active():
+                if ev.name == "a":
                     self.press()
-                elif ev.code == ecodes.BTN_EAST:
+                elif ev.name == "b":
                     self.back()
-                elif ev.code == ecodes.BTN_WEST:
-                    self.other_button("x")
-                elif ev.code == ecodes.BTN_NORTH:
-                    self.other_button("y")
-        elif ev.type == ecodes.EV_ABS:
-            if ev.code in (ecodes.ABS_HAT0X, ecodes.ABS_HAT0Y):
-                value = max(-1, min(1, ev.value))
-            elif ev.code in (ecodes.ABS_X, ecodes.ABS_Y):
-                info = dev.absinfo(ev.code)
-                middle = (info.max + info.min) / 2
-                half = (info.max - info.min) / 2 or 1
-                frac = (ev.value - middle) / half
-                value = 1 if frac > self.DEAD_ZONE else -1 if frac < -self.DEAD_ZONE else 0
-            else:
+                elif ev.name in ("x", "y"):
+                    self.other_button(ev.name)
+        elif ev.kind == "axis":
+            value = 1 if ev.value > self.DEAD_ZONE else -1 if ev.value < -self.DEAD_ZONE else 0
+            key = (ev.device, ev.name)
+            if self.stick.get(key, 0) == value:
                 return
-            key = (path, ev.code)
-            if self.axes.get(key, 0) == value:
-                return
-            self.axes[key] = value
-            horizontal = ev.code in (ecodes.ABS_HAT0X, ecodes.ABS_X)
+            self.stick[key] = value
+            horizontal = ev.name == "lx"
             if value:
                 self._hold((value, 0) if horizontal else (0, value))
             elif self.direction and ((horizontal and self.direction[0]) or (not horizontal and self.direction[1])):
                 self._hold(None)
+        elif ev.kind == "disconnected":
+            for key in [k for k in self.stick if k[0] == ev.device]:
+                del self.stick[key]
 
     def _hold(self, direction):
         if self.repeat:
@@ -242,63 +138,25 @@ class Gamepad:
         return True
 
 
-# ---------------------------------------------------------------------------
-# Icons
-
-def desktop_info(name):
-    try:
-        info = Gio.DesktopAppInfo.new(name)
-    except TypeError:
-        info = None
-    if info:
-        return info
-    for base in FLATPAK_EXPORTS:
-        path = base / "applications" / name
-        if path.exists():
-            return Gio.DesktopAppInfo.new_from_filename(str(path))
-    return None
-
-
-def app_icon(app):
-    """The icon the app installed itself (through its .desktop file), or a generic one.
-
-    "icon" in apps.json overrides it: a theme icon name or an image file path.
-    """
-    if app.get("icon"):
-        icon = os.path.expanduser(app["icon"])
-        if not os.path.isabs(icon):
-            return Gio.ThemedIcon.new(icon)
-        if os.path.exists(icon):
-            return Gio.FileIcon.new(Gio.File.new_for_path(icon))
-        log("icon not found:", icon, "- using the app's own")
-    if not app.get("id") and not app.get("desktop"):
-        return Gio.ThemedIcon.new("application-x-executable")
-    for desktop in (app.get("desktop"), f"{app.get('id')}.desktop"):
-        if not desktop:
-            continue
-        info = desktop_info(desktop)
-        if info and info.get_icon():
-            return info.get_icon()
-    # Flatpak also publishes the icon under the app id itself.
-    theme = Gtk.IconTheme.get_for_display(Gdk.Display.get_default())
-    if app.get("id") and theme.has_icon(app["id"]):
-        return Gio.ThemedIcon.new(app["id"])
-    log("no icon for", app.get("name"), "- is the app installed?")
-    return Gio.ThemedIcon.new("application-x-executable")
+def gicon(ref):
+    """Backend IconRef -> Gio icon for GTK."""
+    if ref.path:
+        return Gio.FileIcon.new(Gio.File.new_for_path(ref.path))
+    return Gio.ThemedIcon.new_from_names(list(ref.names) or ["application-x-executable"])
 
 
 # ---------------------------------------------------------------------------
 # Tiles
 
 class Tile(Gtk.Button):
-    def __init__(self, app, on_activate):
+    def __init__(self, app, icon, on_activate):
         super().__init__()
         self.app = app
         self.add_css_class("tile")
         self.set_focus_on_click(False)
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=14)
         box.set_valign(Gtk.Align.CENTER)
-        image = Gtk.Image.new_from_gicon(app_icon(app))
+        image = Gtk.Image.new_from_gicon(icon)
         image.set_pixel_size(128)
         image.add_css_class("tile-icon")
         name = Gtk.Label(label=app.get("name", "?"), ellipsize=Pango.EllipsizeMode.END, max_width_chars=14)
@@ -341,21 +199,20 @@ class AddTile(Gtk.Button):
 # The launcher window
 
 class Launcher(EditorMixin):
-    # What the edit mode (editor.py) uses from here, without importing this file.
-    app_icon = staticmethod(app_icon)
-    desktop_info = staticmethod(desktop_info)
-    app_icons_dir = APP_ICONS
-    flatpak_exports = FLATPAK_EXPORTS
-    launcher_id = LAUNCHER_ID
+    gicon = staticmethod(gicon)  # the editor turns backend icons into GTK icons with it
 
     def __init__(self, gtk_app):
         self.gtk_app = gtk_app
-        self.cfg, migrated = htpc_config.load()
+        self.cfg, migrated = config.load()
         if migrated:
-            htpc_config.save(self.cfg)
+            config.save(self.cfg)
             log("apps.json converted to the current format")
         self.t = Translator(self.cfg.get("language"))
-        self.bridge = Bridge()
+        backend = get_backend()
+        self.windows = backend.window_control()
+        self.apps = backend.apps()
+        self.system = backend.system()
+        self.app_icons_dir = paths.app_icons_dir()
 
         # Background color: its own CSS provider, above launcher.css, so it can change live.
         self.theme_provider = Gtk.CssProvider()
@@ -364,9 +221,8 @@ class Launcher(EditorMixin):
         self.apply_theme(self.cfg.get("background", themes.DEFAULT_THEME))
 
         theme = Gtk.IconTheme.get_for_display(Gdk.Display.get_default())
-        for base in FLATPAK_EXPORTS:
-            if (base / "icons").is_dir():
-                theme.add_search_path(str(base / "icons"))
+        for folder in self.apps.icon_dirs():
+            theme.add_search_path(folder)
         self.opening = {}         # app id -> when it was started
         self.overlays = []        # stack of things shown on top (confirmation, editor...)
         self.editing = False
@@ -396,9 +252,9 @@ class Launcher(EditorMixin):
         self.win.add_controller(keys)
 
         self.win.connect("notify::is-active", lambda *_: self.win.is_active() and self.refresh_status())
-        self.bridge.on_focus_changed(self.refresh_status)
 
-        self.gamepad = Gamepad(self.win.is_active, self.move, self.press, self.back, self.other_button)
+        self.navigator = Navigator(backend.gamepads(), self.win.is_active, self.move, self.press,
+                                   self.back, self.other_button)
 
         self._update_clock()
         GLib.timeout_add_seconds(1, self._update_clock)
@@ -443,7 +299,7 @@ class Launcher(EditorMixin):
             self.grid.remove(child)
             child = following
 
-        self.tiles = [Tile(a, self.on_tile) for a in self.cfg.get("apps", [])]
+        self.tiles = [Tile(a, self.icon_for(a), self.on_tile) for a in self.cfg.get("apps", [])]
         items = list(self.tiles)
         self.add_tile = None
         if self.editing:
@@ -471,8 +327,11 @@ class Launcher(EditorMixin):
         else:
             self.open_app(tile)
 
+    def icon_for(self, app):
+        return gicon(self.apps.icon_for(app))
+
     def save_config(self):
-        htpc_config.save(self.cfg)
+        config.save(self.cfg)
         log("apps.json saved")
 
     # --- top bar ---------------------------------------------------------------
@@ -577,7 +436,7 @@ class Launcher(EditorMixin):
                 tile.show_status(self.t("status_edit"))
                 continue
             app_id = tile.app["id"]
-            if self.bridge.is_running(app_id):
+            if self.windows.is_running(app_id):
                 self.opening.pop(app_id, None)
                 tile.show_status(self.t("status_open"), running=True)
             elif now - self.opening.get(app_id, -1e9) < OPENING_GRACE:
@@ -588,24 +447,18 @@ class Launcher(EditorMixin):
         return False
 
     def _spawn(self, command):
-        try:
-            subprocess.Popen(command, start_new_session=True,
-                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            return True
-        except OSError as e:
-            log("could not start", command, e)
-            return False
+        return self.system.spawn(command)
 
     def open_app(self, tile):
         app = tile.app
         app_id = app["id"]
         windows = app.get("preferred_windows")
-        if self.bridge.activate(app_id, windows):
+        if self.windows.activate(app_id, windows):
             log("resuming", app["name"])
             on_resume = app.get("on_resume")
             if on_resume and self._spawn(on_resume):
                 # e.g. Steam switching to Big Picture opens a new window; bring it up.
-                GLib.timeout_add(RESUME_DELAY, lambda: self.bridge.activate(app_id, windows) and False)
+                GLib.timeout_add(RESUME_DELAY, lambda: self.windows.activate(app_id, windows) and False)
             return
         if time.monotonic() - self.opening.get(app_id, -1e9) < OPENING_GRACE:
             log(app["name"], "is still opening")
@@ -692,9 +545,11 @@ class Launcher(EditorMixin):
         self.confirm(title, self.t("power_warning"), label, lambda: self._run_power(action))
 
     def _run_power(self, action):
-        command = ["systemctl", "reboot" if action == "restart" else "poweroff"]
-        log("running", command)
-        subprocess.Popen(command, start_new_session=True)
+        log("power:", action)
+        if action == "restart":
+            self.system.reboot()
+        else:
+            self.system.power_off()
 
     # --- navigation ---------------------------------------------------------------------
 
@@ -771,11 +626,11 @@ class Launcher(EditorMixin):
 
 
 def main():
-    if not htpc_config.CONFIG_PATH.exists():
-        raise SystemExit(f"Missing configuration file: {htpc_config.CONFIG_PATH}")
+    if not config.exists():
+        raise SystemExit(f"Missing configuration file: {paths.config_file()}")
 
     # Is a launcher already open? Then just bring it to the front.
-    if Bridge().activate(LAUNCHER_ID):
+    if get_backend().window_control().activate(LAUNCHER_ID):
         log("already running")
         return
 
