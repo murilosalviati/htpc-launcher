@@ -150,6 +150,11 @@ class System(ABC):
     def power_off(self):
         """Shut the machine down."""
 
+    def connection_kind(self):
+        """How the machine reaches the network right now: "wired", "wifi", or None when
+        there is no connection or the OS cannot tell. The launcher picks its icon from this."""
+        return None
+
 
 class Backend(ABC):
     name = "?"

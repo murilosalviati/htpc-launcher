@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Murilo Salviati
-"""Starting and stopping programs, restart and shut down on Linux."""
+"""Starting and stopping programs, restart and shut down on Linux.
+Also which kind of connection is in use, asked to NetworkManager."""
 
 import logging
 import os
@@ -60,3 +61,35 @@ class LinuxSystem(System):
 
     def power_off(self):
         self.spawn(["systemctl", "poweroff"])
+
+    # NetworkManager's PrimaryConnectionType: "802-11-wireless", "802-3-ethernet",
+    # "bridge", "bond", "vpn", "gsm"... or "" when there is no connection.
+    WIFI_TYPES = ("802-11-wireless", "802-11-olpc-mesh", "wifi-p2p")
+
+    def connection_kind(self):
+        kind = self._nm_primary_type()
+        if not kind:
+            return None
+        return "wifi" if kind in self.WIFI_TYPES else "wired"
+
+    def _nm_primary_type(self):
+        try:
+            from jeepney import DBusAddress, Properties
+            from jeepney.io.blocking import open_dbus_connection
+            from jeepney.wrappers import unwrap_msg
+            if getattr(self, "_nm", None) is None:
+                self._nm = open_dbus_connection(bus="SYSTEM")
+            addr = DBusAddress("/org/freedesktop/NetworkManager",
+                               bus_name="org.freedesktop.NetworkManager",
+                               interface="org.freedesktop.NetworkManager")
+            reply = self._nm.send_and_get_reply(Properties(addr).get("PrimaryConnectionType"), timeout=1)
+            return unwrap_msg(reply)[0][1]
+        except Exception as e:  # no NetworkManager, no system bus...
+            if getattr(self, "_nm", None) is not None:
+                try:
+                    self._nm.close()
+                except Exception:
+                    pass
+            self._nm = None
+            log.debug("NetworkManager not reachable: %s", e)
+            return None

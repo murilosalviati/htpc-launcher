@@ -18,6 +18,7 @@ This is the plan for each piece, so the port can be done one class at a time
   apps      Start Menu shortcuts (.lnk) and Store apps (shell:AppsFolder);
             icons extracted from the executables.
   system    subprocess for starting apps, TerminateProcess to force-close,
+            the network kind (wired or Wi-Fi) from GetAdaptersAddresses,
             "shutdown /r /t 0" and "shutdown /s /t 0".
 
 The launcher UI is GTK 4; it runs on Windows (MSYS2 / gvsbuild) but is awkward

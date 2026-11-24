@@ -237,7 +237,16 @@ def e1():
     check("down from the last app reaches the footer", l.win.get_focus() in (l.btn_settings, l.btn_restart, l.btn_power))
     l.btn_settings.grab_focus()
     l.press()
-    check("the gear enters edit mode", l.editing and l.add_tile is not None)
+    f = l.settings_fields
+    check("the gear opens Settings with apps, background, location, temperature and language",
+          len(l.overlays) == 1 and list(f) == ["apps", "background", "location", "unit", "language"])
+    check("Settings shows the current values",
+          f["background"].value.get_label() == "Meia-noite" and f["unit"].value.get_label() == "°C"
+          and f["language"].value.get_label() == "Português (Brasil)"
+          and f["location"].value.get_label() == "Desligado (sem clima)")
+    check("focus starts on Apps", l.win.get_focus() is f["apps"])
+    l.press()
+    check("Apps closes Settings and enters edit mode", l.editing and l.add_tile is not None and not l.overlays)
     check("the hint switches to edit mode", "Modo de edição" in l.hint.get_label())
     check("the button becomes 'Concluir'", l.btn_settings.label.get_label() == "Concluir")
 
@@ -245,16 +254,15 @@ def e1():
 @step(300)
 def b1():
     l = L()
-    check("the Background button only shows in edit mode", l.btn_background.get_visible() and l.btn_background in l.rows[-1])
-    l.btn_background.grab_focus()
+    l.open_settings(focus="background")
     l.press()
     swatches = [b for row in l.overlays[-1]["rows"] for b in row]
-    check("the background picker offers 9 colors", len(swatches) == 9)
+    check("Settings → Background offers 9 colors", len(swatches) == 9)
     check("focus starts on the current color", l.win.get_focus() is swatches[0] and l.theme == "midnight")
     l.move(1, 0)
     check("moving the focus previews the color", l.theme == "ocean")
     l.back()
-    check("Ⓑ goes back to the saved color", l.theme == "midnight" and not l.overlays)
+    check("Ⓑ goes back to the saved color and to Settings", l.theme == "midnight" and len(l.overlays) == 1)
 
 
 @step(300)
@@ -264,7 +272,8 @@ def b2():
     l.move(0, 1)  # second row, first column: aurora
     l.press()
     saved = json.load(open(f"{cfgdir}/htpc-launcher/apps.json"))
-    check("Ⓐ keeps the color and saves it to apps.json", l.theme == "aurora" and saved.get("background") == "aurora" and not l.overlays)
+    check("Ⓐ keeps the color and saves it to apps.json", l.theme == "aurora" and saved.get("background") == "aurora" and len(l.overlays) == 1)
+    check("Settings shows the new color", l.settings_fields["background"].value.get_label() == "Aurora")
 
 
 @step(500)
@@ -277,6 +286,7 @@ def b3():
 def b4():
     l = L()
     screenshot(l.win, "5c-background-picker")
+    l.back()
     l.back()
 
 
@@ -390,8 +400,7 @@ def e9():
     l = L()
     screenshot(l.win, "11-after-remove")
     l.back()
-    check("Ⓑ leaves edit mode", not l.editing and l.add_tile is None and l.btn_settings.label.get_label() == "Editar apps")
-    check("the Background button hides again", not l.btn_background.get_visible())
+    check("Ⓑ leaves edit mode", not l.editing and l.add_tile is None and l.btn_settings.label.get_label() == "Configurações")
 
 
 @step(300)
@@ -440,6 +449,160 @@ def n2():
     screenshot(l.win, "9-two-gamepads")
     l.gamepads.connected = lambda: []
     l._update_gamepads()
+
+
+# ---------------- weather, temperature unit, language, network kind ----------------
+
+from htpc import weather as W  # noqa: E402
+
+GEO = {"results": [
+    {"name": "Araranguá", "latitude": -28.9, "longitude": -49.5, "country_code": "BR", "admin1": "Santa Catarina"},
+    {"name": "Campinas", "latitude": -3.77, "longitude": -39.7, "country_code": "BR", "admin1": "Ceará"},
+    {"name": "Campinas", "latitude": -22.9, "longitude": -47.06, "country_code": "BR", "admin1": "São Paulo"},
+]}
+
+
+def fake_fetch(url):
+    state.setdefault("urls", []).append(url)
+    if "offline" in url.lower():
+        raise W.Unreachable("no network")
+    if "viacep" in url:
+        return {"erro": "true"} if "99999999" in url else {"localidade": "Campinas", "uf": "SP"}
+    if "geocoding" in url:
+        return GEO if "Campinas" in url else {}
+    if "forecast" in url:
+        f = "fahrenheit" in url
+        return {"current": {"temperature_2m": 81.3 if f else 27.4, "weather_code": 2, "is_day": 1}}
+    raise AssertionError(url)
+
+
+def type_location(l, text):
+    l.open_settings(focus="location")
+    l.press()
+    top = l.overlays[-1]
+    for _ in range(30):
+        top["delete"]()
+    for c in text:
+        top["type"](c)
+    top["enter"]()
+
+
+@step(300)
+def w1():
+    l = L()
+    l.weather_fetch = fake_fetch
+    check("no location: the weather is hidden", not l.weather_box.get_visible())
+    type_location(l, "13010-001")
+
+
+@step(500)
+def w2():
+    l = L()
+    screenshot(l.win, "13-use-place")
+    title = l.overlays[-1]["backdrop"].get_first_child().get_first_child().get_label()
+    check("a CEP finds its town in the right state and asks to confirm", title == "Usar Campinas, SP?")
+    l.press()  # Use
+    saved = json.load(open(f"{cfgdir}/htpc-launcher/apps.json"))
+    check("the location is saved with its coordinates",
+          saved["weather"]["name"] == "Campinas, SP" and saved["weather"]["latitude"] == -22.9
+          and saved["weather"]["query"] == "13010-001")
+    check("Settings shows the place", l.settings_fields["location"].value.get_label() == "Campinas, SP")
+
+
+@step(500)
+def w3():
+    l = L()
+    check("the weather shows up: rounded temperature, place, partly cloudy by day",
+          l.weather_box.get_visible() and l.weather_temp.get_label() == "27°"
+          and l.weather_place.get_label() == "Campinas, SP" and l.conditions.icon == "weather-partly-day.svg")
+    l.settings_fields["unit"].grab_focus()
+    l.press()
+    check("Ⓐ on Temperature switches to °F and saves it",
+          l.settings_fields["unit"].value.get_label() == "°F"
+          and json.load(open(f"{cfgdir}/htpc-launcher/apps.json"))["temperature_unit"] == "fahrenheit")
+
+
+@step(500)
+def w4():
+    l = L()
+    check("the temperature comes in °F", l.weather_temp.get_label() == "81°")
+    while l.overlays:
+        l.pop_overlay()
+    type_location(l, "99999-999")
+
+
+@step(500)
+def w5():
+    l = L()
+    title = l.overlays[-1]["backdrop"].get_first_child().get_first_child().get_label()
+    check("a CEP that does not exist says so", "99999-999" in title and "Não encontrei" in title)
+    while l.overlays:
+        l.pop_overlay()
+    type_location(l, "Offline")
+
+
+@step(500)
+def w6():
+    l = L()
+    title = l.overlays[-1]["backdrop"].get_first_child().get_first_child().get_label()
+    check("no internet: says the service could not be reached", "Não consegui" in title)
+    check("a failed search keeps the saved place", l.cfg["weather"]["name"] == "Campinas, SP")
+    while l.overlays:
+        l.pop_overlay()
+    l.open_settings(focus="language")
+    l.press()
+    buttons = l.overlays[-1]["rows"][0]
+    check("the language picker lists English and Português", [b.get_label() for b in buttons] == ["English", "Português (Brasil)"])
+    buttons[0].grab_focus()
+    l.press()
+
+
+@step(500)
+def w7():
+    l = L()
+    check("English applies right away: footer, hint and Settings",
+          l.btn_settings.label.get_label() == "Settings" and l.hint.get_label().startswith("Ⓐ open")
+          and l.settings_fields["language"].value.get_label() == "English"
+          and l.win.get_focus() is l.settings_fields["language"])
+    check("the weather is still on screen after the switch", l.weather_box.get_visible() and l.weather_temp.get_label() == "81°")
+    check("the date is in English", l.date_label.get_label().split(",")[0] in
+          ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"))
+    check("the language is saved", json.load(open(f"{cfgdir}/htpc-launcher/apps.json"))["language"] == "en")
+    screenshot(l.win, "14-settings")
+
+
+@step(300)
+def w8():
+    l = L()
+    while l.overlays:
+        l.pop_overlay()
+    real = l.system.connection_kind
+    l.system.connection_kind = lambda: "wired"
+    l._update_network()
+    check("network over a cable: wired icon, not Wi-Fi", l.net_icon_name.startswith("wired"))
+    l.system.connection_kind = lambda: "wifi"
+    l._update_network()
+    check("network over Wi-Fi: Wi-Fi icon", l.net_icon_name.startswith("wifi"))
+    l.system.connection_kind = lambda: None
+    l._update_network()
+    check("kind unknown (e.g. disconnected): keeps the last one", l.net_icon_name.startswith("wifi"))
+    l.system.connection_kind = lambda: "wired"
+    l._update_network()
+    l.system.connection_kind = real
+    l.tiles[0].grab_focus()
+
+
+@step(500)
+def w9():
+    screenshot(L().win, "12-home-weather")
+    type_location(L(), "")
+
+
+@step(300)
+def w10():
+    l = L()
+    check("an empty location turns the weather off", "weather" not in l.cfg and not l.weather_box.get_visible()
+          and l.settings_fields["location"].value.get_label() == "Off (weather hidden)")
 
 
 @step(200)

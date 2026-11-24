@@ -14,7 +14,7 @@ window.htpc {
 
 /* ---------- top bar ---------- */
 
-/* Console style: clock in the top-left corner, network status on the right. */
+/* Weather on the left, clock in the middle, gamepads and network on the right. */
 
 .clock {
   font-size: 40pt;
@@ -23,6 +23,18 @@ window.htpc {
 }
 .date {
   font-size: 15pt;
+  color: #8f9bb3;
+}
+.weather {
+  margin-top: 6px;
+}
+.weather-temp {
+  font-size: 28pt;
+  font-weight: 700;
+  font-feature-settings: "tnum";
+}
+.weather-place {
+  font-size: 13pt;
   color: #8f9bb3;
 }
 
@@ -38,7 +50,7 @@ window.htpc {
   color: #4ade80;
 }
 
-/* ---------- footer: hint + edit apps / restart / shut down ---------- */
+/* ---------- footer: hint + settings / restart / shut down ---------- */
 
 button.footer-button {
   min-height: 40px;

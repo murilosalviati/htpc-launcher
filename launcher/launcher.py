@@ -7,10 +7,12 @@ A full-screen home screen driven by a gamepad (or a keyboard):
   * in the middle, one tile per app in apps.json; if the app is already
     running, its tile brings the existing window back (resumes it) instead
     of starting a second copy;
-  * clock in the top-left corner, network and gamepad status in the top-right;
-  * in the footer, on the right: edit apps, restart and shut down (the last
-    two ask for confirmation). "Edit apps" opens edit mode (see editor.py),
-    where shortcuts can be added, edited and removed.
+  * top bar: the weather on the left (if a location is set), the clock in the
+    middle, gamepad and network status on the right;
+  * in the footer, on the right: settings, restart and shut down (the last
+    two ask for confirmation). Settings (see settings.py) has the apps
+    (edit mode, see editor.py), the background, the weather location, the
+    temperature unit and the language.
 
 Everything that depends on the operating system (finding and raising
 windows, reading gamepads, the installed-apps list, restart and shut down)
@@ -25,6 +27,7 @@ Keyboard: arrows move, Enter selects, Esc goes back.
 """
 
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -45,10 +48,11 @@ HERE = Path(__file__).resolve().parent
 # Installed: the htpc package sits next to this file. In the repo: one folder up.
 sys.path.insert(0, str(HERE))
 sys.path.insert(1, str(HERE.parent))
-from htpc import config, paths, themes  # noqa: E402
+from htpc import config, paths, themes, weather  # noqa: E402
 from htpc.backends import get_backend  # noqa: E402
 from htpc.i18n import Translator  # noqa: E402
 from editor import EditorMixin  # noqa: E402
+from settings import SettingsMixin  # noqa: E402
 
 CSS = HERE / "launcher.css"
 ICONS = HERE / "icons"
@@ -56,6 +60,8 @@ LAUNCHER_ID = "htpc-launcher"
 OPENING_GRACE = 20   # seconds an app counts as "opening" and is not started again
 RESUME_DELAY = 1500  # ms to wait after on_resume before raising the app's window
 COLUMNS = 5          # tiles per row; more apps wrap onto more rows
+WEATHER_EVERY = 30 * 60   # seconds between weather updates
+WEATHER_RETRY = 5 * 60    # ...or after a failed one
 
 
 def log(*args):
@@ -198,7 +204,7 @@ class AddTile(Gtk.Button):
 # ---------------------------------------------------------------------------
 # The launcher window
 
-class Launcher(EditorMixin):
+class Launcher(EditorMixin, SettingsMixin):
     gicon = staticmethod(gicon)  # the editor turns backend icons into GTK icons with it
 
     def __init__(self, gtk_app):
@@ -227,6 +233,10 @@ class Launcher(EditorMixin):
         self.overlays = []        # stack of things shown on top (confirmation, editor...)
         self.editing = False
         self.tiles, self.add_tile, self.tile_rows = [], None, []
+        self.weather_fetch = weather.http_json  # the tests swap this for a fake
+        self.conditions = None    # last weather that arrived (kept when an update fails)
+        self.weather_timer = 0
+        self.last_kind = "wifi"   # connection kind, for the "no connection" icon
 
         self.win = Gtk.Window(application=gtk_app, title="HTPC")
         self.win.add_css_class("htpc")
@@ -234,17 +244,7 @@ class Launcher(EditorMixin):
 
         self.overlay = Gtk.Overlay()
         self.win.set_child(self.overlay)
-
-        root = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
-        root.add_css_class("root")
-        self.overlay.set_child(root)
-
-        root.append(self._top_bar())
-        self.grid = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=44,
-                            halign=Gtk.Align.CENTER, valign=Gtk.Align.CENTER, vexpand=True)
-        root.append(self.grid)
-        root.append(self._footer())
-        self.build_grid()
+        self.build_ui()
 
         keys = Gtk.EventControllerKey()
         keys.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
@@ -255,18 +255,17 @@ class Launcher(EditorMixin):
 
         self.navigator = Navigator(backend.gamepads(), self.win.is_active, self.move, self.press,
                                    self.back, self.other_button)
+        self.gamepads = self.navigator.gamepads
 
-        self._update_clock()
         GLib.timeout_add_seconds(1, self._update_clock)
         self.network = Gio.NetworkMonitor.get_default()
         self.network.connect("notify::connectivity", lambda *_: self._update_network())
         self.network.connect("network-changed", lambda *_: self._update_network())
-        self._update_network()
-        self.gamepads = self.navigator.gamepads
-        self.gamepad_count = None
-        self._update_gamepads()
+        GLib.timeout_add_seconds(5, lambda: self._update_network() or True)
         GLib.timeout_add_seconds(1, self._update_gamepads)
         GLib.timeout_add_seconds(3, self._every_3s)
+        self.refresh_top_bar()
+        self.update_weather()
 
         self.win.set_cursor(Gdk.Cursor.new_from_name("none", None))
         self.win.fullscreen()
@@ -274,10 +273,29 @@ class Launcher(EditorMixin):
         if self.tiles:
             self.tiles[0].grab_focus()
 
+    def build_ui(self):
+        """(Re)build everything on screen in the current language. Called again
+        when the language changes; the timers keep working on the new widgets."""
+        root = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        root.add_css_class("root")
+        root.append(self._top_bar())
+        self.grid = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=44,
+                            halign=Gtk.Align.CENTER, valign=Gtk.Align.CENTER, vexpand=True)
+        root.append(self.grid)
+        root.append(self._footer())
+        self.overlay.set_child(root)
+        self.build_grid()
+
+    def refresh_top_bar(self):
+        self._update_clock()
+        self._update_network()
+        self.gamepad_count = None
+        self._update_gamepads()
+        self.show_weather()
+
     @property
     def rows(self):
-        footer = [self.btn_background] if self.editing else []
-        return self.tile_rows + [footer + [self.btn_settings, self.btn_restart, self.btn_power]]
+        return self.tile_rows + [[self.btn_settings, self.btn_restart, self.btn_power]]
 
     def apply_theme(self, theme_id):
         """Switch the background color right away (does not save it)."""
@@ -341,14 +359,32 @@ class Launcher(EditorMixin):
     # --- top bar ---------------------------------------------------------------
 
     def _top_bar(self):
-        """Console style: clock in the left corner, network status alone on the right."""
-        bar = Gtk.Box()
+        """Weather on the left, clock in the middle, gamepads and network on the right.
+        A CenterBox keeps the clock centered whatever the sides hold."""
+        bar = Gtk.CenterBox()
         bar.add_css_class("top-bar")
 
-        clock = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, valign=Gtk.Align.START, hexpand=True)
-        self.time_label = Gtk.Label(label="", xalign=0)
+        # Weather: icon and temperature, the place below in small print. Hidden
+        # until a location is set and the first answer arrives.
+        self.weather_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, valign=Gtk.Align.START)
+        self.weather_box.add_css_class("weather")
+        line = Gtk.Box(spacing=12)
+        self.weather_icon = Gtk.Image()
+        self.weather_icon.set_pixel_size(54)
+        self.weather_temp = Gtk.Label(label="", xalign=0)
+        self.weather_temp.add_css_class("weather-temp")
+        line.append(self.weather_icon)
+        line.append(self.weather_temp)
+        self.weather_place = Gtk.Label(label="", xalign=0)
+        self.weather_place.add_css_class("weather-place")
+        self.weather_box.append(line)
+        self.weather_box.append(self.weather_place)
+        self.weather_box.set_visible(False)
+
+        clock = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, valign=Gtk.Align.START)
+        self.time_label = Gtk.Label(label="")
         self.time_label.add_css_class("clock")
-        self.date_label = Gtk.Label(label="", xalign=0)
+        self.date_label = Gtk.Label(label="")
         self.date_label.add_css_class("date")
         clock.append(self.time_label)
         clock.append(self.date_label)
@@ -375,8 +411,9 @@ class Launcher(EditorMixin):
         net.append(self.net_text)
         net.append(self.net_icon)
 
-        bar.append(clock)
-        bar.append(net)
+        bar.set_start_widget(self.weather_box)
+        bar.set_center_widget(clock)
+        bar.set_end_widget(net)
         return bar
 
     # --- footer ----------------------------------------------------------------
@@ -389,15 +426,12 @@ class Launcher(EditorMixin):
         self.hint.add_css_class("hint")
         bar.append(self.hint)
 
-        # Only shown in edit mode, next to "Done".
-        self.btn_background = self._footer_button("background.svg", self.t("background"), self.choose_background)
-        self.btn_background.set_visible(False)
-        self.btn_settings = self._footer_button("settings.svg", self.t("edit_apps"), self.toggle_edit_mode)
+        self.btn_settings = self._footer_button("settings.svg", self.t("settings"), self.settings_button)
         self.btn_restart = self._footer_button("restart.svg", self.t("restart"),
                                                lambda: self.confirm_power("restart"))
         self.btn_power = self._footer_button("power.svg", self.t("power_off"),
                                              lambda: self.confirm_power("power_off"))
-        for b in (self.btn_background, self.btn_settings, self.btn_restart, self.btn_power):
+        for b in (self.btn_settings, self.btn_restart, self.btn_power):
             bar.append(b)
         return bar
 
@@ -423,21 +457,33 @@ class Launcher(EditorMixin):
         return True
 
     def _update_network(self):
+        """Icon by how we are connected (cable or Wi-Fi), color by whether the internet works."""
         c = self.network.get_connectivity()
+        kind = self.system.connection_kind()
+        if kind:
+            self.last_kind = kind
         if not self.network.get_network_available() or c == Gio.NetworkConnectivity.LOCAL:
-            text, icon, state = self.t("no_internet"), "wifi-off.svg", "off"
+            text, state = self.t("no_internet"), "off"
         elif c == Gio.NetworkConnectivity.FULL:
-            text, icon, state = "", "wifi.svg", "on"
+            text, state = "", "on"
         else:  # LIMITED or PORTAL
-            text, icon, state = self.t("limited_internet"), "wifi-limited.svg", "limited"
-        self.net_icon.set_from_file(str(ICONS / icon))
+            text, state = self.t("limited_internet"), "limited"
+        # Without a connection the OS reports no kind: keep showing the last one, crossed out.
+        icon = (kind or self.last_kind) + {"on": "", "limited": "-limited", "off": "-off"}[state]
+        self.net_icon_name = icon
+        self.net_icon.set_from_file(str(ICONS / f"{icon}.svg"))
         self.net_icon.set_pixel_size(30)
         self.net_text.set_label(text)
         self.net_text.set_visible(bool(text))
         for s in ("on", "off", "limited"):
             self.net_text.remove_css_class(s)
         self.net_text.add_css_class(state)
+        changed = getattr(self, "network_state", None) not in (None, state)
         self.network_state = state
+        self.network_kind = kind or self.last_kind
+        if changed and state == "on" and self.cfg.get("weather") and not self.conditions:
+            self.update_weather()  # internet came back: no need to wait for the retry
+        return False
 
     def _update_gamepads(self):
         """The gamepad list is kept up to date by the Navigator's polling (every 2 s)."""
@@ -449,6 +495,55 @@ class Launcher(EditorMixin):
             self.pad_count.set_label(str(n) if n > 1 else "")
             self.pad_count.set_visible(n > 1)
         return True
+
+    # --- weather -------------------------------------------------------------------
+
+    def update_weather(self):
+        """Ask for the weather in a thread; the answer comes back on the GTK thread."""
+        if self.weather_timer:
+            GLib.source_remove(self.weather_timer)
+            self.weather_timer = 0
+        place = self.cfg.get("weather")
+        if not place:
+            self.conditions = None
+            self.show_weather()
+            return False
+        unit = self.cfg.get("temperature_unit", "celsius")
+        fetch = self.weather_fetch
+
+        def work():
+            try:
+                result = weather.current(place["latitude"], place["longitude"], unit, fetch)
+            except Exception as e:  # noqa: BLE001 - any failure just means "try later"
+                result = e
+            GLib.idle_add(self._weather_arrived, place, unit, result)
+
+        threading.Thread(target=work, daemon=True).start()
+        return False
+
+    def _weather_arrived(self, place, unit, result):
+        if place is not self.cfg.get("weather") or unit != self.cfg.get("temperature_unit", "celsius"):
+            return False  # the settings changed meanwhile; a newer request is on its way
+        if isinstance(result, Exception):
+            log("weather not updated:", result)
+            delay = WEATHER_RETRY
+        else:
+            self.conditions = result
+            delay = WEATHER_EVERY
+        self.show_weather()
+        self.weather_timer = GLib.timeout_add_seconds(delay, self.update_weather)
+        return False
+
+    def show_weather(self):
+        place, c = self.cfg.get("weather"), self.conditions
+        if not place or not c:
+            self.weather_box.set_visible(False)
+            return
+        self.weather_icon.set_from_file(str(ICONS / c.icon))
+        self.weather_icon.set_pixel_size(54)
+        self.weather_temp.set_label(f"{c.temperature}°")
+        self.weather_place.set_label(place.get("name", ""))
+        self.weather_box.set_visible(True)
 
     def _every_3s(self):
         if self.win.is_active() and not self.overlays:

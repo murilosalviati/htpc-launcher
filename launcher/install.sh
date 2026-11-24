@@ -29,7 +29,7 @@ rm -rf "$DATA/icones" "$DATA/edicao.py"
 # Before 0.1.0-beta.3 the shared modules were loose files; they now live in the htpc package.
 rm -f "$DATA/htpc_config.py" "$DATA/i18n.py" "$DATA/themes.py"
 
-cp "$HERE/launcher.py" "$HERE/editor.py" "$HERE/launcher.css" "$DATA/"
+cp "$HERE/launcher.py" "$HERE/editor.py" "$HERE/settings.py" "$HERE/launcher.css" "$DATA/"
 rm -rf "$DATA/htpc"
 cp -r "$HERE/../htpc" "$DATA/"
 find "$DATA/htpc" -name __pycache__ -prune -exec rm -rf {} +

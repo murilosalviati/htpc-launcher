@@ -2,7 +2,7 @@
 # Copyright (C) 2026 Murilo Salviati
 """Launcher edit mode: add, edit and remove app shortcuts.
 
-Entered from the "Edit apps" button in the footer. There, Ⓐ on an app opens
+Entered from Settings → Apps (settings.py). There, Ⓐ on an app opens
 the editor and Ⓐ on "+ Add" creates a new shortcut. The editor has three
 fields:
 
@@ -53,13 +53,12 @@ class EditorMixin:
     def toggle_edit_mode(self):
         self.editing = not self.editing
         self.hint.set_label(self.t("hint_edit") if self.editing else self.t("hint_normal"))
-        self.btn_background.set_visible(self.editing)
         if self.editing:
             self.hint.add_css_class("editing")
             self.btn_settings.label.set_label(self.t("done"))
         else:
             self.hint.remove_css_class("editing")
-            self.btn_settings.label.set_label(self.t("edit_apps"))
+            self.btn_settings.label.set_label(self.t("settings"))
         self.build_grid(focus=0 if self.cfg.get("apps") else -1)
 
     def new_app(self):
@@ -107,14 +106,14 @@ class EditorMixin:
         # For a new shortcut, picking the app comes first (the name comes from it).
         self.push_overlay(box, rows, focus=self.field_app if index is None else self.field_name)
 
-    def _field(self, title, action):
+    def _field(self, title, action, title_width=190):
         b = Gtk.Button()
         b.add_css_class("field")
         b.set_focus_on_click(False)
         box = Gtk.Box(spacing=24)
         label = Gtk.Label(label=title, xalign=0)
         label.add_css_class("field-title")
-        label.set_size_request(190, -1)
+        label.set_size_request(title_width, -1)
         b.value = Gtk.Label(label="", xalign=0, hexpand=True,
                             ellipsize=Pango.EllipsizeMode.END, max_width_chars=36)
         b.value.add_css_class("field-value")
@@ -206,10 +205,10 @@ class EditorMixin:
         self.editor["draft"]["name"] = text
         self._refresh_editor()
 
-    def keyboard(self, title, value, on_done):
+    def keyboard(self, title, value, on_done, note=None):
         # Capitalize the first letter automatically, like a phone keyboard.
         state = {"text": value, "shift": not value}
-        box = self.dialog_box(title)
+        box = self.dialog_box(title, note)
         box.add_css_class("keyboard")
         display = Gtk.Label(label="", xalign=0)
         display.add_css_class("keyboard-display")
@@ -446,3 +445,4 @@ class EditorMixin:
         self.cfg["background"] = theme_id
         self.save_config()
         self.pop_overlay()
+        self.refresh_settings()

@@ -162,6 +162,47 @@ check("gamepads: counts each physical gamepad once and skips virtual ones",
 pads.devs = {}
 check("gamepads: none connected", pads.connected() == [])
 
+# 9c. weather: finding the place and reading the conditions (no network: a fake fetch)
+from htpc import weather  # noqa: E402
+
+GEO = {"results": [
+    {"name": "Araranguá", "latitude": -28.9, "longitude": -49.5, "country_code": "BR", "admin1": "Santa Catarina"},
+    {"name": "Campinas", "latitude": -3.7, "longitude": -39.7, "country_code": "BR", "admin1": "Ceará"},
+    {"name": "Campinas", "latitude": -22.9, "longitude": -47.0, "country_code": "BR", "admin1": "São Paulo"},
+]}
+
+
+def fetch(url):
+    if "viacep" in url:
+        return {"erro": "true"} if "00000000" in url else {"localidade": "Campinas", "uf": "SP"}
+    if "geocoding" in url:
+        if "Lisbon" in url:
+            return {"results": [{"name": "Lisbon", "latitude": 38.7, "longitude": -9.1,
+                                 "country_code": "PT", "admin1": "Lisbon"}]}
+        return GEO if "Campinas" in url else {"generationtime_ms": 0.1}
+    return {"current": {"temperature_2m": 18.6, "weather_code": 61, "is_day": 0}}
+
+
+check("weather: CEP with or without dash and dots", weather.cep_digits("13.010-001") == "13010001"
+      and weather.cep_digits("Campinas") is None)
+p = weather.find_place("13010-001", "pt-BR", fetch)
+check("weather: a CEP picks the town in its own state", (p.name, p.latitude) == ("Campinas, SP", -22.9))
+p = weather.find_place("Lisbon", "en", fetch)
+check("weather: a city name outside Brazil", p.name == "Lisbon, Lisbon" and p.longitude == -9.1)
+for bad in ("00000-000", "Nowhere", ""):
+    try:
+        weather.find_place(bad, "en", fetch)
+        check(f"weather: {bad!r} is not found", False)
+    except weather.NotFound:
+        check(f"weather: {bad!r} is not found", True)
+c = weather.current(-22.9, -47.0, "celsius", fetch)
+check("weather: rain at night, rounded", (c.temperature, c.kind, c.icon) == (19, "rain", "weather-rain.svg"))
+check("weather: codes map to icons",
+      [weather.kind_for_code(x) for x in (0, 2, 3, 45, 63, 81, 75, 95)]
+      == ["clear", "partly", "cloudy", "fog", "rain", "rain", "snow", "storm"])
+check("weather: clear at night is the moon",
+      weather.Conditions(10, "clear", False).icon == "weather-clear-night.svg")
+
 # 10. the Windows backend is a documented placeholder for now
 from htpc.backends.windows import WindowsBackend  # noqa: E402
 try:

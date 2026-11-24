@@ -11,18 +11,23 @@ A gamepad-driven home screen for a living-room PC running Ubuntu with GNOME on W
 
 ## Features
 
-- **Full-screen home screen** with one tile per app, a clock in the top-left corner and a network indicator in the top-right. The indicator is just an icon while you are online and only shows text when the connection is limited or down. Next to it, a gamepad icon lights up when a gamepad is connected (USB, Bluetooth or wireless dongle) and shows how many there are when there is more than one.
+- **Full-screen home screen** with one tile per app. Across the top:
+  - on the left, the current weather (icon, temperature and place), once you set a location;
+  - in the middle, the clock and date;
+  - on the right, a gamepad icon that lights up when a gamepad is connected (USB, Bluetooth or wireless dongle) and shows how many there are when there is more than one, and the network icon: a cable symbol on a wired connection, Wi-Fi bars on Wi-Fi. It is just an icon while you are online and only shows text when the connection is limited or down.
 - **Resume, never duplicate:** selecting an app that is already running brings its existing window back instead of starting a second copy.
 - **Guide button** (Xbox / Home / PS): pauses the video that is playing, if any, and returns to the launcher. The app keeps running behind it.
 - **Start + Select + L1 + R1:** closes the focused app and returns to the launcher. For game streaming apps like Moonlight, the first press ends the stream (Moonlight's own shortcut) and a second press within 15 seconds closes the app.
-- **Edit mode** (the gear in the footer): add, edit and remove shortcuts from the couch.
+- **Settings** (the gear in the footer): apps, background color, weather location, temperature unit (°C or °F) and language, all from the couch.
+- **Weather:** type a Brazilian CEP or a city name; the launcher finds the place, asks you to confirm it, and shows the conditions, updated every 30 minutes, with a moon instead of the sun at night. It uses [Open-Meteo](https://open-meteo.com/) and [ViaCEP](https://viacep.com.br/), which are free and need no account. Leave the location empty to hide it.
+- **Edit mode** (Settings → Apps): add, edit and remove shortcuts.
   - Type names on an on-screen keyboard driven by the gamepad (Ⓧ deletes, Ⓨ types a space). A physical keyboard works too.
   - Pick the application from the list of installed apps, including Flatpaks.
   - Pick the icon: the app's own, or any image in `~/.local/share/htpc-launcher/app-icons/`.
   - The grid wraps onto more rows after 5 apps and reflows when you remove one.
-  - Change the background color: 9 dark themes (Midnight, Ocean, Forest, Aurora, Plum, Wine, Ember, Graphite, Black), previewed live as you move between them.
+- **Background colors:** 9 dark themes (Midnight, Ocean, Forest, Aurora, Plum, Wine, Ember, Graphite, Black), previewed live as you move between them.
 - **Restart and shut down** buttons in the footer, both with a confirmation that defaults to Cancel.
-- **English and Brazilian Portuguese** on-screen text (`"language": "en"` or `"pt-BR"` in `apps.json`).
+- **English and Brazilian Portuguese** on-screen text, switched in Settings without restarting.
 - **Steam opens in Big Picture.** It starts with `-gamepadui`, and if it is already running in desktop mode, the launcher switches it to Big Picture when you select it.
 
 The default configuration has VacuumTube (YouTube's TV interface), Jellyfin Desktop, Moonlight and Steam, all as Flatpaks.
@@ -37,8 +42,8 @@ On Wayland, a regular program cannot raise another app's window or find out whic
 |---|---|
 | `gnome-extension/` | The `htpc-launcher@htpc` GNOME Shell extension. It runs inside GNOME and exposes window control on the session bus (`org.htpc.Launcher`): list windows, raise or close an app's windows, show the launcher. |
 | `controller/` | The background service that reads the gamepads and runs the shortcuts (a systemd user service on Linux). |
-| `launcher/` | The home screen UI in GTK 4 (`launcher.py`), with edit mode in `editor.py`. It only reaches the OS through the backend. |
-| `htpc/` | The shared Python package: `apps.json` handling (`config.py`), file locations per OS (`paths.py`), the guide and close-combo rules (`shortcuts.py`), on-screen text (`i18n.py`) and background colors (`themes.py`). |
+| `launcher/` | The home screen UI in GTK 4 (`launcher.py`), with the settings menu in `settings.py` and edit mode in `editor.py`. It only reaches the OS through the backend. |
+| `htpc/` | The shared Python package: `apps.json` handling (`config.py`), file locations per OS (`paths.py`), the guide and close-combo rules (`shortcuts.py`), on-screen text (`i18n.py`), background colors (`themes.py`) and the weather lookup (`weather.py`). |
 | `htpc/backends/` | Everything that talks to the operating system, behind the interface in `base.py`: window control, media pausing, gamepad input, the installed-apps list, and starting, force-closing, restart and shut down. `linux/` implements it; `windows/` is a documented placeholder. |
 | `config/apps.json` | The example configuration, installed to `~/.config/htpc-launcher/apps.json`. |
 | `tests/` | Tests that run against a fake GNOME extension and a fake media player. |
@@ -77,7 +82,7 @@ To use your own icons, put PNG files in an `app-icons/` folder at the root of th
 
 ## Configuration: `apps.json`
 
-You can edit apps from the launcher's edit mode, or by hand:
+You can change everything from the launcher's Settings, or by hand:
 
 ```json
 {
@@ -104,7 +109,7 @@ You can edit apps from the launcher's edit mode, or by hand:
 | `icon` | A theme icon name or an image path. Without it, the launcher uses the icon the app installed. |
 | `desktop` | The `.desktop` file to take the icon from, when it differs from `id`. |
 
-At the top level, `language` sets the on-screen text (`en` or `pt-BR`), `background` sets the background color (`midnight`, `ocean`, `forest`, `aurora`, `plum`, `wine`, `ember`, `graphite` or `black`; see `htpc/themes.py`), and `launcher.launch` is the command the service uses to start the launcher if it is not running. `launcher/install.sh` fills it in.
+At the top level, `language` sets the on-screen text (`en` or `pt-BR`), `background` sets the background color (`midnight`, `ocean`, `forest`, `aurora`, `plum`, `wine`, `ember`, `graphite` or `black`; see `htpc/themes.py`), `temperature_unit` is `celsius` or `fahrenheit`, `weather` holds the place chosen in Settings (`query`, `name`, `latitude`, `longitude`; remove it to hide the weather), and `launcher.launch` is the command the service uses to start the launcher if it is not running. `launcher/install.sh` fills it in.
 
 Older versions of this project used Portuguese field names (`nome`, `abrir`...). They are converted automatically the first time the launcher starts, and the on-screen text stays in Portuguese for those installs.
 
