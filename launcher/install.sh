@@ -60,6 +60,26 @@ config.save(cfg, config_path)
 print("apps.json is up to date (language: %s)" % cfg.get("language"))
 EOF
 
+# Some Flatpaks ship without access to gamepads, so their own gamepad support
+# (SDL) finds none. Jellyfin Desktop is one: let it see input devices.
+# "--device=input" needs Flatpak 1.15.6 or later; older ones only have "all".
+grant_input() {
+    local app="$1"
+    flatpak info "$app" >/dev/null 2>&1 || return 0
+    if flatpak info --show-permissions "$app" | grep -qE '^devices=.*\b(all|input)\b'; then
+        return 0
+    fi
+    local device=input
+    if [ "$(printf '%s\n' "1.15.6" "$(flatpak --version | awk '{print $2}')" | sort -V | head -1)" != "1.15.6" ]; then
+        device=all
+    fi
+    flatpak override --user --device="$device" "$app"
+    echo "Gave $app access to gamepads (--device=$device)."
+}
+if command -v flatpak >/dev/null; then
+    grant_input org.jellyfin.JellyfinDesktop
+fi
+
 sed "s|@DATA@|$DATA|g" "$HERE/htpc-launcher.desktop.in" > "$HOME/.local/share/applications/htpc-launcher.desktop"
 cp "$HOME/.local/share/applications/htpc-launcher.desktop" "$HOME/.config/autostart/"
 

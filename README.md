@@ -54,6 +54,7 @@ On Wayland, a regular program cannot raise another app's window or find out whic
 - Ubuntu with GNOME on Wayland. Tested on GNOME Shell 50; the extension declares support for 47 to 51.
 - `python3-evdev`, `python3-jeepney`, `python3-gi` and `gir1.2-gtk-4.0`. The install scripts install whichever are missing.
 - The apps you want to launch. The default `apps.json` expects these Flatpaks: `rocks.shy.VacuumTube`, `org.jellyfin.JellyfinDesktop`, `com.moonlight_stream.Moonlight` and `com.valvesoftware.Steam`.
+- **Jellyfin Desktop:** its Flatpak cannot see gamepads by default (`devices=dri` only), so its gamepad support finds none. `launcher/install.sh` gives it access (`flatpak override --user --device=input org.jellyfin.JellyfinDesktop`, or `--device=all` on Flatpak older than 1.15.6). Also switch it to TV mode (Settings → Client settings → layout, or `"layout": "tv"` in its `jellyfin-desktop.conf`) so the interface is made for a gamepad.
 
 ## Install
 
