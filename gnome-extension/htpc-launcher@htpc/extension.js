@@ -330,13 +330,22 @@ class LauncherBridge {
             this._dropToast(toast);
     }
 
-    // Hides the mouse pointer on the whole screen (asked when the gamepad is
-    // used) until the mouse moves. GNOME 49 removed set_pointer_visible; its
-    // replacement, inhibit_cursor_visibility, does not undo itself when the
-    // mouse moves, so we watch the pointer position and undo it ourselves.
     // GNOME's own level indicator (the one the volume keys show), on every monitor.
+    // Like the notices, it must show over full-screen apps too: while it is up,
+    // the compositor keeps drawing the desktop instead of handing the screen
+    // straight to the app ("unredirect"), which would hide it.
     ShowOsd(iconName, level) {
         const icon = Gio.ThemedIcon.new(iconName);
+        if (!this._osdTimer)
+            global.compositor?.disable_unredirect?.();
+        else
+            GLib.source_remove(this._osdTimer);
+        // GNOME hides the indicator 1.5 s after the last change, then fades it out.
+        this._osdTimer = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 2500, () => {
+            this._osdTimer = 0;
+            global.compositor?.enable_unredirect?.();
+            return GLib.SOURCE_REMOVE;
+        });
         const osd = Main.osdWindowManager;
         if (osd.showAll)
             osd.showAll(icon, null, level, 1);
@@ -345,6 +354,18 @@ class LauncherBridge {
         return true;
     }
 
+    clearOsd() {
+        if (this._osdTimer) {
+            GLib.source_remove(this._osdTimer);
+            this._osdTimer = 0;
+            global.compositor?.enable_unredirect?.();
+        }
+    }
+
+    // Hides the mouse pointer on the whole screen (asked when the gamepad is
+    // used) until the mouse moves. GNOME 49 removed set_pointer_visible; its
+    // replacement, inhibit_cursor_visibility, does not undo itself when the
+    // mouse moves, so we watch the pointer position and undo it ourselves.
     HidePointer() {
         const tracker = global.backend?.get_cursor_tracker?.() ??
             Meta.CursorTracker.get_for_display?.(global.display);
@@ -413,6 +434,7 @@ export default class HtpcLauncherExtension extends Extension {
     disable() {
         this._impl?.showPointer?.();
         this._impl?.clearToasts?.();
+        this._impl?.clearOsd?.();
         if (this._createdId) {
             global.display.disconnect(this._createdId);
             this._createdId = 0;
