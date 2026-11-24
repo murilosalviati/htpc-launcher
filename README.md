@@ -15,6 +15,7 @@ A gamepad-driven home screen for a living-room PC running Ubuntu with GNOME on W
   - on the left, the current weather (icon, temperature and place), once you set a location;
   - in the middle, the clock and date;
   - on the right, a gamepad icon that lights up when a gamepad is connected (USB, Bluetooth or wireless dongle) and shows how many there are when there is more than one, and the network icon: a cable symbol on a wired connection, Wi-Fi bars on Wi-Fi. It is just an icon while you are online and only shows text when the connection is limited or down.
+- **Apps open in full screen** (through the GNOME extension), except where an app's own full-screen mode is better, like Steam's Big Picture.
 - **Resume, never duplicate:** selecting an app that is already running brings its existing window back instead of starting a second copy.
 - **Guide button** (Xbox / Home / PS): pauses the video that is playing, if any, and returns to the launcher. The app keeps running behind it.
 - **Start + Select + L1 + R1:** closes the focused app and returns to the launcher. For game streaming apps like Moonlight, the first press ends the stream (Moonlight's own shortcut) and a second press within 15 seconds closes the app.
@@ -105,6 +106,7 @@ You can change everything from the launcher's Settings, or by hand:
 | `close_timeout` | Seconds to wait before forcing the app to close. The default is 3. |
 | `pause_on_home` | Pause media (MPRIS) when the guide button is pressed in this app. |
 | `close_on_second_press` | The first close combo goes to the app itself; the second one closes it. |
+| `fullscreen` | Put the app's windows in full screen when it opens. On by default; Steam defaults to off because Big Picture already is full screen and its other windows should not be. Needs version 3 of the GNOME extension. |
 | `preferred_windows` | For apps with several windows: titles to bring to the front, in order of preference. Without it, the most recently used window comes up. |
 | `icon` | A theme icon name or an image path. Without it, the launcher uses the icon the app installed. |
 | `desktop` | The `.desktop` file to take the icon from, when it differs from `id`. |

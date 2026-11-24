@@ -67,3 +67,7 @@ class ExtensionWindowControl(WindowControl):
 
     def show_launcher(self):
         return bool(self._call("ShowLauncher"))
+
+    def fullscreen_on_open(self, app_id, seconds=60):
+        # Extension v3 and later; an older one answers None (logged once per call).
+        return self._call("FullscreenOnOpen", "su", (app_id, int(seconds)))

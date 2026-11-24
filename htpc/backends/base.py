@@ -89,6 +89,12 @@ class WindowControl(ABC):
     def show_launcher(self):
         """Raise the launcher. False if it is not running."""
 
+    def fullscreen_on_open(self, app_id, seconds=60):
+        """Put the app's windows in full screen, including the ones it opens in the
+        next `seconds`. Returns how many windows went full screen right away, or None
+        if the OS side cannot do it."""
+        return None
+
 
 class Media(ABC):
     @abstractmethod

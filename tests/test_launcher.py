@@ -133,6 +133,21 @@ def s3():
     before = dict(l.opening)
     l.press()
     check("pressing again while it opens does not start another", l.opening == before)
+    check("opening an app asks for full screen", "rocks.shy.VacuumTube" in fakes.state.get("fullscreen", []))
+
+
+@step(300)
+def s3b():
+    """Opened, then closed with the gamepad shortcut while the launcher was behind it."""
+    l = L()
+    yt = {"appId": "rocks.shy.VacuumTube", "ids": ["rocks.shy.vacuumtube"], "title": "YouTube", "pid": 0, "minimized": False}
+    fakes.state["windows"].append(yt)
+    l._check_opening()
+    fakes.state["windows"].remove(yt)
+    l._check_opening()
+    l.refresh_status()
+    check("an app closed right after opening does not go back to 'abrindo…'",
+          l.tiles[0].status.get_label() == "" and "rocks.shy.VacuumTube" not in l.opening)
 
 
 @step(300)
@@ -187,6 +202,8 @@ def s7():
     l.press()
     check("running Steam: raises the 'Steam' window, not 'Friends List'", fakes.state.get("activated") == "Steam")
     check("running Steam is not started again", "com.valvesoftware.Steam" not in l.opening)
+    check("Steam is not forced to full screen (Big Picture already is; its other windows should not be)",
+          "com.valvesoftware.Steam" not in fakes.state.get("fullscreen", []))
 
 
 @step(600)

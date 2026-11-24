@@ -40,6 +40,13 @@ NEW_DEFAULTS = {
     },
 }
 
+# Defaults for known apps, filled in on every load when the entry does not set
+# them. Steam's Big Picture is already full screen and Steam's other windows
+# (Friends List, Special Offers...) should not be.
+KNOWN_APP_DEFAULTS = {
+    "com.valvesoftware.Steam": {"fullscreen": False},
+}
+
 # The folder of user-chosen icons was renamed too.
 LEGACY_ICON_DIR = "/htpc-launcher/icones-apps/"
 ICON_DIR = "/htpc-launcher/app-icons/"
@@ -79,6 +86,9 @@ def load(path=None):
         cfg = json.load(f)
     migrated = migrate(cfg)
     cfg.setdefault("language", DEFAULT_LANGUAGE)
+    for app in cfg.get("apps", []):
+        for key, value in KNOWN_APP_DEFAULTS.get(app.get("id"), {}).items():
+            app.setdefault(key, value)
     return cfg, migrated
 
 

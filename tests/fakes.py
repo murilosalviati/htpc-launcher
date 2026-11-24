@@ -56,6 +56,9 @@ def shell():
                 state["focus"] = target["appId"]
                 state["activated"] = target["title"]
             r = new_method_return(m, "b", (target is not None,))
+        elif name == "FullscreenOnOpen":
+            state.setdefault("fullscreen", []).append(args[0])
+            r = new_method_return(m, "u", (0,))
         elif name == "ShowLauncher":
             state["focus"] = "htpc-launcher"
             r = new_method_return(m, "b", (True,))

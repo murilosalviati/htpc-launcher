@@ -121,14 +121,36 @@ S["focus"] = "org.jellyfin.JellyfinDesktop"; time.sleep(0.4)
 press("start", "select", "l1"); time.sleep(0.4)
 check("incomplete combo does not close", "org.jellyfin.JellyfinDesktop" in running())
 
-# 8. service without the graphical session's variables: only missing ones are filled
-for v in ("DISPLAY", "WAYLAND_DISPLAY"):
+# 8. started without the graphical session's variables (systemd service, SSH):
+#    missing ones come from the session, then from defaults
+for v in ("DISPLAY", "WAYLAND_DISPLAY", "XAUTHORITY"):
     os.environ.pop(v, None)
-os.environ["XDG_RUNTIME_DIR"] = "/run/user/1234"
+runtime = tempfile.mkdtemp()
+os.environ["XDG_RUNTIME_DIR"] = runtime
+real_session_env = linux_system.session_env
+linux_system.session_env = lambda: {}
+open(f"{runtime}/.mutter-Xwaylandauth.ABC123", "w").close()
 env = linux_system.graphical_env()
-check("fills in missing DISPLAY and WAYLAND_DISPLAY", env["DISPLAY"] == ":0" and env["WAYLAND_DISPLAY"] == "wayland-0")
-os.environ["DISPLAY"] = ":1"
-check("keeps a DISPLAY that already exists", linux_system.graphical_env()["DISPLAY"] == ":1")
+check("no session info: fills DISPLAY, WAYLAND_DISPLAY and Xwayland's XAUTHORITY",
+      env["DISPLAY"] == ":0" and env["WAYLAND_DISPLAY"] == "wayland-0"
+      and env["XAUTHORITY"] == f"{runtime}/.mutter-Xwaylandauth.ABC123")
+linux_system.session_env = lambda: {"DISPLAY": ":1", "XAUTHORITY": "/run/user/1000/.mutter-Xwaylandauth.XYZ"}
+env = linux_system.graphical_env()
+check("takes DISPLAY and XAUTHORITY from the session", env["DISPLAY"] == ":1" and env["XAUTHORITY"].endswith("XYZ"))
+os.environ["DISPLAY"] = ":5"
+check("keeps a DISPLAY that already exists", linux_system.graphical_env()["DISPLAY"] == ":5")
+linux_system.session_env = real_session_env
+
+
+class FakeRun:
+    stdout = "HOME=/home/u\nDISPLAY=:0\nXAUTHORITY=$'/run/user/1000/.mutter-Xwaylandauth.Q1'\nLANG=pt_BR.UTF-8\n"
+
+
+real_run = linux_system.subprocess.run
+linux_system.subprocess.run = lambda *a, **k: FakeRun()
+check("reads systemd's environment, only the session variables",
+      linux_system.session_env() == {"DISPLAY": ":0", "XAUTHORITY": "/run/user/1000/.mutter-Xwaylandauth.Q1"})
+linux_system.subprocess.run = real_run
 
 # 9. evdev events become normalized gamepad events
 pads = EvdevGamepads()

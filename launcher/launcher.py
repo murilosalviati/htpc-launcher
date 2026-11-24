@@ -58,6 +58,7 @@ CSS = HERE / "launcher.css"
 ICONS = HERE / "icons"
 LAUNCHER_ID = "htpc-launcher"
 OPENING_GRACE = 20   # seconds an app counts as "opening" and is not started again
+FULLSCREEN_FOR = 60  # seconds after starting an app during which its new windows go full screen
 RESUME_DELAY = 1500  # ms to wait after on_resume before raising the app's window
 COLUMNS = 5          # tiles per row; more apps wrap onto more rows
 WEATHER_EVERY = 30 * 60   # seconds between weather updates
@@ -229,7 +230,7 @@ class Launcher(EditorMixin, SettingsMixin):
         theme = Gtk.IconTheme.get_for_display(Gdk.Display.get_default())
         for folder in self.apps.icon_dirs():
             theme.add_search_path(folder)
-        self.opening = {}         # app id -> when it was started
+        self.opening = {}         # app id -> when it was started (None once its window showed up)
         self.overlays = []        # stack of things shown on top (confirmation, editor...)
         self.editing = False
         self.tiles, self.add_tile, self.tile_rows = [], None, []
@@ -263,6 +264,7 @@ class Launcher(EditorMixin, SettingsMixin):
         self.network.connect("network-changed", lambda *_: self._update_network())
         GLib.timeout_add_seconds(5, lambda: self._update_network() or True)
         GLib.timeout_add_seconds(1, self._update_gamepads)
+        GLib.timeout_add_seconds(1, lambda: self.opening and self._check_opening() or True)
         GLib.timeout_add_seconds(3, self._every_3s)
         self.refresh_top_bar()
         self.update_weather()
@@ -485,6 +487,19 @@ class Launcher(EditorMixin, SettingsMixin):
             self.update_weather()  # internet came back: no need to wait for the retry
         return False
 
+    def _check_opening(self):
+        """An app counts as "opening" until its window shows up. Checked even while
+        the launcher is behind it, so an app closed soon after opening does not
+        come back as "opening…"."""
+        for app_id in list(self.opening):
+            if self.windows.is_running(app_id):
+                self.opening[app_id] = None  # seen: no longer opening
+            elif self.opening[app_id] is None:
+                del self.opening[app_id]     # seen and now closed
+            elif time.monotonic() - self.opening[app_id] >= OPENING_GRACE:
+                del self.opening[app_id]     # never showed up
+        return True
+
     def _update_gamepads(self):
         """The gamepad list is kept up to date by the Navigator's polling (every 2 s)."""
         n = len(self.gamepads.connected())
@@ -562,7 +577,7 @@ class Launcher(EditorMixin, SettingsMixin):
             if self.windows.is_running(app_id):
                 self.opening.pop(app_id, None)
                 tile.show_status(self.t("status_open"), running=True)
-            elif now - self.opening.get(app_id, -1e9) < OPENING_GRACE:
+            elif self.opening.get(app_id) is not None and now - self.opening[app_id] < OPENING_GRACE:
                 tile.show_status(self.t("status_opening"), running=True)
             else:
                 self.opening.pop(app_id, None)
@@ -576,6 +591,9 @@ class Launcher(EditorMixin, SettingsMixin):
         app = tile.app
         app_id = app["id"]
         windows = app.get("preferred_windows")
+        if app.get("fullscreen", True):
+            # Covers both cases: an open window goes full screen now, a new one when it appears.
+            self.windows.fullscreen_on_open(app_id, FULLSCREEN_FOR)
         if self.windows.activate(app_id, windows):
             log("resuming", app["name"])
             on_resume = app.get("on_resume")
@@ -583,7 +601,8 @@ class Launcher(EditorMixin, SettingsMixin):
                 # e.g. Steam switching to Big Picture opens a new window; bring it up.
                 GLib.timeout_add(RESUME_DELAY, lambda: self.windows.activate(app_id, windows) and False)
             return
-        if time.monotonic() - self.opening.get(app_id, -1e9) < OPENING_GRACE:
+        started = self.opening.get(app_id)
+        if started is not None and time.monotonic() - started < OPENING_GRACE:
             log(app["name"], "is still opening")
             return
         command = app.get("launch")

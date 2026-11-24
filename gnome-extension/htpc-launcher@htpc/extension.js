@@ -54,6 +54,11 @@ const IFACE_XML = `
       <arg type="s" direction="in" name="appId"/>
       <arg type="u" direction="out" name="closedWindows"/>
     </method>
+    <method name="FullscreenOnOpen">
+      <arg type="s" direction="in" name="appId"/>
+      <arg type="u" direction="in" name="seconds"/>
+      <arg type="u" direction="out" name="windowsNow"/>
+    </method>
     <method name="ShowLauncher">
       <arg type="b" direction="out" name="ok"/>
     </method>
@@ -118,7 +123,17 @@ function windowsOf(appId) {
 // ---------------------------------------------------------------------------
 // Object exported on D-Bus
 
+// A window worth making full screen: a normal top-level window, not a dialog.
+function fullscreenable(win) {
+    return win && win.get_window_type() === Meta.WindowType.NORMAL &&
+        !win.get_transient_for() && !win.is_fullscreen();
+}
+
 class LauncherBridge {
+    constructor() {
+        this._fullscreenWanted = new Map();  // appId (lowercase) -> until when (µs, monotonic)
+    }
+
     ListWindows() {
         const focused = global.display.focus_window;
         const list = normalWindows().map(win => ({
@@ -178,6 +193,40 @@ class LauncherBridge {
         return wins.length;
     }
 
+    // Puts the app's windows in full screen: the ones it has now and any it
+    // opens in the next `seconds` (an app being started has no window yet).
+    FullscreenOnOpen(appId, seconds) {
+        const wanted = (appId ?? '').trim().toLowerCase();
+        if (!wanted)
+            return 0;
+        this._fullscreenWanted.set(wanted, GLib.get_monotonic_time() + seconds * 1e6);
+        const wins = windowsOf(wanted).filter(fullscreenable);
+        for (const win of wins)
+            win.make_fullscreen();
+        return wins.length;
+    }
+
+    // Called for every new window.
+    windowCreated(win) {
+        const now = GLib.get_monotonic_time();
+        for (const [id, until] of this._fullscreenWanted) {
+            if (until < now)
+                this._fullscreenWanted.delete(id);
+        }
+        if (this._fullscreenWanted.size === 0)
+            return;
+        // Wait a moment: right after creation the window may not have its app id
+        // or type yet, and some apps resize themselves when they first appear.
+        GLib.timeout_add(GLib.PRIORITY_DEFAULT, 300, () => {
+            if (!win.get_compositor_private())
+                return GLib.SOURCE_REMOVE;  // already gone
+            const ids = windowIds(win);
+            if (fullscreenable(win) && ids.some(id => this._fullscreenWanted.has(id)))
+                win.make_fullscreen();
+            return GLib.SOURCE_REMOVE;
+        });
+    }
+
     ShowLauncher() {
         return this.Activate(LAUNCHER_ID);
     }
@@ -194,6 +243,9 @@ export default class HtpcLauncherExtension extends Extension {
         this._nameId = Gio.bus_own_name_on_connection(
             Gio.DBus.session, BUS_NAME, Gio.BusNameOwnerFlags.NONE, null, null);
 
+        this._createdId = global.display.connect('window-created',
+            (_display, win) => this._impl.windowCreated(win));
+
         this._focusId = global.display.connect('notify::focus-window', () => {
             const appId = this._impl.FocusedApp();
             this._dbus.emit_signal('FocusChanged', new GLib.Variant('(s)', [appId]));
@@ -201,6 +253,10 @@ export default class HtpcLauncherExtension extends Extension {
     }
 
     disable() {
+        if (this._createdId) {
+            global.display.disconnect(this._createdId);
+            this._createdId = 0;
+        }
         if (this._focusId) {
             global.display.disconnect(this._focusId);
             this._focusId = 0;
