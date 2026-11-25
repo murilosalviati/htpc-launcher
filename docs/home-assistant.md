@@ -127,6 +127,7 @@ The events, with what they carry, are listed under [Events](#events). Adapt the 
 - The first press only wakes the TV. If it's still off 8 seconds later, the next press asks again.
 - The gamepad works normally again once Home Assistant reports the TV as on.
 - If Home Assistant can't be reached, or the TV's state is unknown (`unavailable`), nothing is blocked. The launcher never gets stuck because of Home Assistant.
+- If Home Assistant still says the TV is off after 3 wake presses within a minute, it has probably lost the TV (for example, the TV got a new IP address after a router restart). The gamepad then works normally for 10 minutes, or until Home Assistant sees the TV on again. Give the TV a fixed IP address in your router to avoid this.
 
 > Apps that read the gamepad themselves (Steam, Jellyfin, Moonlight) still receive it while the TV is off. Only the launcher and the shortcuts are blocked.
 

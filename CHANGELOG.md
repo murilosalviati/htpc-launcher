@@ -4,6 +4,7 @@ The project is in beta: every `0.x` version is a pre-release, and the configurat
 
 ## Unreleased
 
+- **The gamepad is never locked out by a wrong TV state.** If Home Assistant keeps saying the TV is off after 3 wake presses within a minute (it lost the TV, for example after the router gave the TV a new IP address), the gamepad stops being ignored for 10 minutes, or until Home Assistant sees the TV on again.
 - **Per-app resolution.** In edit mode → Resolution, pick one of the screen's modes for an app (for example 4K for Jellyfin). The screen switches when the app opens or comes back, and returns to the default (GNOME's saved mode) in the launcher. The switch is never saved as GNOME's setting, so there is no "keep these settings?" prompt.
 - **Cinema mode (Home Assistant).** With a second webhook set in Settings → Home Assistant → App and media events, the controller service sends app_opened / app_closed and media_playing / media_paused / media_stopped. `extras/home-assistant/cinema-mode.yaml` dims the lights while a video plays. A separate webhook, because a Home Assistant webhook only triggers one automation.
 - **Updates from Settings.** A new Updates button: the newest launcher release from GitHub (downloaded, installed, and the launcher restarted), and the Flatpak apps (`flatpak update`).

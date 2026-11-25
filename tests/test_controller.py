@@ -697,6 +697,26 @@ tv_state[0] = "on"
 gate.check()
 check("TV on again: input goes through and the gate opens",
       not gate.blocks(a_press) and not hass.input_blocked(gate_path) and len(woken) == 2)
+# Home Assistant lost the TV (new IP...): it stays "off" however often it's woken
+tv_state[0] = "off"
+gate.check()
+woken.clear()
+for _ in range(hass.GIVE_UP_WAKES):
+    gclock[0] += hass.WAKE_RETRY
+    gate.blocks(a_press)
+check("TV 'off' but not waking: the first wakes are sent and block",
+      len(woken) == hass.GIVE_UP_WAKES and hass.input_blocked(gate_path))
+gclock[0] += hass.WAKE_RETRY
+gave_up = not gate.blocks(a_press)
+check("after that many wakes in a minute, the gamepad is no longer blocked (launcher too)",
+      gave_up and not hass.input_blocked(gate_path) and not gate.blocks(a_press))
+gate.check()
+check("and the next state checks keep it open while distrusted", not hass.input_blocked(gate_path))
+gclock[0] += hass.DISTRUST_FOR + 1
+gate.check()
+check("after a while it trusts Home Assistant again", hass.input_blocked(gate_path))
+tv_state[0] = "on"
+gate.check()
 tv_state[0] = "off"
 gate.check()
 

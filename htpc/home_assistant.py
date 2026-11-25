@@ -173,6 +173,9 @@ class HomeAssistant:
 STATE_EVERY = 3.0     # seconds between state checks
 WAKE_RETRY = 8.0      # a press this long after the last wake asks again
 GATE_FRESH = 10.0     # the launcher ignores a gate file older than this
+GIVE_UP_WAKES = 3     # this many wakes without the TV turning on...
+GIVE_UP_WINDOW = 60.0 # ...within this many seconds: Home Assistant's "off" is not trusted
+DISTRUST_FOR = 600.0  # for this long (or until it reports the TV on): nothing is blocked
 OFF_STATES = {"off", "standby"}
 
 
@@ -259,6 +262,8 @@ class TvGate:
         self.gate = gate
         self.state = None               # "on" / "off" / None
         self.last_wake = None
+        self.wakes = []                 # times of the recent wake requests
+        self.distrust_until = None      # Home Assistant says "off" but the TV doesn't wake up
         self._lock = threading.Lock()
 
     def check(self):
@@ -275,7 +280,13 @@ class TvGate:
             self.state = state
             if state != "off":
                 self.last_wake = None
-        self.gate(state == "off")
+                self.wakes = []
+                self.distrust_until = None
+            blocked = state == "off" and not self._distrusted()
+        self.gate(blocked)
+
+    def _distrusted(self):
+        return self.distrust_until is not None and self.clock() < self.distrust_until
 
     def run_forever(self):
         while True:
@@ -289,7 +300,7 @@ class TvGate:
         """True when the event must not be used. The first press while the TV is
         off wakes it (again after WAKE_RETRY if it is still off)."""
         with self._lock:
-            if self.state != "off":
+            if self.state != "off" or self._distrusted():
                 return False
             if not is_press(event):
                 return False   # releases and a stick going back to the middle are harmless
@@ -297,6 +308,19 @@ class TvGate:
             wake = self.last_wake is None or now - self.last_wake >= WAKE_RETRY
             if wake:
                 self.last_wake = now
+                self.wakes = [t for t in self.wakes if now - t < GIVE_UP_WINDOW] + [now]
+                if len(self.wakes) > GIVE_UP_WAKES:
+                    # Woken several times and still "off": Home Assistant has lost the
+                    # TV (a new IP address, the integration down...). Don't lock the
+                    # gamepad out because of that.
+                    log.warning("tv still off for Home Assistant after %d wakes: not blocking the "
+                                "gamepad for %d minutes", GIVE_UP_WAKES, DISTRUST_FOR // 60)
+                    self.distrust_until = now + DISTRUST_FOR
+                    self.wakes = []
+                    wake = False
+        if self._distrusted():
+            self.gate(False)
+            return False
         if wake:
             log.info("tv is off: this press only wakes it")
             self.send_wake(event)
