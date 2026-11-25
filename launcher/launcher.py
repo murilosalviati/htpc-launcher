@@ -1039,7 +1039,8 @@ class Launcher(HomeMixin, EditorMixin, SettingsMixin):
     def dialog_box(self, title, text=None):
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=28)
         box.add_css_class("dialog")
-        label = Gtk.Label(label=title)
+        # Long titles (an error message) wrap instead of running off the screen.
+        label = Gtk.Label(label=title, wrap=True, max_width_chars=44, justify=Gtk.Justification.CENTER)
         label.add_css_class("dialog-title")
         box.append(label)
         if text:

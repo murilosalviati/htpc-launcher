@@ -488,7 +488,12 @@ class SettingsMixin:
                 self.pop_overlay()   # "Pairing…"
             p["shown"] = None    # redraw the list with the new state
             if isinstance(result, Exception):
-                self._message(self.t("pairing_failed", name=device.name, error=self._reason(result)))
+                refused = any(e in str(result) for e in ("AuthenticationFailed", "AuthenticationCanceled",
+                                                         "AuthenticationRejected"))
+                if refused:
+                    self._message(self.t("pairing_refused_title", name=device.name), self.t("pairing_refused"))
+                else:
+                    self._message(self.t("pairing_failed", name=device.name, error=self._reason(result)))
             else:
                 self._message(self.t("pairing_done", name=device.name))
                 if getattr(self, "audio_menu", None) is not None:
