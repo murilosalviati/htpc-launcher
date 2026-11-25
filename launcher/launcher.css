@@ -86,7 +86,11 @@ button.top-button {
   transition: all 120ms ease-out;
 }
 button.top-button > box {
-  margin: 0 14px;
+  margin: 0 14px;   /* room for "Done" when the gear shows it in edit mode */
+}
+.weather-dot {
+  font-size: 10pt;
+  color: #67718a;
 }
 button.top-button:focus {
   background: rgba(255, 255, 255, 0.16);
@@ -244,6 +248,46 @@ button.device.on .device-badge {
 button.device.on .device-state {
   color: #f5c77a;
 }
+.area-title {
+  font-size: 15pt;
+  font-weight: 800;
+  color: #9aa6bd;
+  margin-top: 6px;
+}
+.light-row-title {
+  font-size: 15pt;
+  color: #8f9bb3;
+}
+button.dialog-button.light-choice {
+  min-width: 120px;
+  font-size: 14pt;
+}
+button.light-choice.kelvin-warm { color: #ffc58a; }
+button.light-choice.kelvin-neutral { color: #fff1dc; }
+button.light-choice.kelvin-cool { color: #d6e6ff; }
+button.light-choice.selected,
+button.color-swatch.selected {
+  box-shadow: inset 0 0 0 3px rgba(255, 255, 255, 0.85);
+}
+button.color-swatch {
+  min-width: 64px;
+  min-height: 64px;
+  padding: 0;
+  border-radius: 999px;
+  border: 4px solid transparent;
+  outline: none;
+}
+button.color-swatch:focus {
+  border-color: #7cb7ff;
+}
+button.color-red { background: #ef4444; }
+button.color-orange { background: #f97316; }
+button.color-yellow { background: #facc15; }
+button.color-green { background: #22c55e; }
+button.color-cyan { background: #22d3ee; }
+button.color-blue { background: #3b82f6; }
+button.color-purple { background: #a855f7; }
+button.color-pink { background: #f472b6; }
 .brightness-value {
   font-size: 44pt;
   font-weight: 800;

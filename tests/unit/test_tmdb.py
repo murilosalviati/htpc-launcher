@@ -7,6 +7,11 @@ SHORT = {"tmdb": {"api_key": "a" * 32}}
 LONG = {"tmdb": {"api_key": "eyJ" + "x" * 200}}
 
 
+import datetime
+
+TODAY = datetime.date(2026, 11, 25)
+
+
 class Tmdb:
     def __init__(self):
         self.calls = []
@@ -15,14 +20,21 @@ class Tmdb:
         self.calls.append((url, headers))
         parts = urllib.parse.urlsplit(url)
         page = int(dict(urllib.parse.parse_qsl(parts.query)).get("page", 1))
-        if parts.path == "/3/trending/movie/week":
-            return {"results": [{"id": 10 * page + n} for n in range(2)]}
-        if parts.path == "/3/trending/tv/week":
-            return {"results": [{"id": 100 * page}]}
-        if parts.path == "/3/movie/popular":
-            return {"results": [{"id": 10}, {"id": 999}]}
-        if parts.path == "/3/tv/popular":
+        if page > 1:
             return {"results": []}
+        if parts.path == "/3/trending/movie/week":
+            return {"results": [{"id": 10, "release_date": "2026-10-01"},
+                                {"id": 11, "release_date": "1999-03-31"},      # an old favourite
+                                {"id": 12, "release_date": "2027-01-01"},      # not out yet
+                                {"id": 13}]}                                   # no date
+        if parts.path == "/3/trending/tv/week":
+            return {"results": [{"id": 100, "first_air_date": "2026-09-01"},
+                                {"id": 101, "first_air_date": "1994-09-22"},   # Friends: old, no new episodes
+                                {"id": 102, "first_air_date": "2022-04-01"}]}  # old, but a new season airs
+        if parts.path == "/3/tv/on_the_air":
+            return {"results": [{"id": 102}, {"id": 103}]}
+        if parts.path == "/3/movie/now_playing":
+            return {"results": [{"id": 10}, {"id": 14}]}
         if parts.path == "/3/trending/all/week":
             return {"results": [{}] * 20}
         raise AssertionError(url)
@@ -38,10 +50,14 @@ def test_short_key_goes_in_the_query_long_token_in_a_header():
     assert "api_key" not in url and headers["Authorization"].startswith("Bearer eyJ")
 
 
-def test_ranking_interleaves_films_and_series_then_popular_without_repeats():
-    r = tmdb.ranking(SHORT, Tmdb())
-    assert r[:4] == [("movie", "10"), ("tv", "100"), ("movie", "11"), ("tv", "200")]
-    assert r.count(("movie", "10")) == 1 and r[-1] == ("movie", "999")
+def test_ranking_keeps_whats_new():
+    r = tmdb.ranking(SHORT, Tmdb(), today=TODAY)
+    assert r == [("movie", "10"), ("tv", "100"), ("tv", "102"), ("tv", "103"), ("movie", "14")]
+
+
+def test_the_window_can_be_widened():
+    cfg = {"tmdb": {**SHORT["tmdb"], "recent_days": 365 * 40}}
+    assert ("movie", "11") in tmdb.ranking(cfg, Tmdb(), today=TODAY)
 
 
 LIB = {"Items": [

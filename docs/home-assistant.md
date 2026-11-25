@@ -122,7 +122,8 @@ With the address and the [access token](#3-optional-ignore-the-gamepad-while-the
 
 - **What shows:** every light, grouped by room (Home Assistant's areas), plus up to 6 scenes.
 - **Choose:** Settings → Home Assistant → **Lights on the home screen** lists every light and switch (also fans and input booleans). Tick the ones you want; they show in the order you ticked them. **All lights** goes back to the default. **Show under the apps** turns the row off.
-- **Use it:** Ⓐ turns a light or switch on or off, or runs a scene. Ⓨ on a dimmable light sets its brightness.
+- **Use it:** Ⓐ turns a light or switch on or off, or runs a scene. Holding Ⓐ (or Ⓨ) on a light opens its brightness, white temperature and colour, as far as the light supports them (`light.turn_on` with `brightness_pct`, `color_temp_kelvin` or `hs_color`).
+- **By room:** **Separate by room**, in the same menu, puts each room's name over its lights.
 
 The token needs no extra permission, but rooms come from a template call: a token of a non-admin user still works, without the room names.
 
@@ -158,6 +159,7 @@ The `home_assistant` entry of `apps.json`:
 | `tv_name` | The TV's name as shown in Settings. Filled in when you pick the TV. | TV |
 | `home_screen` | `false` hides the lights under the apps. Defaults to `true`. | Lights on the home screen → Show under the apps |
 | `devices` | The lights and switches under the apps, in order (entity ids). Without it, every light, by room. | Lights on the home screen |
+| `group_by_area` | `true` shows each room's name over its lights. | Lights on the home screen → Separate by room |
 | `scenes` | The scenes or scripts above them (entity ids). Without it, the first 6 scenes. | (apps.json only) |
 
 

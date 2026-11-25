@@ -123,7 +123,7 @@ def s1():
     screenshot(l.win, "1-home")
     check("edge sizes follow the screen: scale 1 on 1920×1080", abs((l.edge_scale or 0) - 1.0) < 0.01)
     l.apply_edge_scale(2.0)
-    check("on a screen twice as big, the edge icons double", l.weather_icon.get_pixel_size() == 144
+    check("on a screen twice as big, the edge icons double", l.weather_icon.get_pixel_size() == 60
           and l.net_icon.get_pixel_size() == 84 and all(i.get_pixel_size() == 56 for i in l.footer_images))
     from gi.repository import Gio as _Gio
     check("edge icons are drawn from the vector at their size (GIcon, not a stretched file)",
@@ -679,6 +679,19 @@ def w10():
 
 
 # ---------------- Home Assistant settings and "Turn off TV" ----------------
+
+def label_texts_widgets(widget):
+    found, stack = [], [widget]
+    while stack:
+        w = stack.pop()
+        if isinstance(w, Gtk.Label):
+            found.append(w)
+        child = w.get_last_child()
+        while child is not None:
+            stack.append(child)
+            child = child.get_prev_sibling()
+    return found
+
 
 def label_texts(widget):
     """All the label texts inside a widget, joined."""
@@ -1364,7 +1377,7 @@ def ha_states(url, token):
 def ha_api_post(url, token, payload):
     state.setdefault("ha_posts", []).append((url.split("/api/", 1)[1], payload))
     if url.endswith("/template"):
-        return json.dumps({"light.sala": "Sala", "light.abajur": "Quarto", "switch.som": "Sala"})
+        return json.dumps({"light.sala": "Sala", "light.abajur": "Quarto", "switch.som": "Sala", "light.fita": "Sala"})
     return "[]"
 
 
@@ -1452,11 +1465,102 @@ def h3b():
     check("Ⓨ on an on/off light does nothing", not l.overlays)
 
 
-@step(500)
-def h4():
+COLOR_LIGHT = {"entity_id": "light.fita", "state": "on", "attributes": {
+    "friendly_name": "Fita LED", "brightness": 128, "supported_color_modes": ["hs", "color_temp"],
+    "color_mode": "color_temp", "color_temp_kelvin": 2700, "min_color_temp_kelvin": 2200,
+    "max_color_temp_kelvin": 6500}}
+
+
+@step(600)
+def hc1():
     l = L()
     check("the brightness went to Home Assistant",
           ("services/light/turn_on", {"entity_id": "light.sala", "brightness_pct": 90}) in state["ha_posts"])
+    l.ha_get = lambda url, token: HA_STATES + [COLOR_LIGHT]
+    l.update_house()
+
+
+@step(700)
+def hc2():
+    from htpc.backends.base import GamepadEvent as E
+    l = L()
+    fita = next(t for t in l.device_tiles if t.device["entity"] == "light.fita")
+    fita.grab_focus()
+    nav = l.navigator
+    nav.active = lambda: True
+    state["ha_posts"] = []
+    nav.handle(E("pad", "button", "a", 1))
+    check("Ⓐ down on a light waits to see if it is held", not l.overlays and not state["ha_posts"])
+    state["fita"] = fita
+
+
+@step(800)
+def hc3():
+    from htpc.backends.base import GamepadEvent as E
+    l = L()
+    l.navigator.handle(E("pad", "button", "a", 0))
+    rows = l.overlays[-1]["rows"] if l.overlays else []
+    check("held: the light's panel, with brightness, white temperatures and colours",
+          len(l.overlays) == 1 and len(rows) == 4 and l.brightness_value.get_label() == "50%"
+          and [b.value for b in rows[1]] == [2200, 2700, 3000, 4000, 5000, 6500] and len(rows[2]) == 8
+          and rows[1][1].has_css_class("selected"))
+    check("letting go after the panel opened does not toggle the light", not state["ha_posts"])
+
+
+@step(300)
+def hc4():
+    l = L()
+    screenshot(l.win, "37-light-panel")
+    rows = l.overlays[-1]["rows"]
+    rows[2][5].grab_focus()   # blue
+    l.press()
+    rows[1][4].grab_focus()   # 5000 K
+    l.press()
+    check("a colour and a white marked as chosen", rows[2][5].has_css_class("selected")
+          and rows[1][4].has_css_class("selected") and not rows[1][1].has_css_class("selected"))
+
+
+@step(600)
+def hc5():
+    from htpc.backends.base import GamepadEvent as E
+    l = L()
+    check("they went to Home Assistant", ("services/light/turn_on", {"entity_id": "light.fita", "hs_color": [225, 100]})
+          in state["ha_posts"] and ("services/light/turn_on", {"entity_id": "light.fita", "color_temp_kelvin": 5000})
+          in state["ha_posts"])
+    l.back()
+    fita = next(t for t in l.device_tiles if t.device["entity"] == "light.fita")
+    fita.grab_focus()
+    state["ha_posts"] = []
+    l.navigator.handle(E("pad", "button", "a", 1))
+    l.navigator.handle(E("pad", "button", "a", 0))
+    check("a quick Ⓐ on the same light still turns it on or off", not l.overlays and not fita.has_css_class("on"))
+    l.cfg["home_assistant"]["group_by_area"] = True
+    l.update_house()
+
+
+@step(700)
+def hc6():
+    l = L()
+    titles = [w.get_label() for w in label_texts_widgets(l.device_box) if w.has_css_class("area-title")]
+    check("separated by room: a title per room, a row of lights under each",
+          titles == ["Quarto", "Sala"] and [[t.device["entity"] for t in r] for r in l.device_rows]
+          == [["light.abajur"], ["light.fita", "light.sala"]] and l.house_rows[-2:] == l.device_rows)
+    l.device_rows[1][0].grab_focus()
+
+
+@step(400)
+def hc7():
+    l = L()
+    screenshot(l.win, "38-lights-by-room")
+    l.cfg["home_assistant"].pop("group_by_area", None)
+    l.ha_get = ha_states
+    l.update_house()
+
+
+@step(500)
+def h4():
+    l = L()
+    l.device_tiles[1].grab_focus()
     l.move(0, -1)
     l.move(0, -1)
     check("back up to the apps: not dimmed, scrolled back to the top",
@@ -1554,10 +1658,13 @@ def h8():
 def tmdb_get(url, headers):
     import urllib.parse as up
     path = up.urlsplit(url).path
+    import datetime as _dt
+    recent = (_dt.date.today() - _dt.timedelta(days=30)).isoformat()
     if path == "/3/trending/movie/week":
-        return {"results": [{"id": 1}, {"id": 77}]}
+        return {"results": [{"id": 1, "release_date": recent}, {"id": 77, "release_date": recent},
+                            {"id": 5, "release_date": "1994-01-01"}]}
     if path == "/3/trending/tv/week":
-        return {"results": [{"id": 88}]}
+        return {"results": [{"id": 88, "first_air_date": recent}]}
     if path == "/3/trending/all/week":
         return {"results": [{"id": 1}] * 20}
     return {"results": []}

@@ -427,7 +427,8 @@ class AppEvents:
 # the apps and turns them on and off. Which ones: "devices" (entity ids, in
 # that order) in the "home_assistant" entry, chosen in Settings → Home
 # Assistant → Devices; without it, every light. Scenes: "scenes", likewise;
-# without it, every scene. "home_screen": false hides the row.
+# without it, every scene. "home_screen": false hides the row;
+# "group_by_area": true shows them under their rooms' names.
 
 DEVICE_DOMAINS = ("light", "switch", "fan", "input_boolean")
 SCENE_DOMAINS = ("scene", "script")
@@ -476,11 +477,16 @@ def areas(cfg, entities, post=None):
     return found if isinstance(found, dict) else {}
 
 
+COLOR_MODES = {"hs", "rgb", "rgbw", "rgbww", "xy"}
+
+
 def _device(state, area):
     entity = state["entity_id"]
     attrs = state.get("attributes") or {}
     brightness = attrs.get("brightness")
-    modes = attrs.get("supported_color_modes") or []
+    modes = set(attrs.get("supported_color_modes") or [])
+    light = _domain(entity) == "light"
+    hs = attrs.get("hs_color")
     return {
         "entity": entity,
         "domain": _domain(entity),
@@ -490,7 +496,14 @@ def _device(state, area):
         "on": state.get("state") == "on",
         "available": state.get("state") not in ("unavailable", "unknown", None),
         "brightness": round(brightness / 2.55) if isinstance(brightness, (int, float)) and state.get("state") == "on" else None,
-        "dimmable": _domain(entity) == "light" and any(m != "onoff" for m in modes),
+        "dimmable": light and any(m != "onoff" for m in modes),
+        "color": light and bool(modes & COLOR_MODES),
+        "temperature": light and "color_temp" in modes,
+        "min_kelvin": int(attrs.get("min_color_temp_kelvin") or 2000),
+        "max_kelvin": int(attrs.get("max_color_temp_kelvin") or 6500),
+        "kelvin": attrs.get("color_temp_kelvin") if state.get("state") == "on" else None,
+        "hs": list(hs) if isinstance(hs, (list, tuple)) and len(hs) == 2 and attrs.get("color_mode") in COLOR_MODES
+        else None,
     }
 
 
@@ -514,6 +527,8 @@ def house(cfg, get=None, post=None):
     devices = [_device(states[e], found.get(e)) for e in ids]
     if not isinstance(chosen, list):   # no choice made: by room, then name
         devices.sort(key=lambda d: ((d["area"] or "￿").lower(), d["name"].lower()))
+    elif ha.get("group_by_area"):     # grouped: the rooms in order, the choice's order inside each
+        devices.sort(key=lambda d: (d["area"] or "￿").lower())
     scene_ids = ha.get("scenes")
     if isinstance(scene_ids, list):
         scene_ids = [e for e in scene_ids if e in states]
@@ -529,6 +544,11 @@ def toggle(cfg, entity, post=None):
     domain = _domain(entity)
     service = "turn_on" if domain in SCENE_DOMAINS else "toggle"
     _post(cfg, f"services/{domain}/{service}", {"entity_id": entity}, post)
+
+
+def set_light(cfg, entity, post=None, **values):
+    """Turn a light on with any of brightness_pct, color_temp_kelvin, hs_color."""
+    _post(cfg, "services/light/turn_on", {"entity_id": entity, **values}, post)
 
 
 def set_brightness(cfg, entity, percent, post=None):

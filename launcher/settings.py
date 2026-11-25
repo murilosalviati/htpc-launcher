@@ -871,13 +871,15 @@ class SettingsMixin:
         box = self.dialog_box(self.t("ha_home_title"))
         box.add_css_class("editor")
         show = self._field(self.t("ha_home_show"), lambda: self._ha_home_toggle_show(), title_width=380)
+        group = self._field(self.t("ha_home_group"), lambda: self._ha_home_toggle_group(), title_width=380)
         default = self._field(self.t("ha_home_default"), lambda: self._ha_home_default(), title_width=380)
         items = []
         for entity, name in result:
             b = self._field(name, lambda e=entity: self._ha_home_toggle(e), title_width=380)
             b.entity = entity
             items.append(b)
-        self.ha_home_fields = {"show": show, "default": default, "items": items, "all": [e for e, _ in result]}
+        self.ha_home_fields = {"show": show, "group": group, "default": default, "items": items,
+                               "all": [e for e, _ in result]}
         listing = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
         for b in items:
             listing.append(b)
@@ -889,10 +891,10 @@ class SettingsMixin:
         close_box = Gtk.Box(spacing=20, halign=Gtk.Align.CENTER)
         close_box.add_css_class("editor-buttons")
         close_box.append(close)
-        for w in (show, default, scroll, close_box):
+        for w in (show, group, default, scroll, close_box):
             box.append(w)
         self._ha_home_refresh()
-        self.push_overlay(box, [[show], [default]] + [[b] for b in items] + [[close]], focus=show)
+        self.push_overlay(box, [[show], [group], [default]] + [[b] for b in items] + [[close]], focus=show)
 
     def _ha_home_refresh(self):
         f = getattr(self, "ha_home_fields", None)
@@ -900,6 +902,7 @@ class SettingsMixin:
             return
         ha = self._ha()
         f["show"].value.set_label(self.t("on" if ha.get("home_screen", True) else "off"))
+        f["group"].value.set_label(self.t("on" if ha.get("group_by_area") else "off"))
         chosen = ha.get("devices")
         f["default"].value.set_label("✓" if not isinstance(chosen, list) else "")
         lights = [e for e in f["all"] if e.startswith("light.")]
@@ -914,6 +917,9 @@ class SettingsMixin:
 
     def _ha_home_toggle_show(self):
         self._ha_home_changed(home_screen=None if not self._ha().get("home_screen", True) else False)
+
+    def _ha_home_toggle_group(self):
+        self._ha_home_changed(group_by_area=None if self._ha().get("group_by_area") else True)
 
     def _ha_home_default(self):
         self._ha_home_changed(devices=None)

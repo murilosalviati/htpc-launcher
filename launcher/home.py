@@ -11,7 +11,8 @@
     when it is only streamed from another computer, opens its Steam page).
   * "Home" (below the apps, scrolled into view by going down): lights,
     switches and scenes from Home Assistant, set up in Settings → Home
-    Assistant. Ⓐ turns one on or off; Ⓨ on a dimmable light sets its brightness.
+    Assistant. Ⓐ turns one on or off; holding Ⓐ (or Ⓨ) on a light opens its
+    brightness, colour temperature and colour. They can be shown by room.
 
 Both are fetched off the screen's thread, only while the launcher is in front,
 and simply stay hidden when not set up or unreachable.
@@ -35,6 +36,9 @@ WIDE = (512, 288)          # the first "recently added" card (16:9)
 POSTER = (192, 288)        # the others (2:3)
 SCROLL_MS = 180
 BRIGHTNESS_STEP = 10
+TEMPERATURES = (2200, 2700, 3000, 4000, 5000, 6500)   # kelvin, offered within the light's range
+COLORS = (("red", (0, 100)), ("orange", (28, 100)), ("yellow", (52, 100)), ("green", (120, 90)),
+          ("cyan", (185, 90)), ("blue", (225, 100)), ("purple", (275, 90)), ("pink", (320, 70)))
 
 
 def log(*args):
@@ -206,8 +210,9 @@ class HomeMixin:
         self.house_section.append(self.house_title)
         self.scene_box = Gtk.Box(spacing=18)
         self.house_section.append(self.scene_box)
-        self.device_grid = Gtk.Grid(column_spacing=20, row_spacing=20, column_homogeneous=True)
-        self.house_section.append(self.device_grid)
+        self.device_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=18)
+        self.house_section.append(self.device_box)
+        self.device_rows, self.house_grouped = [], None
         self.house_section.set_visible(False)
 
         for w in (self.recent_section, self.grid, self.house_section):
@@ -250,9 +255,7 @@ class HomeMixin:
         if not self.house_section.get_visible():
             return []
         rows = [list(self.scene_buttons)] if self.scene_buttons else []
-        tiles = self.device_tiles
-        rows += [tiles[i:i + HOUSE_COLUMNS] for i in range(0, len(tiles), HOUSE_COLUMNS)]
-        return rows
+        return rows + [list(r) for r in self.device_rows]
 
     # --- the media tabs: Explore, Series, Films (Jellyfin) and Games (Steam) ------------------
 
@@ -510,8 +513,11 @@ class HomeMixin:
         devices = (data or {}).get("devices") or []
         scenes = (data or {}).get("scenes") or []
         self.house_data = data
+        grouped = bool((self.cfg.get("home_assistant") or {}).get("group_by_area"))
         same = ([d["entity"] for d in devices] == [t.device["entity"] for t in self.device_tiles]
-                and [s["entity"] for s in scenes] == [b.scene["entity"] for b in self.scene_buttons])
+                and [d.get("area") for d in devices] == [t.device.get("area") for t in self.device_tiles]
+                and [s["entity"] for s in scenes] == [b.scene["entity"] for b in self.scene_buttons]
+                and grouped == self.house_grouped)
         if same:
             for tile, device in zip(self.device_tiles, devices):
                 tile.update(device)
@@ -519,11 +525,8 @@ class HomeMixin:
             focused = self.win.get_focus()
             keep = getattr(focused, "device", None) or getattr(focused, "scene", None)
             _clear(self.scene_box)
-            child = self.device_grid.get_first_child()
-            while child is not None:
-                following = child.get_next_sibling()
-                self.device_grid.remove(child)
-                child = following
+            _clear(self.device_box)
+            self.house_grouped = grouped
             self.scene_buttons = []
             for scene in scenes:
                 b = Gtk.Button(label=scene["name"])
@@ -533,13 +536,31 @@ class HomeMixin:
                 b.connect("clicked", lambda _b, e=scene["entity"]: self.run_scene(e))
                 self.scene_box.append(b)
                 self.scene_buttons.append(b)
-            self.device_tiles = []
-            for n, device in enumerate(devices):
-                tile = DeviceTile(device, self.t, self.svg_icon, self.on_device)
-                self.device_grid.attach(tile, n % HOUSE_COLUMNS, n // HOUSE_COLUMNS, 1, 1)
-                self.device_tiles.append(tile)
-            for n in range(len(devices), HOUSE_COLUMNS):   # a short first row keeps the column width
-                self.device_grid.attach(Gtk.Box(), n, 0, 1, 1)
+            self.device_tiles, self.device_rows = [], []
+            groups = []   # (room name or None, devices)
+            for device in devices:
+                key = device.get("area") if grouped else None
+                if groups and groups[-1][0] == key:
+                    groups[-1][1].append(device)
+                else:
+                    groups.append((key, [device]))
+            for area, members in groups:
+                if grouped:
+                    title = Gtk.Label(label=area or self.t("house_no_area"), xalign=0)
+                    title.add_css_class("area-title")
+                    self.device_box.append(title)
+                grid = Gtk.Grid(column_spacing=20, row_spacing=20, column_homogeneous=True)
+                tiles = []
+                for n, device in enumerate(members):
+                    tile = DeviceTile(device, self.t, self.svg_icon, self.on_device)
+                    tile.area.set_visible(not grouped)   # the room's title says it already
+                    grid.attach(tile, n % HOUSE_COLUMNS, n // HOUSE_COLUMNS, 1, 1)
+                    tiles.append(tile)
+                for n in range(len(members), HOUSE_COLUMNS):   # a short row keeps the column width
+                    grid.attach(Gtk.Box(), n, 0, 1, 1)
+                self.device_box.append(grid)
+                self.device_tiles += tiles
+                self.device_rows += [tiles[i:i + HOUSE_COLUMNS] for i in range(0, len(tiles), HOUSE_COLUMNS)]
             self.scene_box.set_visible(bool(scenes))
             if keep is not None:
                 target = next((w for w in self.device_tiles + self.scene_buttons
@@ -573,14 +594,32 @@ class HomeMixin:
 
         in_background(lambda: job(cfg, post), done)
 
-    def open_brightness(self, tile):
-        """Ⓨ on a dimmable light: − / + in steps of 10 %, and on / off."""
+    def open_light(self, tile):
+        """Hold Ⓐ (or Ⓨ) on a light: its brightness, colour temperature and colour,
+        each as far as the light supports it."""
         device = tile.device
         box = self.dialog_box(device["name"])
+        box.add_css_class("light-panel")
+        rows = []
+        level = {"pct": device.get("brightness") or (0 if not device["on"] else 100)}
+
+        def call(**values):
+            entity = device["entity"]
+            self._house_call(lambda cfg, post: home_assistant.set_light(cfg, entity, post, **values))
+
+        def line(title, widgets):
+            row = Gtk.Box(spacing=16, halign=Gtk.Align.CENTER)
+            label = Gtk.Label(label=title, xalign=1)
+            label.add_css_class("light-row-title")
+            label.set_size_request(220, -1)
+            row.append(label)
+            for w in widgets:
+                row.append(w)
+            box.append(row)
+
         value = Gtk.Label()
         value.add_css_class("brightness-value")
-        box.append(value)
-        level = {"pct": device.get("brightness") or (0 if not device["on"] else 100)}
+        self.brightness_value = value
 
         def show():
             value.set_label(f"{level['pct']}%" if level["pct"] else self.t("dev_off_light"))
@@ -592,19 +631,87 @@ class HomeMixin:
             p = level["pct"]
             self._house_call(lambda cfg, post: home_assistant.set_brightness(cfg, device["entity"], p, post))
 
-        minus = self.dialog_button("−", lambda: change((level["pct"] or 0) - BRIGHTNESS_STEP))
-        plus = self.dialog_button("+", lambda: change((level["pct"] or 0) + BRIGHTNESS_STEP))
-        off = self.dialog_button(self.t("turn_off"), lambda: change(0))
+        def turned_on():
+            tile.update({**tile.device, "on": True})
+
+        focus = None
+        if device.get("dimmable"):
+            minus = self.dialog_button("−", lambda: change((level["pct"] or 0) - BRIGHTNESS_STEP))
+            plus = self.dialog_button("+", lambda: change((level["pct"] or 0) + BRIGHTNESS_STEP))
+            for b in (minus, plus):
+                b.add_css_class("brightness-step")
+            value.set_size_request(200, -1)
+            line(self.t("light_brightness"), [minus, value, plus])
+            rows.append([minus, plus])
+            focus = plus
+            show()
+
+        if device.get("temperature"):
+            temps = []
+            for kelvin in TEMPERATURES:
+                if not device["min_kelvin"] <= kelvin <= device["max_kelvin"]:
+                    continue
+                b = self.dialog_button(f"{kelvin} K", lambda k=kelvin: (
+                    turned_on(), call(color_temp_kelvin=k), self._mark(temps, k)))
+                b.add_css_class("light-choice")
+                b.add_css_class("kelvin-" + ("warm" if kelvin < 3300 else "neutral" if kelvin < 5000 else "cool"))
+                b.value = kelvin
+                temps.append(b)
+            if temps:
+                current = device.get("kelvin")
+                if current:
+                    self._mark(temps, min((b.value for b in temps), key=lambda k: abs(k - current)))
+                line(self.t("light_temperature"), temps)
+                rows.append(temps)
+
+        if device.get("color"):
+            swatches = []
+            for name, hs in COLORS:
+                b = Gtk.Button()
+                b.add_css_class("color-swatch")
+                b.add_css_class(f"color-{name}")
+                b.set_focus_on_click(False)
+                b.update_property([Gtk.AccessibleProperty.LABEL], [self.t(f"color_{name}")])
+                b.value = name
+                b.connect("clicked", lambda _b, n=name, v=hs: (
+                    turned_on(), call(hs_color=list(v)), self._mark(swatches, n)))
+                swatches.append(b)
+            if device.get("hs"):
+                h, sat = device["hs"]
+                nearest = min(COLORS, key=lambda c: min(abs(c[1][0] - h), 360 - abs(c[1][0] - h))
+                              + abs(c[1][1] - sat) / 4)
+                self._mark(swatches, nearest[0])
+            line(self.t("light_color"), swatches)
+            rows.append(swatches)
+
+        on_off = self.dialog_button(self.t("turn_off") if device["on"] else self.t("turn_on"),
+                                    lambda: (self.pop_overlay(), self.on_device(tile)))
         close = self.dialog_button(self.t("close"), self.pop_overlay)
-        for b in (minus, plus):
-            b.add_css_class("brightness-step")
-        buttons = Gtk.Box(spacing=20, halign=Gtk.Align.CENTER)
-        for b in (minus, plus, off, close):
-            buttons.append(b)
-        box.append(buttons)
-        show()
-        self.brightness_value = value
-        self.push_overlay(box, [[minus, plus, off, close]], focus=plus)
+        end = Gtk.Box(spacing=20, halign=Gtk.Align.CENTER)
+        end.append(on_off)
+        end.append(close)
+        box.append(end)
+        rows.append([on_off, close])
+        self.push_overlay(box, rows, focus=focus or rows[0][0])
+
+    open_brightness = open_light   # its first name
+
+    @staticmethod
+    def _mark(buttons, value):
+        for b in buttons:
+            (b.add_css_class if b.value == value else b.remove_css_class)("selected")
+
+    def can_hold(self):
+        """Is Ⓐ on something that does more when held (a light with settings)?"""
+        focused = self.win.get_focus()
+        return (not self.overlays and isinstance(focused, DeviceTile)
+                and focused.device["domain"] == "light" and focused.device["available"]
+                and bool(focused.device.get("dimmable") or focused.device.get("color")
+                         or focused.device.get("temperature")))
+
+    def long_press(self):
+        if self.can_hold():
+            self.open_light(self.win.get_focus())
 
     # --- timers and scrolling --------------------------------------------------------------
 

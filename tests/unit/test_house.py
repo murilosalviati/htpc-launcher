@@ -85,3 +85,32 @@ def test_services():
         ("http://ha:8123/api/services/light/turn_on", {"entity_id": "light.sala", "brightness_pct": 40}),
         ("http://ha:8123/api/services/light/turn_off", {"entity_id": "light.sala"}),
     ]
+
+
+def test_light_capabilities():
+    states = [{"entity_id": "light.rgb", "state": "on", "attributes": {
+        "friendly_name": "RGB", "supported_color_modes": ["hs", "color_temp"], "color_mode": "hs",
+        "hs_color": [30.0, 80.0], "min_color_temp_kelvin": 2200, "max_color_temp_kelvin": 6500, "brightness": 255}}]
+    d = ha.house({"home_assistant": {**CFG["home_assistant"], "devices": ["light.rgb"]}},
+                 lambda url, token: states, Post())["devices"][0]
+    assert d["color"] and d["temperature"] and d["hs"] == [30.0, 80.0] and d["min_kelvin"] == 2200
+    sala = ha.house(CFG, get, Post())["devices"][1]
+    assert sala["dimmable"] and not sala["color"] and not sala["temperature"] and sala["hs"] is None
+
+
+def test_grouped_by_room_keeps_the_choice_order_inside_each():
+    cfg = {"home_assistant": {**CFG["home_assistant"], "group_by_area": True,
+                              "devices": ["switch.som", "light.quarto", "light.sala"]}}
+    areas = {"switch.som": "Sala", "light.quarto": "Quarto", "light.sala": "Sala"}
+    h = ha.house(cfg, get, Post(areas))
+    assert [d["entity"] for d in h["devices"]] == ["light.quarto", "switch.som", "light.sala"]
+
+
+def test_set_light():
+    post = Post()
+    ha.set_light(CFG, "light.sala", post, color_temp_kelvin=2700)
+    ha.set_light(CFG, "light.sala", post, hs_color=[0, 100])
+    assert post.calls == [
+        ("http://ha:8123/api/services/light/turn_on", {"entity_id": "light.sala", "color_temp_kelvin": 2700}),
+        ("http://ha:8123/api/services/light/turn_on", {"entity_id": "light.sala", "hs_color": [0, 100]}),
+    ]

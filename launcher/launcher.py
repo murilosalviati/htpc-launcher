@@ -69,7 +69,7 @@ from htpc.backends.base import STICK_DEAD_ZONE, pick_mode  # noqa: E402
 from htpc.i18n import Translator  # noqa: E402
 from background import in_background  # noqa: E402
 from editor import EditorMixin  # noqa: E402
-from home import HOUSE_EVERY, DeviceTile, HomeMixin  # noqa: E402
+from home import HOUSE_EVERY, HomeMixin  # noqa: E402
 from settings import SettingsMixin  # noqa: E402
 
 CSS = HERE / "launcher.css"
@@ -90,7 +90,7 @@ EDGE = {
     "clock": 56, "date": 20,                      # pt
     "weather_temp": 38, "weather_place": 17,      # pt
     "status_text": 20, "hint": 17, "footer_label": 17,  # pt
-    "weather_icon": 72, "status_icon": 42, "footer_icon": 28,  # px
+    "weather_icon": 30, "status_icon": 42, "footer_icon": 28,  # px
     "footer_height": 56, "footer_pad_x": 24, "footer_gap": 18,  # px
     "top_button": 60,                             # px, the round buttons at the top right
     "pad_top": 44, "pad_side": 72, "pad_bottom": 40,  # px, around the screen
@@ -116,8 +116,10 @@ class Navigator:
     BROKEN = GLib.IOCondition.HUP | GLib.IOCondition.ERR | GLib.IOCondition.NVAL
     DIRECTIONS = {"left": (-1, 0), "right": (1, 0), "up": (0, -1), "down": (0, 1)}
 
+    HOLD_MS = 500         # Ⓐ held this long on a light opens its settings
+
     def __init__(self, gamepads, active, move, press, back, other_button, blocked=lambda: False,
-                 shoulder=lambda step: None):
+                 shoulder=lambda step: None, can_hold=lambda: False, long_press=lambda: None):
         self.gamepads = gamepads
         self.blocked = blocked  # True while the TV is off: input is ignored (it only wakes the TV)
         self.capture = None     # set while Settings records a shortcut: gets every button event
@@ -126,6 +128,8 @@ class Navigator:
         self.other_button = other_button  # called with "x" or "y"
         self.shoulder = shoulder          # called with -1 (LB) or 1 (RB) when one is tapped alone
         self.tapping = None               # (device, "l1"/"r1") pressed with nothing else so far
+        self.can_hold, self.long_press = can_hold, long_press
+        self.hold_timer = 0               # Ⓐ down on something that does more when held
         self.stick = {}         # (device, axis) -> -1 / 0 / 1
         self.direction = None   # (dx, dy) being held
         self.repeat = 0
@@ -218,10 +222,18 @@ class Navigator:
         if home_assistant.is_press(ev, self.DEAD_ZONE) and self.blocked():
             return
         if ev.kind == "button":
-            if ev.name in self.DIRECTIONS:
+            if ev.name == "a" and not ev.value and self.hold_timer:
+                GLib.source_remove(self.hold_timer)   # let go before it counted as held: a press
+                self.hold_timer = 0
+                self.press()
+            elif ev.name in self.DIRECTIONS:
                 self._hold(self.DIRECTIONS[ev.name] if ev.value else None)
             elif ev.value and self.active():
-                if ev.name == "a":
+                if ev.name == "a" and self.can_hold():
+                    if self.hold_timer:
+                        GLib.source_remove(self.hold_timer)
+                    self.hold_timer = GLib.timeout_add(self.HOLD_MS, self._held)
+                elif ev.name == "a":
                     self.press()
                 elif ev.name == "b":
                     self.back()
@@ -241,6 +253,11 @@ class Navigator:
         elif ev.kind == "disconnected":
             for key in [k for k in self.stick if k[0] == ev.device]:
                 del self.stick[key]
+
+    def _held(self):
+        self.hold_timer = 0
+        self.long_press()
+        return False
 
     def _hold(self, direction):
         if self.repeat:
@@ -423,7 +440,8 @@ class Launcher(HomeMixin, EditorMixin, SettingsMixin):
 
         self.navigator = Navigator(backend.gamepads(), self.win.is_active, self.move, self.press,
                                    self.back, self.other_button, blocked=home_assistant.input_blocked,
-                                   shoulder=self.page_media)
+                                   shoulder=self.page_media, can_hold=self.can_hold,
+                                   long_press=self.long_press)
         self.gamepads = self.navigator.gamepads
 
         GLib.timeout_add_seconds(1, self._update_clock)
@@ -602,21 +620,20 @@ class Launcher(HomeMixin, EditorMixin, SettingsMixin):
         bar = Gtk.CenterBox()
         bar.add_css_class("top-bar")
 
-        # Weather: icon and temperature, the place below in small print. Hidden
-        # until a location is set and the first answer arrives.
-        self.weather_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, valign=Gtk.Align.START)
+        # Weather: "● 24°" and its icon, on the date's line and in its style.
+        # Hidden until a location is set and the first answer arrives.
+        self.weather_box = Gtk.Box(spacing=10, valign=Gtk.Align.CENTER)
         self.weather_box.add_css_class("weather")
-        line = Gtk.Box(spacing=12)
+        dot = Gtk.Label(label="•")
+        dot.add_css_class("date")
+        dot.add_css_class("weather-dot")
+        self.weather_temp = Gtk.Label(label="", xalign=0)
+        self.weather_temp.add_css_class("date")
         self.weather_icon = Gtk.Image()
         self.weather_icon.set_pixel_size(self.px("weather_icon"))
-        self.weather_temp = Gtk.Label(label="", xalign=0)
-        self.weather_temp.add_css_class("weather-temp")
-        line.append(self.weather_icon)
-        line.append(self.weather_temp)
-        self.weather_place = Gtk.Label(label="", xalign=0)
-        self.weather_place.add_css_class("weather-place")
-        self.weather_box.append(line)
-        self.weather_box.append(self.weather_place)
+        for w in (dot, self.weather_temp, self.weather_icon):
+            self.weather_box.append(w)
+        self.weather_place = Gtk.Label(label="")   # kept for Settings; not on screen
         self.weather_box.set_visible(False)
 
         clock = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, valign=Gtk.Align.START)
@@ -624,8 +641,11 @@ class Launcher(HomeMixin, EditorMixin, SettingsMixin):
         self.time_label.add_css_class("clock")
         self.date_label = Gtk.Label(label="")
         self.date_label.add_css_class("date")
+        date_line = Gtk.Box(spacing=16)
+        date_line.append(self.date_label)
+        date_line.append(self.weather_box)
         clock.append(self.time_label)
-        clock.append(self.date_label)
+        clock.append(date_line)
 
         # Connected: just the icon. Text only when something is wrong.
         net = Gtk.Box(spacing=10, valign=Gtk.Align.START)
@@ -654,12 +674,11 @@ class Launcher(HomeMixin, EditorMixin, SettingsMixin):
         net.append(self.net_text)
         net.append(self.net_icon)
 
-        # Left: the clock, then the weather. Right: status, settings and the power menu.
+        # Left: the clock, the date and the weather. Right: status, settings and the power menu.
         self.time_label.set_xalign(0)
         self.date_label.set_xalign(0)
-        left = Gtk.Box(spacing=48, valign=Gtk.Align.START)
+        left = Gtk.Box(valign=Gtk.Align.START)
         left.append(clock)
-        left.append(self.weather_box)
         self.btn_settings = self._top_button("settings.svg", self.t("settings"), self.settings_button)
         self.btn_power = self._top_button("power.svg", self.t("power_menu"), self.power_menu)
         self.top_buttons = [self.btn_settings, self.btn_power]
@@ -696,6 +715,8 @@ class Launcher(HomeMixin, EditorMixin, SettingsMixin):
         b.remove_css_class("footer-button")
         b.add_css_class("top-button")
         b.label.set_visible(False)
+        b.get_child().set_halign(Gtk.Align.CENTER)   # the icon in the middle of the circle
+        b.get_child().set_valign(Gtk.Align.CENTER)
         b.update_property([Gtk.AccessibleProperty.LABEL], [text])
         return b
 
@@ -736,7 +757,8 @@ class Launcher(HomeMixin, EditorMixin, SettingsMixin):
     def _update_clock(self):
         now = GLib.DateTime.new_now_local()
         self.time_label.set_label(now.format("%H:%M"))
-        self.date_label.set_label(self.t.date(now.get_day_of_week(), now.get_day_of_month(), now.get_month()))
+        self.date_label.set_label(self.t.date(now.get_day_of_week(), now.get_day_of_month(), now.get_month(),
+                                              now.get_year()))
         return True
 
     def _update_network(self):
@@ -1143,10 +1165,8 @@ class Launcher(HomeMixin, EditorMixin, SettingsMixin):
         hook = {"x": "delete", "y": "space"}[name]
         if self.overlays and self.overlays[-1].get(hook):
             self.overlays[-1][hook]()
-        elif not self.overlays and name == "y":
-            focused = self.win.get_focus()
-            if isinstance(focused, DeviceTile) and focused.device.get("dimmable") and focused.device["available"]:
-                self.open_brightness(focused)
+        elif not self.overlays and name == "y" and self.can_hold():
+            self.open_light(self.win.get_focus())
 
     def _on_key(self, _ctl, keyval, _code, _mods):
         top = self.overlays[-1] if self.overlays else {}

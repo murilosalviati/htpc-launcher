@@ -180,7 +180,15 @@ STRINGS = {
         "media_episode": "S{season}·E{episode}",
         "jf_no_app": "Add Jellyfin to the apps (Settings → Apps) to open it from here.",
         "house_title": "Home",
-        "house_note": "{n} on    Ⓐ on / off    Ⓨ brightness",
+        "house_no_area": "No room",
+        "light_brightness": "Brightness",
+        "light_temperature": "White",
+        "light_color": "Colour",
+        "turn_on": "Turn on",
+        "color_red": "Red", "color_orange": "Orange", "color_yellow": "Yellow", "color_green": "Green",
+        "color_cyan": "Cyan", "color_blue": "Blue", "color_purple": "Purple", "color_pink": "Pink",
+        "ha_home_group": "Separate by room",
+        "house_note": "{n} on    Ⓐ on / off    hold Ⓐ: brightness and colour",
         "dev_on": "On",
         "dev_off": "Off",
         "dev_on_light": "On",
@@ -276,7 +284,7 @@ STRINGS = {
         "icon_hint": "For more options, put PNG images in {path}",
         "weekdays": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"],
         "months": ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"],
-        "date": "{weekday}, {month} {day}",
+        "date": "{weekday}, {day:02d}/{month_number:02d}/{year}",
         "keyboard_rows": ["1234567890", "qwertyuiop", "asdfghjkl", "zxcvbnm-.'&"],
     },
     "pt-BR": {
@@ -452,7 +460,15 @@ STRINGS = {
         "media_episode": "T{season}·E{episode}",
         "jf_no_app": "Adicione o Jellyfin aos apps (Configurações → Apps) para abri-lo daqui.",
         "house_title": "Casa",
-        "house_note": "{n} ligados    Ⓐ liga / desliga    Ⓨ brilho",
+        "house_no_area": "Sem cômodo",
+        "light_brightness": "Brilho",
+        "light_temperature": "Branco",
+        "light_color": "Cor",
+        "turn_on": "Acender",
+        "color_red": "Vermelho", "color_orange": "Laranja", "color_yellow": "Amarelo", "color_green": "Verde",
+        "color_cyan": "Ciano", "color_blue": "Azul", "color_purple": "Roxo", "color_pink": "Rosa",
+        "ha_home_group": "Separar por cômodo",
+        "house_note": "{n} ligados    Ⓐ liga / desliga    segure Ⓐ: brilho e cor",
         "dev_on": "Ligado",
         "dev_off": "Desligado",
         "dev_on_light": "Acesa",
@@ -546,9 +562,10 @@ STRINGS = {
         "no_apps": "Nenhum aplicativo instalado foi encontrado.",
         "choose_icon": "Escolha o ícone",
         "icon_hint": "Para ter mais opções, ponha imagens PNG em {path}",
-        "weekdays": ["segunda", "terça", "quarta", "quinta", "sexta", "sábado", "domingo"],
+        "weekdays": ["segunda-feira", "terça-feira", "quarta-feira", "quinta-feira", "sexta-feira", "sábado",
+                     "domingo"],
         "months": ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"],
-        "date": "{weekday}, {day} {month}",
+        "date": "{weekday}, {day:02d}/{month_number:02d}/{year}",
         "keyboard_rows": ["1234567890", "qwertyuiop", "asdfghjklç", "zxcvbnm-.'&"],
     },
 }
@@ -565,7 +582,8 @@ class Translator:
     def raw(self, key):
         return self.strings[key]
 
-    def date(self, weekday, day, month):
+    def date(self, weekday, day, month, year=None):
         """weekday 1..7 (Monday first), month 1..12."""
-        return self.strings["date"].format(weekday=self.strings["weekdays"][weekday - 1],
-                                           day=day, month=self.strings["months"][month - 1])
+        return self.strings["date"].format(weekday=self.strings["weekdays"][weekday - 1], day=day,
+                                           month=self.strings["months"][month - 1], month_number=month,
+                                           year=year if year is not None else "")

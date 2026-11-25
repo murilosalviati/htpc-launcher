@@ -10,6 +10,10 @@ The project is in beta: every `0.x` version is a pre-release, and the configurat
 - **Home (Home Assistant)** below the apps, reached by going down: lights and switches by room, and scenes. Ⓐ turns one on or off (shown at once), Ⓨ on a dimmable light opens its brightness (−/+ by 10%). Every light by default; choose in Settings → Home Assistant → Lights on the home screen. Needs the address and the token. States are read every 5 seconds while the launcher is in front.
 - **The clock moved to the top left**, with the weather next to it.
 - **One power button** at the top right, next to Settings, replaces Restart, Shut down and the footer's "Turn off TV". It opens a menu: Turn off the TV (when Home Assistant is set up, and selected first), Restart the computer, Shut down the computer, Cancel. Turning off the TV also puts the launcher back on its start (menus closed, first app selected, scrolled up) for the next time. The menu is the confirmation; restart and shut down never start selected. The `tv_off_button` setting is gone.
+- **The weather moved onto the date's line**, in its style: "Wednesday, 25/11/2026 • 24°" and the icon. Dates read dd/mm/yyyy.
+- **Explore shows what's new**, not all-time favourites: trending films and series from the last 18 months (`recent_days` in `tmdb`), series with new episodes this week, films in cinemas.
+- **Lights: hold Ⓐ** (or Ⓨ) for a panel with brightness, white temperature and colour, as far as the light supports them; **Separate by room** puts each room's name over its lights.
+- The icons in the round buttons at the top right are centred.
 - **No more button reminders** at the bottom left; the bottom of the screen only explains edit mode while it's on.
 - Without Jellyfin and Home Assistant set up, the screen looks as before: the apps alone in the middle.
 

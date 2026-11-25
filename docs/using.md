@@ -26,7 +26,7 @@ The apps row has one tile per app. Move between them with the d-pad or the left 
 
 ### The top bar
 
-- **Left:** the clock and the date, then the weather (an icon, the temperature and the place), once you set a location. At night the sun becomes a moon. It updates every 30 minutes.
+- **Left:** the clock, and under it the date (as 25/11/2026) followed by the weather: the temperature and an icon, in the date's style, once you set a location. At night the sun becomes a moon. It updates every 30 minutes.
 - **Right**, from left to right:
   - **Gamepads:** an icon that lights up when a gamepad is connected (USB, Bluetooth or a wireless receiver). With more than one connected, it shows how many.
   - **Batteries:** one battery icon per wireless gamepad that reports its charge, from empty (red) to full, with a bolt while charging. A gamepad on a cable reports no charge, so no icon shows for it.
@@ -51,7 +51,7 @@ Above the apps, a row of cards that follows the app in focus:
 
 | App in focus | Tabs | What they show |
 |---|---|---|
-| **Jellyfin** | **Explore** | What is popular this week on [TMDB](https://www.themoviedb.org/) **and is in your library**, in TMDB's order. Without a TMDB key: what was added lately. |
+| **Jellyfin** | **Explore** | What is new and popular on [TMDB](https://www.themoviedb.org/) **and is in your library**: this week's trending films and series that came out in the last 18 months, series with new episodes this week, and films in cinemas. Old favourites that trend without anything new (a 90s sitcom) are left out. Without a TMDB key: what was added lately. |
 | | **Series**, **Films** | What was added lately to Jellyfin. New episodes are grouped under their series, with how many are new. |
 | **Steam** | **Games** | Your Steam games, the last played first, with when and how long you played. Games streamed from another computer (Remote Play) count too. |
 | Any other app | none | The space stays empty, so nothing on screen jumps. |
@@ -73,7 +73,8 @@ This product uses the TMDB API but is not endorsed or certified by TMDB.
 Go down from the apps to reach your lights. The apps dim and the screen scrolls.
 
 - **Ⓐ** turns a light or switch on or off. The card changes at once; Home Assistant's own answer follows a moment later.
-- **Ⓨ** on a dimmable light opens its brightness: **−** and **+** change it by 10%.
+- **Hold Ⓐ** (or press **Ⓨ**) on a light to open its panel, with what the light supports: brightness (**−** and **+**, by 10%), white temperature (2200 K to 6500 K, within the light's range) and colour (eight colours). The current ones are marked.
+- **By room:** Settings → Home Assistant → Lights on the home screen → **Separate by room** shows each room's name with its lights under it.
 - **Scenes** sit in a row above the lights. Ⓐ runs one.
 - **Which ones:** every light, by room, until you choose. Choose in Settings → Home Assistant → **Lights on the home screen**, which also lists switches. Without a choice, the first 6 scenes show.
 - **Updates:** the states are read every 5 seconds while the launcher is in front.

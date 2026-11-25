@@ -101,8 +101,10 @@ The `jellyfin` entry sets up the home screen's Recently added row:
 For Explore, a `tmdb` entry with TMDB's short API key or its long API Read Access Token (Settings → Jellyfin → Popular (TMDB)):
 
 ```json
-"tmdb": {"api_key": "0123456789abcdef0123456789abcdef"}
+"tmdb": {"api_key": "0123456789abcdef0123456789abcdef", "recent_days": 540}
 ```
+
+`recent_days` (optional, 540 by default) is how recently a trending title must have come out to count as new.
 
 Older versions used Portuguese field names (`nome`, `abrir`...). They are converted automatically the first time the launcher starts.
 

@@ -17,6 +17,7 @@ certified by TMDB.
 Everything here blocks (HTTP): the launcher calls it off the screen's thread.
 """
 
+import datetime
 import json
 import urllib.parse
 import urllib.request
@@ -26,7 +27,9 @@ from . import __version__
 API = "https://api.themoviedb.org/3"
 TIMEOUT = 8
 TRENDING_PAGES = 3   # 20 titles a page, per kind
-POPULAR_PAGES = 2    # then the most popular, for a longer list to match against
+AIRING_PAGES = 3     # series with episodes airing this week (new seasons of older series)
+NOW_PLAYING_PAGES = 2
+RECENT_DAYS = 540    # a trending title counts as new when it came out this recently
 
 
 def settings(cfg):
@@ -56,21 +59,43 @@ def _get(cfg, path, query=None, get=None):
     return (get or http_get)(url, headers)
 
 
-def ranking(cfg, get=None):
-    """[(kind, tmdb_id)] best first, kind "movie" or "tv": this week's trending
-    films and series interleaved, then the most popular ones, without repeats."""
-    lists = []
-    for kind in ("movie", "tv"):
-        found = []
-        for page in range(1, TRENDING_PAGES + 1):
-            found += [(kind, str(r["id"])) for r in _get(cfg, f"/trending/{kind}/week", {"page": page}, get)
-                      .get("results", []) if r.get("id")]
-        lists.append(found)
-    order = [item for pair in _interleave(*lists) for item in pair]
-    for kind in ("movie", "tv"):
-        for page in range(1, POPULAR_PAGES + 1):
-            order += [(kind, str(r["id"])) for r in _get(cfg, f"/{kind}/popular", {"page": page}, get)
-                      .get("results", []) if r.get("id")]
+def _date(text):
+    try:
+        return datetime.date.fromisoformat(text)
+    except (TypeError, ValueError):
+        return None
+
+
+def _pages(cfg, path, pages, get):
+    found = []
+    for page in range(1, pages + 1):
+        found += [r for r in _get(cfg, path, {"page": page}, get).get("results", []) if r.get("id")]
+    return found
+
+
+def ranking(cfg, get=None, today=None):
+    """[(kind, tmdb_id)] best first, kind "movie" or "tv": what is new and
+    popular, not just popular. This week's trending films and series that came
+    out recently (RECENT_DAYS, or "recent_days" in the tmdb entry), and series
+    with a new episode this week, interleaved; then the series airing this week
+    and the films in cinemas. No all-time favourites: an old sitcom that is
+    trending without new episodes is left out."""
+    today = today or datetime.date.today()
+    since = today - datetime.timedelta(days=int(settings(cfg).get("recent_days", RECENT_DAYS)))
+    airing = _pages(cfg, "/tv/on_the_air", AIRING_PAGES, get)
+    airing_ids = {str(r["id"]) for r in airing}
+
+    def new(r, field):
+        day = _date(r.get(field))
+        return day is not None and since <= day <= today
+
+    movies = [("movie", str(r["id"])) for r in _pages(cfg, "/trending/movie/week", TRENDING_PAGES, get)
+              if new(r, "release_date")]
+    series = [("tv", str(r["id"])) for r in _pages(cfg, "/trending/tv/week", TRENDING_PAGES, get)
+              if new(r, "first_air_date") or str(r["id"]) in airing_ids]
+    order = [item for pair in _interleave(movies, series) for item in pair]
+    order += [("tv", str(r["id"])) for r in airing]
+    order += [("movie", str(r["id"])) for r in _pages(cfg, "/movie/now_playing", NOW_PLAYING_PAGES, get)]
     seen, ranked = set(), []
     for item in order:
         if item not in seen:
