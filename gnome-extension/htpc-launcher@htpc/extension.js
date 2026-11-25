@@ -28,6 +28,9 @@ import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 const LAUNCHER_ID = 'htpc-launcher';
 
 const BUS_NAME = 'org.htpc.Launcher';
+const NOTICE_MAX_SECONDS = 30;
+const NOTICE_MAX_ON_SCREEN = 4;
+const NOTICE_MAX_TEXT = 200;
 const OBJECT_PATH = '/org/htpc/Launcher';
 
 const IFACE_XML = `
@@ -150,6 +153,7 @@ class LauncherBridge {
     constructor() {
         this._fullscreenWanted = new Map();  // appId (lowercase) -> until when (µs, monotonic)
         this._toasts = [];                   // notices on screen, top to bottom
+        this._timers = new Set();            // pending timeouts, removed in disable()
     }
 
     ListWindows() {
@@ -235,7 +239,9 @@ class LauncherBridge {
             return;
         // Wait a moment: right after creation the window may not have its app id
         // or type yet, and some apps resize themselves when they first appear.
-        GLib.timeout_add(GLib.PRIORITY_DEFAULT, 300, () => {
+        // The timer is tracked so disable() can remove it.
+        const timer = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 300, () => {
+            this._timers.delete(timer);
             if (!win.get_compositor_private())
                 return GLib.SOURCE_REMOVE;  // already gone
             const ids = windowIds(win);
@@ -243,6 +249,7 @@ class LauncherBridge {
                 win.make_fullscreen();
             return GLib.SOURCE_REMOVE;
         });
+        this._timers.add(timer);
     }
 
     // A short notice in the top-right corner, above everything, full-screen
@@ -252,6 +259,13 @@ class LauncherBridge {
         const monitor = Main.layoutManager.primaryMonitor;
         if (!monitor)
             return false;
+        // Any program in the session can call this: keep it bounded. Short texts,
+        // a few seconds at most, and only a few notices on screen at once.
+        title = String(title ?? '').slice(0, NOTICE_MAX_TEXT);
+        body = String(body ?? '').slice(0, NOTICE_MAX_TEXT);
+        seconds = Math.min(NOTICE_MAX_SECONDS, Math.max(2, seconds || 6));
+        while (this._toasts.length >= NOTICE_MAX_ON_SCREEN)
+            this._dropToast(this._toasts[0]);
         const k = Math.max(0.6, monitor.height / 1080);
         const toast = new St.BoxLayout({
             opacity: 0,
@@ -289,7 +303,7 @@ class LauncherBridge {
         this._placeToasts();
         toast.ease({opacity: 255, duration: 250, mode: Clutter.AnimationMode.EASE_OUT_QUAD});
 
-        toast._timer = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, Math.max(2, seconds || 6), () => {
+        toast._timer = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, seconds, () => {
             toast._timer = 0;
             toast.ease({
                 opacity: 0, duration: 400, mode: Clutter.AnimationMode.EASE_IN_QUAD,
@@ -323,6 +337,12 @@ class LauncherBridge {
         if (this._toasts.length === 0)
             global.compositor?.enable_unredirect?.();
         this._placeToasts();
+    }
+
+    clearTimers() {
+        for (const timer of this._timers)
+            GLib.source_remove(timer);
+        this._timers.clear();
     }
 
     clearToasts() {
@@ -419,8 +439,14 @@ export default class HtpcLauncherExtension extends Extension {
         this._dbus = Gio.DBusExportedObject.wrapJSObject(IFACE_XML, this._impl);
         this._dbus.export(Gio.DBus.session, OBJECT_PATH);
 
+        // Take the name even if something else holds it (a test fake left running),
+        // and say so if it is ever lost: the launcher depends on it.
         this._nameId = Gio.bus_own_name_on_connection(
-            Gio.DBus.session, BUS_NAME, Gio.BusNameOwnerFlags.NONE, null, null);
+            Gio.DBus.session, BUS_NAME,
+            Gio.BusNameOwnerFlags.ALLOW_REPLACEMENT | Gio.BusNameOwnerFlags.REPLACE,
+            null,
+            () => console.warn(`htpc-launcher: lost the D-Bus name ${BUS_NAME}; ` +
+                'another program took it, and the launcher can no longer control windows'));
 
         this._createdId = global.display.connect('window-created',
             (_display, win) => this._impl.windowCreated(win));
@@ -435,6 +461,7 @@ export default class HtpcLauncherExtension extends Extension {
         this._impl?.showPointer?.();
         this._impl?.clearToasts?.();
         this._impl?.clearOsd?.();
+        this._impl?.clearTimers?.();
         if (this._createdId) {
             global.display.disconnect(this._createdId);
             this._createdId = 0;

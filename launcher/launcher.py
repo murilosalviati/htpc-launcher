@@ -283,7 +283,7 @@ class Launcher(EditorMixin, SettingsMixin):
 
     def __init__(self, gtk_app):
         self.gtk_app = gtk_app
-        self.cfg, migrated = config.load()
+        self.cfg, migrated = config.load(fallback=True)   # a broken apps.json: the last good copy
         if migrated:
             config.save(self.cfg)
             log("apps.json converted to the current format")
@@ -657,8 +657,9 @@ class Launcher(EditorMixin, SettingsMixin):
         """An app counts as "opening" until its window shows up. Checked even while
         the launcher is behind it, so an app closed soon after opening does not
         come back as "opening…"."""
+        running = self._running_ids() if self.opening else set()
         for app_id in list(self.opening):
-            if self.windows.is_running(app_id):
+            if app_id.lower() in running:
                 self.opening[app_id] = None  # seen: no longer opening
             elif self.opening[app_id] is None:
                 del self.opening[app_id]     # seen and now closed
@@ -788,14 +789,29 @@ class Launcher(EditorMixin, SettingsMixin):
 
     # --- apps --------------------------------------------------------------------
 
+    def _running_ids(self):
+        """Every name the open windows answer to, from one ListWindows call (instead
+        of one IsRunning per app on the GTK thread)."""
+        try:
+            windows = self.windows.windows() or []
+        except Exception as e:  # noqa: BLE001 - the extension is not answering
+            log("could not list the windows:", e)
+            windows = []
+        names = set()
+        for w in windows:
+            names.update(i.lower() for i in w.ids)
+            names.add((w.app_id or "").lower())
+        return names
+
     def refresh_status(self):
         now = time.monotonic()
+        running = set() if self.editing else self._running_ids()
         for tile in self.tiles:
             if self.editing:
                 tile.show_status(self.t("status_edit"))
                 continue
             app_id = tile.app["id"]
-            if self.windows.is_running(app_id):
+            if app_id.lower() in running:
                 self.opening.pop(app_id, None)
                 tile.show_status(self.t("status_open"), running=True)
             elif self.opening.get(app_id) is not None and now - self.opening[app_id] < OPENING_GRACE:
@@ -951,8 +967,11 @@ class Launcher(EditorMixin, SettingsMixin):
 
     def press(self):
         focused = self.win.get_focus()
-        if isinstance(focused, Gtk.Button):
-            focused.emit("clicked")
+        if not isinstance(focused, Gtk.Button):
+            return
+        if self.overlays and not focused.is_ancestor(self.overlays[-1]["backdrop"]):
+            return   # the focus is still on something under a box (e.g. "Installing…"): not pressable
+        focused.emit("clicked")
 
     def back(self):
         if self.overlays:

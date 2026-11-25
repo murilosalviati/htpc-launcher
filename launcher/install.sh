@@ -6,6 +6,25 @@ set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 DATA="$HOME/.local/share/htpc-launcher"
+
+# Never leave the installed copy missing or half-written (a failure or a power
+# cut mid-install would leave the TV without launcher and without the gamepad
+# service, and nothing on screen to fix it): copy next to it, then rename over.
+# The previous version stays as <name>.old.
+put_dir() {   # put_dir SRC DEST
+    rm -rf "$2.new"
+    cp -r "$1" "$2.new"
+    find "$2.new" -name __pycache__ -prune -exec rm -rf {} +
+    if [ -e "$2" ]; then
+        rm -rf "$2.old"
+        mv "$2" "$2.old"
+    fi
+    mv "$2.new" "$2"
+}
+put_file() {  # put_file SRC DESTDIR
+    cp "$1" "$2/.$(basename "$1").new"
+    mv -f "$2/.$(basename "$1").new" "$2/$(basename "$1")"
+}
 CONFIG="$HOME/.config/htpc-launcher"
 
 missing=()
@@ -29,12 +48,11 @@ rm -rf "$DATA/icones" "$DATA/edicao.py"
 # Before 0.1.0-beta.3 the shared modules were loose files; they now live in the htpc package.
 rm -f "$DATA/htpc_config.py" "$DATA/i18n.py" "$DATA/themes.py"
 
-cp "$HERE/launcher.py" "$HERE/editor.py" "$HERE/settings.py" "$HERE/launcher.css" "$DATA/"
-rm -rf "$DATA/htpc"
-cp -r "$HERE/../htpc" "$DATA/"
-find "$DATA/htpc" -name __pycache__ -prune -exec rm -rf {} +
-rm -rf "$DATA/icons"
-cp -r "$HERE/icons" "$DATA/"
+put_dir "$HERE/../htpc" "$DATA/htpc"
+put_dir "$HERE/icons" "$DATA/icons"
+for f in editor.py settings.py launcher.css launcher.py; do
+    put_file "$HERE/$f" "$DATA"
+done
 # Icons chosen by you (kept out of the public repository).
 if [ -d "$HERE/../app-icons" ]; then
     mkdir -p "$DATA/app-icons"

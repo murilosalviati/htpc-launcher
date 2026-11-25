@@ -1,5 +1,5 @@
 [Unit]
-Description=HTPC gamepad shortcuts (guide returns to the launcher, combo closes the app)
+Description=HTPC gamepad shortcuts (back to the launcher, close the app, volume)
 PartOf=graphical-session.target
 After=graphical-session.target
 
@@ -9,6 +9,9 @@ ExecStart=/usr/bin/python3 %h/.local/share/htpc-launcher/controller.py
 KillMode=process
 Restart=on-failure
 RestartSec=3
+# Exit code 3: something only a person can fix (python3-evdev missing, no
+# apps.json). Restarting every 3 s would not help; the log says what to do.
+RestartPreventExitStatus=3
 
 [Install]
 WantedBy=graphical-session.target

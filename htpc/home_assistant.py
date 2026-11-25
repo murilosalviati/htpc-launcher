@@ -107,7 +107,7 @@ class HomeAssistant:
     def __init__(self, gamepads, settings=None, post=None, clock=time.monotonic, background=True,
                  marker=tv_off_marker):
         self.gamepads = gamepads
-        self.settings = settings or (lambda: config.load()[0])
+        self.settings = settings or config.load_quietly
         self.post = post
         self.clock = clock
         self.background = background
@@ -382,9 +382,9 @@ class AppEvents:
                 continue
             app = self._app_for_window(cfg, w)
             if app:
-                running.add(app["name"])
+                running.add(app.get("name") or app.get("id", "?"))
                 if w.focused:
-                    front = app["name"]
+                    front = app.get("name") or app.get("id", "?")
         playback = self.media.playback()
         if self.running is not None:
             for name in sorted(running - self.running):

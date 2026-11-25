@@ -71,6 +71,7 @@ The extension exports `org.htpc.Launcher` at `/org/htpc/Launcher` on the session
 | `HidePointer() → b` | 4 | Hides the mouse pointer until the mouse moves. |
 | `Notify(s title, s body, s iconPath, u seconds) → b` | 5 | Shows a notice in the top-right corner, over full-screen apps too. |
 | `ShowOsd(s iconName, d level) → b` | 6 | Shows GNOME's level indicator (0..1), over full-screen apps too. |
+| | 7 | No new methods. Notices are capped at 30 seconds, 4 on screen and 200 characters. Timers are removed on disable, and the bus name is taken over (and its loss logged). |
 | signal `FocusChanged(s appId)` | 1 | Emitted when the focused app changes. |
 
 On top of full-screen apps, GNOME may hand the screen straight to the app ("unredirect"), which would hide anything drawn above it. While a notice or the volume indicator is up, the extension asks the compositor to keep compositing.
@@ -113,6 +114,7 @@ The launcher UI, Settings, the configuration and the shortcut rules then work un
 
 ```bash
 dbus-run-session -- python3 tests/test_controller.py
+export HOME="$(mktemp -d)" && python3 tests/make_test_home.py "$HOME"
 xvfb-run -s "-screen 0 1920x1080x24" dbus-run-session -- python3 tests/test_launcher.py
 ```
 
@@ -138,7 +140,15 @@ Versions are `0.x` betas (`0.1.0-beta.5`, …), published as pre-releases. To ma
 3. Push to `main`.
 4. Run the **Release** workflow (Actions → Release → Run workflow) with the version.
 
-The workflow tags `v<version>`, builds `htpc-launcher-<version>.tar.gz` and publishes the release.
+The workflow first runs the **Tests** workflow:
+
+- shellcheck on the scripts;
+- a syntax check of the extension;
+- both test suites, with `tests/make_test_home.py` building their test home folder with placeholder icons.
+
+Only if everything passes does it check the version against `VERSION`, tag `v<version>`, and publish `htpc-launcher-<version>.tar.gz` with its `SHA256SUMS`. The launcher's updater refuses a package that doesn't match `SHA256SUMS`.
+
+The same Tests workflow also runs on every push and pull request.
 
 ## Contributing
 

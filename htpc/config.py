@@ -11,10 +11,13 @@ since that is what its owner was already seeing.
 """
 
 import json
+import logging
 import os
 from pathlib import Path
 
 from . import paths
+
+log = logging.getLogger("htpc")
 
 DEFAULT_LANGUAGE = "en"
 
@@ -79,11 +82,40 @@ def migrate(cfg):
     return changed
 
 
-def load(path=None):
-    """Read apps.json. Returns (config, migrated)."""
-    path = Path(path or paths.config_file())
+def backup_path(path=None):
+    """apps.json.bak: a copy of the last apps.json that was written successfully."""
+    return Path(path or paths.config_file()).with_suffix(".json.bak")
+
+
+def _read(path):
     with open(path, encoding="utf-8") as f:
         cfg = json.load(f)
+    if not isinstance(cfg, dict) or not isinstance(cfg.get("apps", []), list):
+        raise ValueError(f"{path} is not an HTPC Launcher configuration")
+    return cfg
+
+
+def load(path=None, fallback=False):
+    """Read apps.json. Returns (config, migrated).
+    With fallback, a broken or missing apps.json is replaced by the last good copy
+    (apps.json.bak); the broken file is kept as apps.json.broken. Without a good
+    copy the original error is raised."""
+    path = Path(path or paths.config_file())
+    try:
+        cfg = _read(path)
+    except (OSError, ValueError) as e:
+        backup = backup_path(path)
+        if not fallback or not backup.exists():
+            raise
+        cfg = _read(backup)
+        log.error("apps.json could not be read (%s); using the last good copy, %s", e, backup)
+        if path.exists():
+            os.replace(path, path.with_suffix(".json.broken"))
+        _write(path, cfg)
+    else:
+        if not backup_path(path).exists():
+            _write(backup_path(path), cfg)
+        _private(path)
     migrated = migrate(cfg)
     cfg.setdefault("language", DEFAULT_LANGUAGE)
     for app in cfg.get("apps", []):
@@ -92,12 +124,47 @@ def load(path=None):
     return cfg, migrated
 
 
-def save(cfg, path=None):
-    """Write apps.json atomically (temporary file + rename)."""
+def load_quietly(path=None):
+    """For the background service: apps.json, else the last good copy, else {}.
+    Never raises and never writes (the launcher is the one that repairs the file)."""
     path = Path(path or paths.config_file())
-    temp = path.with_suffix(".json.tmp")
-    temp.write_text(json.dumps(cfg, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    for candidate in (path, backup_path(path)):
+        try:
+            cfg = _read(candidate)
+        except (OSError, ValueError):
+            continue
+        migrate(cfg)
+        return cfg
+    return {}
+
+
+def _private(path):
+    """Only the owner may read apps.json: it can hold a Home Assistant token."""
+    try:
+        if os.stat(path).st_mode & 0o077:
+            os.chmod(path, 0o600)
+    except OSError:
+        pass
+
+
+def _write(path, cfg):
+    """Write atomically (temporary file + rename), readable only by the owner."""
+    path = Path(path)
+    temp = path.with_suffix(path.suffix + ".tmp")
+    fd = os.open(temp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        f.write(json.dumps(cfg, indent=2, ensure_ascii=False) + "\n")
+        f.flush()
+        os.fsync(f.fileno())
+    os.chmod(temp, 0o600)
     os.replace(temp, path)
+
+
+def save(cfg, path=None):
+    """Write apps.json, and keep the same content as the last good copy (apps.json.bak)."""
+    path = Path(path or paths.config_file())
+    _write(path, cfg)
+    _write(backup_path(path), cfg)
 
 
 def exists():

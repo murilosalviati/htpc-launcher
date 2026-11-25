@@ -82,20 +82,30 @@ def combo_label(combo):
 
 
 def app_ids(app):
-    return [i.lower() for i in [app["id"], *app.get("extra_ids", [])] if i]
+    """Every lowercase name an apps.json entry answers to. Tolerates hand-edited
+    entries (no "id", "extra_ids": null or a string)."""
+    if not isinstance(app, dict):
+        return []
+    extra = app.get("extra_ids") or []
+    if isinstance(extra, str):
+        extra = [extra]
+    names = [app.get("id"), *(extra if isinstance(extra, (list, tuple)) else [])]
+    return [i.lower() for i in names if isinstance(i, str) and i]
 
 
 def app_for_window(cfg, window):
     """The apps.json entry that owns a window (by the names the backend reports)."""
-    names = set(window.ids) | {window.app_id.lower()}
-    for app in cfg.get("apps", []):
+    names = set(window.ids) | {(window.app_id or "").lower()}
+    apps = cfg.get("apps") if isinstance(cfg, dict) else None
+    for app in apps if isinstance(apps, list) else []:
         if names & set(app_ids(app)):
             return app
     return None
 
 
 def is_launcher(cfg, window):
-    lid = cfg.get("launcher", {}).get("id", "htpc-launcher").lower()
+    launcher = cfg.get("launcher") if isinstance(cfg, dict) else None
+    lid = str((launcher if isinstance(launcher, dict) else {}).get("id") or "htpc-launcher").lower()
     return lid in window.ids or window.app_id.lower() == lid
 
 
@@ -121,14 +131,28 @@ class Shortcuts:
         self.last_action = now
         return True
 
-    def _context(self):
-        """(config, focused window); the window is None if the OS side did not answer."""
-        cfg = config.load()[0]
+    def settings(self):
+        """apps.json, or the last one that could be read (a broken file must not
+        stop the shortcuts)."""
         try:
-            window = self.windows.focused()
+            cfg = config.load()[0]
+            if not isinstance(cfg, dict):
+                raise ValueError("apps.json is not an object")
+            self._last_cfg = cfg
+        except Exception as e:  # noqa: BLE001 - JSON error, missing file...
+            log.error("could not read apps.json (%s); using the last good one", e)
+            cfg = getattr(self, "_last_cfg", None) or {}
+        return cfg
+
+    def _context(self, windows=None):
+        """(config, focused window); the window is None if the OS side did not answer."""
+        cfg = self.settings()
+        try:
+            window = (windows or self.windows).focused()
         except Exception as e:
             log.error("window control did not answer: %s", e)
-            self._windows = None  # reconnect next time
+            if windows is None:
+                self._windows = None  # reconnect next time
             return cfg, None
         return cfg, window
 
@@ -171,18 +195,30 @@ class Shortcuts:
     def guide(self):
         if not self._ready():
             return
-        cfg, window = self._context()
+        # Asking GNOME and pausing players can take a moment (a stuck player waits
+        # for its timeout): not on the thread that reads the gamepads.
+        threading.Thread(target=self._guide, daemon=True).start()
+
+    def _guide(self):
+        try:
+            windows = self.backend.window_control()   # one per thread
+        except Exception as e:  # noqa: BLE001
+            log.error("window control: %s", e)
+            return
+        cfg, window = self._context(windows)
         if window is not None and is_launcher(cfg, window):
             return
         app = app_for_window(cfg, window) if window else None
-        try:
-            if app and app.get("pause_on_home"):
+        if app and app.get("pause_on_home"):
+            try:
                 paused = self.media.pause_all()
-                log.info("guide in %s: paused %s", app["name"], paused or "nothing (no player was playing)")
-            self._show_launcher(cfg, self.windows)
+                log.info("guide in %s: paused %s", app.get("name", "?"), paused or "nothing (no player was playing)")
+            except Exception as e:  # noqa: BLE001 - pausing is a nicety: still go home
+                log.warning("could not pause: %s", e)
+        try:
+            self._show_launcher(cfg, windows)
         except Exception as e:
             log.error("guide failed: %s", e)
-            self._windows = None
 
     def close(self):
         if not self._ready():
@@ -196,7 +232,7 @@ class Shortcuts:
             now = time.monotonic()
             if now - self.first_press > SECOND_PRESS_WINDOW:
                 self.first_press = now
-                log.info("%s: first press (the app itself ends the stream)", app["name"])
+                log.info("%s: first press (the app itself ends the stream)", app.get("name", "?"))
                 return
             self.first_press = 0.0
 
@@ -207,8 +243,8 @@ class Shortcuts:
     def _close(self, cfg, window, app):
         try:
             windows = self.backend.window_control()  # one per thread
-            target = app["id"] if app else window.app_id
-            name = app["name"] if app else (target or window.title or "?")
+            target = (app.get("id") if app else None) or window.app_id
+            name = (app.get("name") if app else None) or target or window.title or "?"
             timeout = (app or {}).get("close_timeout", DEFAULT_CLOSE_TIMEOUT)
 
             command = (app or {}).get("close")
@@ -240,7 +276,7 @@ class GamepadShortcuts:
 
     def __init__(self, shortcuts, settings=None, clock=time.monotonic):
         self.shortcuts = shortcuts
-        self.settings = settings or (lambda: config.load()[0])
+        self.settings = settings or config.load_quietly
         self.clock = clock
         self.held = {}  # device -> set of button names
         self.repeat = None  # (device, direction, combo, when) while a volume combo is held

@@ -41,6 +41,7 @@ logging.basicConfig(level="INFO", format="  [log] %(message)s")
 shortcuts.MIN_INTERVAL = 0.3
 shortcuts.DEFAULT_CLOSE_TIMEOUT = 1.0
 killed = []
+REAL_FORCE_CLOSE = linux_system.LinuxSystem.force_close
 linux_system.LinuxSystem.force_close = lambda self, app, pid: killed.append(app) or [fakes.state["windows"].remove(w) for w in fakes.find(app)]
 
 fakes.start()
@@ -319,11 +320,13 @@ check("updates: versions compare like releases (betas before the final one)",
 fake_releases = [
     {"tag_name": "v0.1.0-beta.7", "draft": True, "assets": []},
     {"tag_name": "v0.1.0-beta.6", "draft": False, "prerelease": True, "body": "notes", "html_url": "page",
-     "assets": [{"name": "htpc-launcher-0.1.0-beta.6.tar.gz", "browser_download_url": "https://x/r.tar.gz"}]},
+     "assets": [{"name": "htpc-launcher-0.1.0-beta.6.tar.gz", "browser_download_url": "https://x/r.tar.gz"},
+                {"name": "SHA256SUMS", "browser_download_url": "https://x/SHA256SUMS"}]},
 ]
 rel = up.latest_release(lambda url: fake_releases)
 check("updates: the newest published release (drafts skipped), with its .tar.gz",
       rel == {"version": "0.1.0-beta.6", "tag": "v0.1.0-beta.6", "url": "https://x/r.tar.gz",
+              "file": "htpc-launcher-0.1.0-beta.6.tar.gz", "sums_url": "https://x/SHA256SUMS",
               "notes": "notes", "page": "page"})
 # a release archive with an install.sh that leaves a mark, and a newer extension
 src = pathlib.Path(tempfile.mkdtemp()) / "htpc-launcher-0.1.0-beta.6"
@@ -338,20 +341,55 @@ old_ext = up.installed_extension_dir
 fake_ext = pathlib.Path(tempfile.mkdtemp())
 (fake_ext / "metadata.json").write_text('{"version": 6}')
 up.installed_extension_dir = lambda: str(fake_ext)
-result = up.install_release(rel, fetch=lambda url, target: __import__("shutil").copy(archive, target),
-                            workdir=str(work))
+def fetch_release(url, target):
+    if url.endswith("SHA256SUMS"):
+        pathlib.Path(target).write_text(f"{up.sha256_of(archive)}  htpc-launcher-0.1.0-beta.6.tar.gz\n")
+    else:
+        __import__("shutil").copy(archive, target)
+
+
+result = up.install_release(rel, fetch=fetch_release, workdir=str(work))
 check("updates: install downloads, extracts and runs install.sh; tells when the extension changed",
       result == {"version": "0.1.0-beta.6", "extension_changed": True} and (work / "mark").exists())
 (src / "install.sh").write_text("echo boom >&2; exit 3\n")
 with _tar.open(archive, "w:gz") as t:
     t.add(src, arcname=src.name)
 try:
-    up.install_release(rel, fetch=lambda url, target: __import__("shutil").copy(archive, target), workdir=str(work))
+    up.install_release(rel, fetch=fetch_release, workdir=str(work))
     install_error = None
 except RuntimeError as e:
     install_error = str(e)
-up.installed_extension_dir = old_ext
 check("updates: a failing install.sh raises with its last lines", install_error == "boom")
+
+
+def fetch_tampered(url, target):
+    if url.endswith("SHA256SUMS"):
+        pathlib.Path(target).write_text("0" * 64 + "  htpc-launcher-0.1.0-beta.6.tar.gz\n")
+    else:
+        __import__("shutil").copy(archive, target)
+
+
+(work.parent / "mark").unlink(missing_ok=True)
+for label, fetcher, release_info in (
+        ("a download that doesn't match SHA256SUMS", fetch_tampered, rel),
+        ("a release without SHA256SUMS", fetch_release, dict(rel, sums_url=None))):
+    try:
+        up.install_release(release_info, fetch=fetcher, workdir=str(work))
+        refused = None
+    except RuntimeError as e:
+        refused = str(e)
+    check(f"updates: {label} is refused before anything runs",
+          refused is not None and not (work.parent / "mark").exists() and not (work / "mark").exists())
+up.installed_extension_dir = old_ext
+import threading as _th  # noqa: E402
+up._installing.acquire()
+try:
+    up.install_release(rel, fetch=fetch_release, workdir=str(work))
+    second = None
+except RuntimeError as e:
+    second = str(e)
+up._installing.release()
+check("updates: a second install while one runs is refused", second == "an update is already being installed")
 
 
 def fake_flatpak(cmd, **kw):
@@ -438,6 +476,50 @@ check("bluetooth: keyboards and mice by icon, device class or name",
 check("bluetooth: speakers and headphones are told apart from gamepads",
       lbt.is_audio({"Icon": "audio-headphones"}) and lbt.is_audio({"Class": 0x240414})
       and lbt.is_audio({"Name": "JBL Flip 5"}) and not lbt.is_audio({"Name": "Xbox Wireless Controller"}))
+
+# 9a1i. force_close: SIGTERM, SIGKILL only if still alive, through a pidfd
+import subprocess as _sp  # noqa: E402
+from htpc.backends.linux import system as lsys  # noqa: E402
+lsys.KILL_AFTER = 0.5
+real_system = lsys.LinuxSystem()
+real_system.force_close = REAL_FORCE_CLOSE.__get__(real_system)
+stubborn = _sp.Popen(["python3", "-c", "import signal, time; signal.signal(signal.SIGTERM, signal.SIG_IGN); time.sleep(30)"])
+time.sleep(0.6)
+real_system.force_close("", stubborn.pid)
+check("force_close: a process ignoring SIGTERM gets SIGKILL", stubborn.wait(timeout=3) == -9)
+polite = _sp.Popen(["sleep", "30"])
+t0 = time.monotonic()
+real_system.force_close("", polite.pid)
+check("force_close: one that exits on SIGTERM is not waited for nor killed",
+      polite.wait(timeout=3) == -15 and time.monotonic() - t0 < 0.4)
+gone = _sp.Popen(["true"])
+gone.wait()
+real_system.force_close("", gone.pid)
+check("force_close: an already finished process is left alone", True)
+
+# 9a1j. apps.json: private, a last good copy, and broken files don't stop anything
+from htpc import config as cfgmod  # noqa: E402
+cdir = pathlib.Path(tempfile.mkdtemp())
+cpath = cdir / "apps.json"
+cfgmod.save({"apps": [{"name": "A", "id": "a"}], "home_assistant": {"token": "secret"}}, cpath)
+check("apps.json and its copy are readable only by the owner (it can hold a token)",
+      oct(cpath.stat().st_mode & 0o777) == "0o600" and oct(cfgmod.backup_path(cpath).stat().st_mode & 0o777) == "0o600")
+cpath.write_text("{ not json")
+check("the service reads the last good copy of a broken apps.json, without touching it",
+      cfgmod.load_quietly(cpath)["apps"][0]["id"] == "a" and cpath.read_text() == "{ not json")
+good, _ = cfgmod.load(cpath, fallback=True)
+check("the launcher restores the last good copy and keeps the broken file aside",
+      good["apps"][0]["id"] == "a" and json.loads(cpath.read_text())["apps"][0]["id"] == "a"
+      and (cdir / "apps.json.broken").read_text() == "{ not json")
+try:
+    cfgmod.load(cdir / "missing.json")
+    raised = False
+except OSError:
+    raised = True
+check("without fallback, a missing file still raises", raised)
+check("hand-edited entries don't break the shortcuts",
+      shortcuts.app_ids({"extra_ids": None}) == [] and shortcuts.app_ids({"id": "X", "extra_ids": "y"}) == ["x", "y"]
+      and shortcuts.app_ids("junk") == [] and shortcuts.app_for_window({"apps": None}, SimpleNamespace(ids=["a"], app_id="a")) is None)
 
 # 9a1d. volume: Start + Select + Up / Down, repeating while held
 vol = []

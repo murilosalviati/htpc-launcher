@@ -281,12 +281,27 @@ class SettingsMixin:
                 self.pop_overlay()
         return close
 
+    def _start_task(self, name):
+        """True if the long task `name` may start now (it isn't running already)."""
+        running = self.__dict__.setdefault("tasks_running", set())
+        if name in running:
+            log(name, "is already running")
+            return False
+        running.add(name)
+        return True
+
+    def _end_task(self, name):
+        self.__dict__.setdefault("tasks_running", set()).discard(name)
+
     def _install_release(self, release):
+        if not self._start_task("install"):
+            return
         done_busy = self._busy(self.t("updates_installing", version=release["version"]))
         fetch = getattr(self, "updates_fetch", None)
         run = getattr(self, "updates_run", None)
 
         def done(result):
+            self._end_task("install")
             done_busy()
             if isinstance(result, Exception):
                 self._message(self.t("updates_install_failed"), self._reason(result))
@@ -314,10 +329,13 @@ class SettingsMixin:
                      self._run_flatpak_update, danger=False)
 
     def _run_flatpak_update(self):
+        if not self._start_task("flatpak"):
+            return
         done_busy = self._busy(self.t("updates_updating_apps"))
         run = getattr(self, "updates_run", None)
 
         def done(result):
+            self._end_task("flatpak")
             done_busy()
             if isinstance(result, Exception):
                 self._message(self.t("updates_install_failed"), self._reason(result))
@@ -348,9 +366,12 @@ class SettingsMixin:
 
     def open_pairing(self, kind="gamepad"):
         """kind: "gamepad" or "audio" (headphones, speakers): what the list shows."""
+        if getattr(self, "pairing", None) is not None or not self._start_task("bluetooth"):
+            return
         done_busy = self._busy(self.t("pairing_checking"))
 
         def started(result):
+            self._end_task("bluetooth")
             done_busy()
             if result is False:
                 self._message(self.t("pairing_no_adapter"), self.t("pairing_no_adapter_text"))

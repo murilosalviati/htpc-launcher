@@ -13,6 +13,8 @@ from ..base import Media
 
 log = logging.getLogger("htpc")
 
+PLAYER_TIMEOUT = 0.5   # seconds per player: a stuck one must not hold up the others
+
 
 class MprisMedia(Media):
     def __init__(self):
@@ -32,7 +34,7 @@ class MprisMedia(Media):
                                      interface="org.mpris.MediaPlayer2.Player")
                 try:
                     statuses.append(unwrap_msg(self.conn.send_and_get_reply(
-                        Properties(player).get("PlaybackStatus"), timeout=1))[0][1])
+                        Properties(player).get("PlaybackStatus"), timeout=PLAYER_TIMEOUT))[0][1])
                 except Exception as e:  # noqa: BLE001 - one broken player must not hide the rest
                     log.debug("no status from %s: %s", name, e)
         except Exception as e:  # noqa: BLE001 - bus gone
@@ -57,9 +59,9 @@ class MprisMedia(Media):
                                  interface="org.mpris.MediaPlayer2.Player")
             try:
                 status = unwrap_msg(self.conn.send_and_get_reply(
-                    Properties(player).get("PlaybackStatus"), timeout=1))[0][1]
+                    Properties(player).get("PlaybackStatus"), timeout=PLAYER_TIMEOUT))[0][1]
                 if status == "Playing":
-                    unwrap_msg(self.conn.send_and_get_reply(new_method_call(player, "Pause"), timeout=1))
+                    unwrap_msg(self.conn.send_and_get_reply(new_method_call(player, "Pause"), timeout=PLAYER_TIMEOUT))
                     paused.append(name)
             except Exception as e:  # one broken player must not block the rest
                 log.debug("could not pause %s: %s", name, e)

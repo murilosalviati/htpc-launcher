@@ -9,16 +9,34 @@ DATA="$HOME/.local/share/htpc-launcher"
 CONFIG="$HOME/.config/htpc-launcher"
 UNITS="$HOME/.config/systemd/user"
 
+# Never leave the installed copy missing or half-written (a failure or a power
+# cut mid-install would leave the TV without launcher and without the gamepad
+# service, and nothing on screen to fix it): copy next to it, then rename over.
+# The previous version stays as <name>.old.
+put_dir() {   # put_dir SRC DEST
+    rm -rf "$2.new"
+    cp -r "$1" "$2.new"
+    find "$2.new" -name __pycache__ -prune -exec rm -rf {} +
+    if [ -e "$2" ]; then
+        rm -rf "$2.old"
+        mv "$2" "$2.old"
+    fi
+    mv "$2.new" "$2"
+}
+put_file() {  # put_file SRC DESTDIR
+    cp "$1" "$2/.$(basename "$1").new"
+    mv -f "$2/.$(basename "$1").new" "$2/$(basename "$1")"
+}
+
 if ! python3 -c 'import evdev, jeepney' 2>/dev/null; then
     echo "Installing python3-evdev and python3-jeepney (asks for the sudo password)..."
     sudo apt install -y python3-evdev python3-jeepney
 fi
 
 mkdir -p "$DATA" "$CONFIG" "$UNITS"
-cp "$HERE/controller.py" "$DATA/"
-rm -rf "$DATA/htpc" "$DATA/htpc_config.py"
-cp -r "$HERE/../htpc" "$DATA/"
-find "$DATA/htpc" -name __pycache__ -prune -exec rm -rf {} +
+put_dir "$HERE/../htpc" "$DATA/htpc"
+put_file "$HERE/controller.py" "$DATA"
+rm -f "$DATA/htpc_config.py"
 
 if [ -f "$CONFIG/apps.json" ]; then
     echo "Kept the existing $CONFIG/apps.json."
@@ -34,7 +52,7 @@ if [ -f "$UNITS/htpc-controle.service" ]; then
     echo "Removed the old htpc-controle service."
 fi
 
-cp "$HERE/htpc-controller.service" "$UNITS/"
+put_file "$HERE/htpc-controller.service" "$UNITS"
 systemctl --user daemon-reload
 systemctl --user enable htpc-controller.service
 systemctl --user restart htpc-controller.service

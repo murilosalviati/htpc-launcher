@@ -6,6 +6,7 @@ ships those, but not always pactl)."""
 
 import json
 import logging
+import os
 import shutil
 import subprocess
 
@@ -22,7 +23,8 @@ class PulseAudio(Audio):
     def _run(command):
         if not shutil.which(command[0]):
             raise RuntimeError(f"{command[0]} is not installed")
-        return subprocess.run(command, capture_output=True, text=True, timeout=5, check=True).stdout
+        env = dict(os.environ, LC_ALL="C")   # parsed output: no translations
+        return subprocess.run(command, capture_output=True, text=True, timeout=5, check=True, env=env).stdout
 
     def outputs(self):
         sinks = json.loads(self.run(["pactl", "-f", "json", "list", "sinks"]) or "[]")

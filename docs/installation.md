@@ -59,7 +59,7 @@ The easy way is from the couch: **Settings → Updates → Launcher** downloads 
 
 By hand: download the new version and run `./install.sh` again. Your `apps.json` is kept either way.
 
-When a release says the **GNOME extension changed**, log out and back in once after updating. GNOME only loads a new extension version at login. The release notes and the [CHANGELOG](../CHANGELOG.md) say when the extension changed. The current version is 6.
+When a release says the **GNOME extension changed**, log out and back in once after updating. GNOME only loads a new extension version at login. The release notes and the [CHANGELOG](../CHANGELOG.md) say when the extension changed. The current version is 7.
 
 > With auto-login, logging out may not log you back in. Restarting the machine always works. `sudo systemctl restart gdm` also works, but it closes every open app.
 

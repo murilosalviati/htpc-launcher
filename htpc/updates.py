@@ -11,6 +11,7 @@ launcher then restarts itself; a new GNOME extension version still needs a new
 login.
 """
 
+import hashlib
 import json
 import logging
 import os
@@ -18,6 +19,7 @@ import re
 import shutil
 import subprocess
 import tarfile
+import threading
 import urllib.request
 
 from . import __version__, paths
@@ -66,10 +68,29 @@ def latest_release(get=None):
         assets = [a for a in release.get("assets", []) if a.get("name", "").endswith(".tar.gz")]
         if not assets:
             continue
+        sums = [a for a in release.get("assets", []) if a.get("name") == "SHA256SUMS"]
         return {"version": release["tag_name"].lstrip("v"), "tag": release["tag_name"],
-                "url": assets[0]["browser_download_url"], "notes": release.get("body") or "",
-                "page": release.get("html_url", "")}
+                "url": assets[0]["browser_download_url"], "file": assets[0]["name"],
+                "sums_url": sums[0]["browser_download_url"] if sums else None,
+                "notes": release.get("body") or "", "page": release.get("html_url", "")}
     return None
+
+
+def expected_sha256(sums_text, filename):
+    """The hash SHA256SUMS lists for filename ("<hash>  <name>" lines), or None."""
+    for line in sums_text.splitlines():
+        parts = line.split()
+        if len(parts) == 2 and parts[1].lstrip("*") == filename and len(parts[0]) == 64:
+            return parts[0].lower()
+    return None
+
+
+def sha256_of(path):
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for block in iter(lambda: f.read(1 << 20), b""):
+            h.update(block)
+    return h.hexdigest()
 
 
 def download(url, target):
@@ -91,14 +112,38 @@ def installed_extension_dir():
     return os.path.expanduser("~/.local/share/gnome-shell/extensions/htpc-launcher@htpc")
 
 
+_installing = threading.Lock()
+
+
 def install_release(release, fetch=None, run=None, workdir=None):
     """Download, extract and install a release. Returns {"version", "extension_changed"}.
-    Raises with the installer's last lines if it fails."""
+    Raises with the installer's last lines if it fails, or if an install is already
+    running (two at once would delete each other's files)."""
+    if not _installing.acquire(blocking=False):
+        raise RuntimeError("an update is already being installed")
+    try:
+        return _install_release(release, fetch, run, workdir)
+    finally:
+        _installing.release()
+
+
+def _install_release(release, fetch, run, workdir):
     workdir = workdir or os.path.join(paths.data_dir(), "update")
     shutil.rmtree(workdir, ignore_errors=True)
     os.makedirs(workdir)
     archive = os.path.join(workdir, "release.tar.gz")
+    # The package is only installed if it matches the SHA256SUMS published with it.
+    if not release.get("sums_url"):
+        raise RuntimeError("this release has no SHA256SUMS to check the download against")
+    sums = os.path.join(workdir, "SHA256SUMS")
+    (fetch or download)(release["sums_url"], sums)
+    with open(sums, encoding="utf-8", errors="replace") as f:
+        expected = expected_sha256(f.read(), release.get("file") or os.path.basename(release["url"]))
+    if not expected:
+        raise RuntimeError("SHA256SUMS does not list the package")
     (fetch or download)(release["url"], archive)
+    if sha256_of(archive) != expected:
+        raise RuntimeError("the download does not match its SHA256SUMS")
     with tarfile.open(archive) as tar:
         try:
             tar.extractall(workdir, filter="data")   # no paths outside workdir, no devices
@@ -143,8 +188,20 @@ def flatpak_updates(run=None):
     return sorted(found.items(), key=lambda item: item[1].lower())
 
 
+_flatpak_updating = threading.Lock()
+
+
 def flatpak_update(run=None):
     """Update every Flatpak (user and system). Raises with the last lines on failure."""
+    if not _flatpak_updating.acquire(blocking=False):
+        raise RuntimeError("the apps are already being updated")
+    try:
+        _flatpak_update(run)
+    finally:
+        _flatpak_updating.release()
+
+
+def _flatpak_update(run):
     result = (run or subprocess.run)(["flatpak", "update", "-y", "--noninteractive"],
                                      capture_output=True, text=True, timeout=1800, stdin=subprocess.DEVNULL)
     if result.returncode != 0:

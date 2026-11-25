@@ -4,6 +4,22 @@ The project is in beta: every `0.x` version is a pre-release, and the configurat
 
 ## Unreleased
 
+**Robustness and security fixes** from a code review. GNOME extension version 7: log out and back in once after updating.
+
+- **The gamepad service no longer keeps a CPU core busy during games.** Notices, Home Assistant and app events were checked after every batch of gamepad events (hundreds a second with a moving stick); now at most every 2 seconds.
+- **A broken apps.json no longer stops the gamepad service.** A JSON error or a hand-edited entry (no "id", "extra_ids": null) used to crash it on the next shortcut. Events are handled one by one, entries are read tolerantly, and the service keeps the last good settings.
+- **A broken apps.json no longer leaves a black screen.** Every save also keeps `apps.json.bak`; if apps.json can't be read, the launcher puts the last good copy back and keeps the broken one as `apps.json.broken`.
+- **apps.json is readable only by you** (it can hold the Home Assistant token).
+- **Updates are checked before they run.** Releases now come with a `SHA256SUMS`, and the launcher refuses a download that doesn't match it, or a release without one.
+- **Updates, Flatpak updates and Bluetooth pairing can't run twice at once.** A second press used to start a second install that deleted the first one's files. Buttons under a "please wait" box can no longer be pressed.
+- **Installing is atomic.** The installers copy next to the installed files and rename them into place, keeping the previous version as `.old`, so a failure or power cut mid-install never leaves the TV without launcher or gamepad service.
+- **Forcing an app to close is safer.** SIGKILL is sent only if the process is still alive, through a pidfd (so a reused PID can never be hit), and `flatpak` calls have a timeout.
+- **With Steam open, the volume no longer changes twice per press.** Steam Input's virtual gamepad copies every press; its events are now ignored.
+- **No more freezes from a slow GNOME or a stuck media player.** The launcher asks for all open windows in one call instead of one per app, the "back to the launcher" shortcut runs off the gamepad thread, and media players get 0.5 s each.
+- **The GNOME extension (version 7):** removes its pending timers when disabled; takes over its D-Bus name if something else holds it, and logs if it is lost; and limits notices (30 s at most, 4 on screen, 200 characters).
+- **Releases run the tests first.** A new Tests workflow (on every push, and before every release) runs shellcheck, an extension syntax check, and both test suites. The release workflow checks the version against the VERSION file.
+- **Smaller fixes.** The installer's "is the extension active" check no longer matches INACTIVE, the launcher's `.desktop` works with spaces in your home folder, pactl and wpctl output is read in the C locale, a failure to pause media no longer stops "back to the launcher", and the service no longer restarts every 3 seconds when python3-evdev is missing (the log says what to install).
+
 - **Settings → Audio:** pick where the sound goes (the TV, a soundbar, Bluetooth headphones or a speaker); what is playing moves along. It also pairs Bluetooth headphones and speakers. Uses PipeWire's `pw-dump` and `wpctl`, or `pactl` when installed.
 - **Bluetooth pairing for keyboards and mice** too, next to gamepads (Settings → Gamepads → Pair a gamepad, keyboard or mouse), each marked with its kind.
 - **Fixed: "Pair a gamepad" seemed to do nothing without a Bluetooth adapter.** Asking BlueZ, which isn't running without an adapter, waited about 8 seconds for it to start. The launcher now checks the kernel's adapters first and says at once that there is none, with "Checking Bluetooth…" on screen meanwhile.

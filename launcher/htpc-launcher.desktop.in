@@ -2,7 +2,7 @@
 Type=Application
 Name=HTPC Launcher
 Comment=Gamepad-driven home screen for the HTPC
-Exec=python3 @DATA@/launcher.py
+Exec=python3 "@DATA@/launcher.py"
 Icon=video-display
 StartupWMClass=htpc-launcher
 Terminal=false

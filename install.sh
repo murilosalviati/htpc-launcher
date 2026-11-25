@@ -16,7 +16,7 @@ echo "== Launcher =="
 "$HERE/launcher/install.sh"
 
 echo
-if gnome-extensions info htpc-launcher@htpc 2>/dev/null | grep -q "ACTIVE"; then
+if gnome-extensions info htpc-launcher@htpc 2>/dev/null | grep -Eq '^[[:space:]]*State:[[:space:]]*ACTIVE[[:space:]]*$'; then
     echo "All set. Start the launcher now with: gtk-launch htpc-launcher"
 else
     echo "Almost done: log out and back in so GNOME loads the extension,"

@@ -18,7 +18,7 @@ The launcher's own messages go to the session log, starting with `[launcher]`: `
 ## Common problems
 
 **Apps don't open in full screen, the pointer doesn't hide, and notices or the volume indicator don't show up.**
-GNOME is running an older version of the extension. After updating, **log out and back in** (or restart): GNOME only loads a new extension version at login. Check with `gnome-extensions info htpc-launcher@htpc`. The current version is 6.
+GNOME is running an older version of the extension. After updating, **log out and back in** (or restart): GNOME only loads a new extension version at login. Check with `gnome-extensions info htpc-launcher@htpc`. The current version is 7.
 
 **A shortcut does nothing.**
 - Is the service running? Check with `systemctl --user status htpc-controller`.
@@ -51,6 +51,12 @@ The launcher recognizes Xbox drivers by driver or by name. If yours isn't recogn
 
 **Everything feels slow on a 4K TV.**
 Use a 60 Hz mode instead of 4K at 30 Hz. See [Installation → 4K TVs](installation.md#4k-tvs).
+
+**The launcher came back with older settings.**
+Your `apps.json` could not be read, probably because of a typo from editing it by hand. The launcher put back the last good copy (`apps.json.bak`) and kept the broken file as `~/.config/htpc-launcher/apps.json.broken`, so you can fix it and copy it back.
+
+**An update was refused.**
+The download didn't match the release's `SHA256SUMS`, or the release has none (releases older than this check). Try again later, or install by hand, as described in [Installation](installation.md#updating).
 
 **The weather says the place was not found.**
 For a Brazilian CEP, use 8 digits. For a city name, add the state or country, for example "Campinas SP".

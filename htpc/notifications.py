@@ -48,7 +48,7 @@ class Notifier:
         self.backend = backend
         self._windows = None
         self.clock = clock
-        self.settings = settings or (lambda: config.load()[0])
+        self.settings = settings or config.load_quietly
         self.pads = None             # Counter of gamepad names, None until the first look
         self.battery_stage = {}      # gamepad name -> last stage announced
         self.internet = None         # last announced state: "full", "limited", "none"

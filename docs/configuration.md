@@ -4,6 +4,9 @@
 
 Everything is in **`~/.config/htpc-launcher/apps.json`**. Most of it can be changed from the launcher's Settings. This page covers every field, for editing by hand.
 
+- **Permissions:** the file is readable only by you, because it can hold a Home Assistant token.
+- **Last good copy:** every save also writes `apps.json.bak`. If `apps.json` gets broken, the launcher restores that copy and keeps the broken file as `apps.json.broken`.
+
 The launcher and the background service read the file again on their own, so most changes need no restart. Changes to the app list are the exception: they show up the next time the launcher starts. Back the file up before updating the launcher.
 
 ## Example

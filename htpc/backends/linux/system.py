@@ -7,6 +7,7 @@ import glob
 import logging
 import os
 import re
+import select
 import shutil
 import signal
 import subprocess
@@ -15,6 +16,9 @@ import time
 from ..base import System
 
 log = logging.getLogger("htpc")
+
+FLATPAK_TIMEOUT = 5   # seconds for flatpak info / kill (it can block while an update runs)
+KILL_AFTER = 2.0      # seconds between SIGTERM and SIGKILL, if the process is still alive
 
 
 # What a program needs to reach the graphical session (X apps like Steam need
@@ -77,26 +81,48 @@ class LinuxSystem(System):
             return False
 
     def force_close(self, app_id, pid):
-        if app_id and subprocess.run(["flatpak", "info", app_id], capture_output=True).returncode == 0:
-            log.info("forcing: flatpak kill %s", app_id)
-            subprocess.run(["flatpak", "kill", app_id], capture_output=True)
-            return
+        try:
+            if app_id and subprocess.run(["flatpak", "info", app_id], capture_output=True,
+                                         timeout=FLATPAK_TIMEOUT).returncode == 0:
+                log.info("forcing: flatpak kill %s", app_id)
+                subprocess.run(["flatpak", "kill", app_id], capture_output=True, timeout=FLATPAK_TIMEOUT)
+                return
+        except subprocess.TimeoutExpired:
+            log.warning("flatpak did not answer (an update running?); trying the process itself")
         if not pid or pid <= 1 or pid == os.getpid():
             log.warning("don't know how to force %r to close", app_id)
             return
-        log.info("forcing: SIGTERM to pid %d", pid)
+        # A pidfd pins the process: if it exits and its PID gets reused, signals
+        # through the pidfd can't reach the new process.
         try:
-            os.kill(pid, signal.SIGTERM)
-            time.sleep(2)
-            os.kill(pid, signal.SIGKILL)
-            log.info("SIGKILL to pid %d", pid)
+            pidfd = os.pidfd_open(pid)
+        except ProcessLookupError:
+            return   # already gone
+        except (OSError, AttributeError) as e:
+            log.warning("can't watch pid %d safely (%s); sending SIGTERM only", pid, e)
+            try:
+                os.kill(pid, signal.SIGTERM)
+            except ProcessLookupError:
+                pass
+            return
+        try:
+            log.info("forcing: SIGTERM to pid %d", pid)
+            signal.pidfd_send_signal(pidfd, signal.SIGTERM)
+            exited, _, _ = select.select([pidfd], [], [], KILL_AFTER)   # readable once it has exited
+            if not exited:
+                signal.pidfd_send_signal(pidfd, signal.SIGKILL)
+                log.info("SIGKILL to pid %d", pid)
         except ProcessLookupError:
             pass
+        finally:
+            os.close(pidfd)
 
     # --- volume: PipeWire (wpctl), or PulseAudio (pactl) ------------------------------
 
     def _run(self, command):
-        return subprocess.run(command, capture_output=True, text=True, timeout=3, check=True).stdout
+        # C locale: the output is parsed ("45%", "Volume: 0.45"), so no translated words or decimal commas.
+        env = dict(os.environ, LC_ALL="C")
+        return subprocess.run(command, capture_output=True, text=True, timeout=3, check=True, env=env).stdout
 
     def change_volume(self, step):
         if shutil.which("wpctl"):

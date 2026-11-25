@@ -1,0 +1,40 @@
+# Checks and tests, on every push and pull request, and before every release.
+name: Tests
+
+on:
+  push:
+  pull_request:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install what the tests need
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends python3-gi gir1.2-gtk-4.0 python3-evdev \
+            python3-jeepney xvfb dbus dbus-x11 shellcheck
+
+      - name: Shell scripts (shellcheck)
+        run: shellcheck install.sh */install.sh gnome-extension/test.sh
+
+      - name: GNOME extension (syntax)
+        run: |
+          cp gnome-extension/htpc-launcher@htpc/extension.js /tmp/extension.mjs
+          node --check /tmp/extension.mjs
+          python3 -c "import json; m = json.load(open('gnome-extension/htpc-launcher@htpc/metadata.json')); assert m['uuid'] == 'htpc-launcher@htpc' and isinstance(m['version'], int)"
+
+      - name: Controller tests
+        run: dbus-run-session -- python3 tests/test_controller.py
+
+      - name: Launcher tests
+        run: |
+          export HOME="$(mktemp -d)"
+          python3 tests/make_test_home.py "$HOME"
+          xvfb-run -a -s "-screen 0 1920x1080x24" dbus-run-session -- python3 tests/test_launcher.py

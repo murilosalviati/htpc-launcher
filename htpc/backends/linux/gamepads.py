@@ -242,6 +242,8 @@ class EvdevGamepads(Gamepads):
             dev = self.devs.get(path)
             try:
                 for ev in dev.read():
+                    if self.virtual.get(path):
+                        continue   # Steam Input's copy of a real pad: counting it too would double every press
                     events.extend(self.translate(path, dev, ev))
             except BlockingIOError:
                 pass
