@@ -50,6 +50,13 @@ gi.require_version("Gdk", "4.0")
 gi.require_version("Pango", "1.0")
 from gi.repository import Gdk, Gio, Gtk, Pango  # noqa: E402
 
+try:   # GLib 2.80+ moved the Unix fd watch to GLibUnix (the GLib one warns there)
+    gi.require_version("GLibUnix", "2.0")
+    from gi.repository import GLibUnix  # noqa: E402
+    unix_fd_add = GLibUnix.fd_add_full
+except (ValueError, ImportError):
+    unix_fd_add = GLib.unix_fd_add_full
+
 HERE = Path(__file__).resolve().parent
 # Installed: the htpc package sits next to this file. In the repo: one folder up.
 sys.path.insert(0, str(HERE))
@@ -161,7 +168,7 @@ class Navigator:
         for fd in [fd for fd in self.watches if fd not in wanted]:
             GLib.source_remove(self.watches.pop(fd))   # a gamepad that went away
         for fd in wanted - self.watches.keys():
-            self.watches[fd] = GLib.unix_fd_add_full(
+            self.watches[fd] = unix_fd_add(
                 GLib.PRIORITY_DEFAULT, fd, GLib.IOCondition.IN | self.BROKEN, self._readable)
 
     def _readable(self, fd, condition):

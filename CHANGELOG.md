@@ -2,9 +2,9 @@
 
 The project is in beta: every `0.x` version is a pre-release, and the configuration format or install steps may still change.
 
-## Unreleased
+## 0.1.0-beta.6
 
-**Robustness and security fixes** from a code review. GNOME extension version 7: log out and back in once after updating.
+Update by running `./install.sh` again, then **log out and back in once** so GNOME loads version 7 of the extension. Your `apps.json` is kept. New: Settings → Audio, Bluetooth keyboards and mice, per-app resolution, cinema mode, updates from Settings; robustness and security fixes from a code review; much less work in the background.
 
 - **The gamepad service no longer keeps a CPU core busy during games.** Notices, Home Assistant and app events were checked after every batch of gamepad events (hundreds a second with a moving stick); now at most every 2 seconds.
 - **A broken apps.json no longer stops the gamepad service.** A JSON error or a hand-edited entry (no "id", "extra_ids": null) used to crash it on the next shortcut. Events are handled one by one, entries are read tolerantly, and the service keeps the last good settings.
@@ -18,7 +18,7 @@ The project is in beta: every `0.x` version is a pre-release, and the configurat
 - **No more freezes from a slow GNOME or a stuck media player.** The launcher asks for all open windows in one call instead of one per app, the "back to the launcher" shortcut runs off the gamepad thread, and media players get 0.5 s each.
 - **The GNOME extension (version 7):** removes its pending timers when disabled; takes over its D-Bus name if something else holds it, and logs if it is lost; and limits notices (30 s at most, 4 on screen, 200 characters).
 - **Releases run the tests first.** A new Tests workflow (on every push, and before every release) runs shellcheck, an extension syntax check, and both test suites. The release workflow checks the version against the VERSION file.
-- **Smaller fixes.** The installer's "is the extension active" check no longer matches INACTIVE, the launcher's `.desktop` works with spaces in your home folder, pactl and wpctl output is read in the C locale, a failure to pause media no longer stops "back to the launcher", and the service no longer restarts every 3 seconds when python3-evdev is missing (the log says what to install).
+- **Smaller fixes.** The installer's "is the extension active" check no longer matches INACTIVE, the launcher's `.desktop` works with spaces in your home folder, pactl and wpctl output is read in the C locale, a failure to pause media no longer stops "back to the launcher", the service no longer restarts every 3 seconds when python3-evdev is missing (the log says what to install), and the launcher uses GLibUnix for its gamepad watches on GLib 2.80 and newer (no more deprecation warning in the log).
 - **Less work in the background.**
   - The launcher stops reading the gamepads (it did so 60 times a second, all the time) and skips its network and gamepad checks while an app is in front. What was pressed inside the app is thrown away when the launcher comes back, so it doesn't act on it.
   - A stick only sends an event when it crosses the dead zone, instead of hundreds a second while it moves, and Steam Input's virtual gamepads are no longer opened at all.
