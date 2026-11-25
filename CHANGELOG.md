@@ -4,6 +4,8 @@ The project is in beta: every `0.x` version is a pre-release, and the configurat
 
 ## Unreleased
 
+- **Fixed: a Bluetooth LE gamepad (newer Xbox controllers) connected but did nothing.** The kernel handles them through uhid, under /devices/virtual, and the launcher took them for Steam Input's virtual pads and left them alone. Only uinput devices count as virtual now.
+
 - **Fixed: an Xbox controller refused to pair over Bluetooth** (AuthenticationFailed). In a GNOME session GNOME's own agent answers the pairing, in a window the launcher hides. While pairing, the launcher now registers its own agent (no screen, no keys: it accepts), and tries once more if the first attempt is refused. A refusal now says what to do instead of showing BlueZ's error, and long messages wrap instead of running off the screen.
 
 - **Lights by room follow your order:** the rooms come in the order of your choice, not alphabetically.

@@ -155,11 +155,13 @@ def uses_xbox_codes(path, name=""):
     return False
 
 
-def is_virtual(path):
-    """True for gamepads made by software (uinput), e.g. Steam Input's virtual pads."""
+def is_virtual(path, sys_input="/sys/class/input"):
+    """True for gamepads made by software (uinput), e.g. Steam Input's virtual pads.
+    Bluetooth LE gamepads (newer Xbox controllers) also sit under /devices/virtual,
+    but in uhid, the kernel's bridge for HID over Bluetooth LE: they are real."""
     name = os.path.basename(path)  # eventN
-    real = os.path.realpath(f"/sys/class/input/{name}/device")
-    return "/devices/virtual/" in real
+    real = os.path.realpath(f"{sys_input}/{name}/device")
+    return "/devices/virtual/" in real and "/uhid/" not in real
 
 
 class EvdevGamepads(Gamepads):

@@ -75,3 +75,24 @@ def test_flush_drops_what_is_waiting_and_centers_the_sticks(ecodes):
     pads.sticks[("p", ecodes.ABS_X)] = 1
     pads.flush()
     assert waiting.n == 0 and pads.sticks == {}
+
+
+def test_bluetooth_le_gamepads_are_not_virtual(tmp_path):
+    from htpc.backends.linux.gamepads import is_virtual
+    sys_input = tmp_path / "class/input"
+    sys_input.mkdir(parents=True)
+    devices = {
+        # Steam Input's pad, made with uinput
+        "event20": tmp_path / "devices/virtual/input/input40",
+        # an Xbox controller over Bluetooth LE: HID through uhid
+        "event21": tmp_path / "devices/virtual/misc/uhid/0005:045E:0B13.0003/input/input41",
+        # a USB gamepad
+        "event22": tmp_path / "devices/pci0000:00/0000:00:14.0/usb1/1-2/input/input42",
+    }
+    for event, target in devices.items():
+        target.mkdir(parents=True)
+        (sys_input / event).mkdir()
+        (sys_input / event / "device").symlink_to(target)
+    assert is_virtual("/dev/input/event20", str(sys_input))
+    assert not is_virtual("/dev/input/event21", str(sys_input))
+    assert not is_virtual("/dev/input/event22", str(sys_input))
