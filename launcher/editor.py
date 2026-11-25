@@ -20,6 +20,7 @@ self.app_icons_dir...), and nothing here is specific to an operating system.
 """
 
 import os
+import sys
 from pathlib import Path
 
 from htpc import themes
@@ -30,7 +31,11 @@ gi.require_version("Gtk", "4.0")
 gi.require_version("Pango", "1.0")
 from gi.repository import Gtk, Pango  # noqa: E402
 
-from htpc.backends.base import IconRef  # noqa: E402
+from htpc.backends.base import IconRef, parse_mode_key  # noqa: E402
+
+
+def log(*args):
+    print("[launcher]", *args, file=sys.stderr, flush=True)
 
 # Settings that only make sense for the shortcut's original application.
 # If the shortcut is switched to another application, they are dropped.
@@ -69,7 +74,7 @@ class EditorMixin:
     def edit_app(self, index):
         original = dict(self.cfg["apps"][index]) if index is not None else {}
         draft = {"name": original.get("name", "")}
-        for k in ("id", "launch", "icon", *APP_SPECIFIC_KEYS):
+        for k in ("id", "launch", "icon", "display_mode", *APP_SPECIFIC_KEYS):
             if k in original:
                 draft[k] = original[k]
         self.editor = {"index": index, "original": original, "draft": draft}
@@ -83,7 +88,8 @@ class EditorMixin:
         self.field_name = self._field(self.t("field_name"), self._edit_name)
         self.field_app = self._field(self.t("field_app"), self._choose_app)
         self.field_icon = self._field(self.t("field_icon"), self._choose_icon)
-        for f in (self.field_name, self.field_app, self.field_icon):
+        self.field_display = self._field(self.t("field_display"), self._choose_display)
+        for f in (self.field_name, self.field_app, self.field_icon, self.field_display):
             box.append(f)
 
         self.editor_error = Gtk.Label(label="")
@@ -102,7 +108,7 @@ class EditorMixin:
         box.append(button_box)
 
         self._refresh_editor()
-        rows = [[self.field_name], [self.field_app], [self.field_icon], buttons]
+        rows = [[self.field_name], [self.field_app], [self.field_icon], [self.field_display], buttons]
         # For a new shortcut, picking the app comes first (the name comes from it).
         self.push_overlay(box, rows, focus=self.field_app if index is None else self.field_name)
 
@@ -140,6 +146,7 @@ class EditorMixin:
         self.field_app.value.set_label(self._describe_app(draft))
         icon = draft.get("icon")
         self.field_icon.value.set_label(Path(os.path.expanduser(icon)).name if icon else self.t("own_icon"))
+        self.field_display.value.set_label(self._display_label(draft.get("display_mode")))
         self.editor_preview.set_from_gicon(self.icon_for(draft))
         self.editor_preview.set_pixel_size(112)
         self.editor_error.set_visible(False)
@@ -172,6 +179,9 @@ class EditorMixin:
         for k in APP_SPECIFIC_KEYS:
             if k in draft:
                 app[k] = draft[k]
+        app.pop("display_mode", None)
+        if draft.get("display_mode"):
+            app["display_mode"] = draft["display_mode"]
 
         apps = self.cfg.setdefault("apps", [])
         if index is None:
@@ -195,6 +205,67 @@ class EditorMixin:
         self.save_config()
         self.pop_overlay()  # closes the editor (the confirmation already closed)
         self.build_grid(focus=min(index, len(apps) - 1) if apps else -1)
+
+    # --- resolution ----------------------------------------------------------------------
+
+    DISPLAY_CHOICES = 6   # modes listed besides "Default" (seven rows fit a 1080p screen)
+
+    def _display_label(self, key):
+        if not key:
+            return self.t("display_default")
+        try:
+            w, h, rate = parse_mode_key(key)
+        except ValueError:
+            return key
+        return f"{w}×{h}" + (f" · {round(rate)} Hz" if rate else "")
+
+    def _display_choices(self):
+        """The screen's modes worth offering: one per size and rounded rate, biggest first."""
+        try:
+            modes = self.display.modes()
+        except Exception as e:  # noqa: BLE001
+            log("no display modes:", e)
+            return []
+        seen, out = set(), []
+        for m in sorted(modes, key=lambda m: (-m.width * m.height, -m.refresh)):
+            if m.width < 1280 or m.key() in seen:
+                continue
+            seen.add(m.key())
+            out.append(m)
+        return out[:self.DISPLAY_CHOICES]
+
+    def _choose_display(self):
+        choices = self._display_choices()
+        if not choices:
+            self._message(self.t("display_unavailable"))
+            return
+        try:
+            default = self.display.default_mode()
+        except Exception:  # noqa: BLE001
+            default = None
+        box = self.dialog_box(self.t("display_title"), self.t("display_text"))
+        box.add_css_class("editor")
+        box.add_css_class("settings")
+        box.set_spacing(16)
+        current = self.editor["draft"].get("display_mode")
+        rows, focus = [], None
+        default_text = self.t("display_default") + (f" ({default.label()})" if default else "")
+        options = [(None, default_text)] + [(m.key(), m.label()) for m in choices]
+        for key, text in options:
+            b = self._field(text, lambda k=key: self._display_chosen(k), title_width=420)
+            box.append(b)
+            rows.append([b])
+            if key == current or (key is None and not current):
+                focus = b
+        self.push_overlay(box, rows, focus=focus)
+
+    def _display_chosen(self, key):
+        self.pop_overlay()
+        if key:
+            self.editor["draft"]["display_mode"] = key
+        else:
+            self.editor["draft"].pop("display_mode", None)
+        self._refresh_editor()
 
     # --- name: on-screen keyboard ---------------------------------------------------------
 

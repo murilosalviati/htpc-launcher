@@ -32,7 +32,7 @@ What changed in each version is in the [CHANGELOG](../CHANGELOG.md).
   | Start + Select + LB + RB | Close the app. |
   | Start + Select + ↑ / ↓ | Volume up or down. |
 
-- **Settings, from the couch:** apps, background, weather, units, language, notices, gamepads (pairing and shortcuts), and Home Assistant.
+- **Settings, from the couch:** apps (each with its own resolution if you want), background, weather, units, language, notices, gamepads (pairing and shortcuts), Home Assistant (TV control and cinema mode), and updates.
 - **Over full-screen apps:** notices and the volume indicator show on top of any video or game.
 
 [← Back to the project page](../README.md)

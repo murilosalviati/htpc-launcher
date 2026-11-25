@@ -8,6 +8,7 @@
   apps      .desktop files (system, user, Flatpak) through Gio
   system    systemd for restart/shut down, Flatpak and signals to force-close
   bluetooth BlueZ over the system D-Bus, to pair gamepads
+  display   Mutter's DisplayConfig over D-Bus, for per-app resolutions
 
 Needs python3-jeepney and python3-evdev; the app catalog also needs python3-gi.
 """
@@ -45,3 +46,7 @@ class LinuxBackend(Backend):
     def bluetooth(self):
         from .bluetooth import BluezBluetooth
         return BluezBluetooth()
+
+    def display(self):
+        from .display import MutterDisplay
+        return MutterDisplay()

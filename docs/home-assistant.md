@@ -5,6 +5,7 @@ The launcher can work with [Home Assistant](https://www.home-assistant.io/) to c
 - **Wake the TV with the gamepad.** Plug in a gamepad, turn one on, or press any button. If the TV is off, Home Assistant turns it on and switches it to the HTPC's input.
 - **Turn the TV off from the launcher.** A "Turn off TV" button in the middle of the footer.
 - **Ignore the gamepad while the TV is off.** The launcher and the gamepad shortcuts do nothing while the screen is dark. The first press only wakes the TV, so you never open an app you can't see.
+- **Cinema mode.** The launcher tells Home Assistant when an app opens or closes and when a video plays, pauses or stops, so an automation can dim the lights.
 
 All of this is optional. Without Home Assistant the launcher works exactly as before.
 
@@ -18,6 +19,7 @@ All of this is optional. Without Home Assistant the launcher works exactly as be
   - [1. The automation in Home Assistant](#1-the-automation-in-home-assistant)
   - [2. The launcher's settings](#2-the-launchers-settings)
   - [3. Optional: ignore the gamepad while the TV is off](#3-optional-ignore-the-gamepad-while-the-tv-is-off)
+  - [4. Optional: cinema mode](#4-optional-cinema-mode)
 - [Using it](#using-it)
 - [Settings reference](#settings-reference)
 - [Events](#events)
@@ -102,6 +104,16 @@ This step needs a long-lived access token:
 3. **Pick the TV:** in Settings → Home Assistant → **TV**, the launcher lists Home Assistant's media players. Pick yours.
 4. **Check it:** **Test the connection** now also says whether the TV is on or off.
 
+### 4. Optional: cinema mode
+
+App and media events go to a **second webhook**. A Home Assistant webhook only triggers one automation, and the one that wakes the TV must not react to these events.
+
+1. **Copy the automation:** start from [`extras/home-assistant/cinema-mode.yaml`](../extras/home-assistant/cinema-mode.yaml). It dims the lights to 10% while a video plays in Jellyfin or YouTube, to 50% on pause, and back to 100% when the video stops or the app closes. Lights that are off stay off.
+2. **Fill it in:** replace `WEBHOOK_ID` with a new hard-to-guess id. Replace `light.living_room` with your lights (a light group or scenes work too), and set the app names to match your `apps.json`.
+3. **Connect the launcher:** in Settings → Home Assistant → **App and media events**, type the same id. Leave it empty to send nothing.
+
+The events, with what they carry, are listed under [Events](#events). Adapt the automation to anything else: a soundbar's sound mode, blinds, or pausing a robot vacuum.
+
 ## Using it
 
 **Wake the TV:**
@@ -127,6 +139,7 @@ The `home_assistant` entry of `apps.json`:
 | `url` | Home Assistant's address. | Address |
 | `webhook_id` | The automation's webhook id. | Webhook ID |
 | `enabled` | `false` turns the whole integration off and keeps the other fields. Defaults to `true`. | Use Home Assistant |
+| `events_webhook_id` | A second webhook, for app and media events (cinema mode). Empty: nothing is sent. | App and media events |
 | `token` | A long-lived access token, used to read the TV's state. | Access token (shows only whether it is set) |
 | `tv_entity` | The TV's entity, such as `media_player.living_room_tv`. | TV |
 | `tv_name` | The TV's name as shown in Settings. Filled in when you pick the TV. | TV |
@@ -148,7 +161,23 @@ Each event is a `POST` to `<url>/api/webhook/<webhook_id>` with a JSON body:
 | `tv_off` | launcher | The "Turn off TV" button. |
 | `test` | launcher | Settings → Home Assistant → Test the connection. |
 
-In the automation, the body is in `trigger.json`, so you can write your own automations around these events. For example, dim the lights when a gamepad connects.
+On the **events webhook** (`events_webhook_id`), only if it is set, the controller service checks every 2 seconds and sends:
+
+```json
+{"event": "media_playing", "app": "Jellyfin", "front": "Jellyfin", "host": "htpc"}
+```
+
+| `event` | When | `app` |
+|---|---|---|
+| `app_opened` | An app from `apps.json` opens its first window. | That app's name. |
+| `app_closed` | Its last window closes. | That app's name. |
+| `media_playing` | Something starts playing (any media player, through MPRIS). | The app in front. |
+| `media_paused` | Everything that was playing is paused. | The app in front. |
+| `media_stopped` | Nothing is playing or paused any more. | The app in front. |
+
+`front` is always the app in front, or `launcher`. Nothing is sent for what was already open or playing when the service started.
+
+In an automation, the body is in `trigger.json`, so you can write your own automations around any of these events.
 
 ## Troubleshooting
 

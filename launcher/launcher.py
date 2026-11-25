@@ -57,6 +57,7 @@ sys.path.insert(0, str(HERE))
 sys.path.insert(1, str(HERE.parent))
 from htpc import config, home_assistant, paths, shortcuts, themes, weather  # noqa: E402
 from htpc.backends import get_backend  # noqa: E402
+from htpc.backends.base import pick_mode  # noqa: E402
 from htpc.i18n import Translator  # noqa: E402
 from editor import EditorMixin  # noqa: E402
 from settings import SettingsMixin  # noqa: E402
@@ -66,6 +67,7 @@ ICONS = HERE / "icons"
 LAUNCHER_ID = "htpc-launcher"
 OPENING_GRACE = 20   # seconds an app counts as "opening" and is not started again
 FULLSCREEN_FOR = 60  # seconds after starting an app during which its new windows go full screen
+DISPLAY_APP_GRACE = 15  # seconds after switching to an app's resolution before the launcher may undo it
 RESUME_DELAY = 1500  # ms to wait after on_resume before raising the app's window
 COLUMNS = 5          # tiles per row; more apps wrap onto more rows
 PRESS_MS = 260       # length of the "button pushed" animation of a tile
@@ -291,6 +293,9 @@ class Launcher(EditorMixin, SettingsMixin):
         self.apps = backend.apps()
         self.system = backend.system()
         self.bluetooth = backend.bluetooth()
+        self.display = backend.display()
+        self.display_app_until = 0.0     # an app's own resolution: don't go back to the default before this
+        self.display_changed = True      # check once at start (a mode left over from before)
         self.app_icons_dir = paths.app_icons_dir()
 
         # Background color: its own CSS provider, above launcher.css, so it can change live.
@@ -331,7 +336,7 @@ class Launcher(EditorMixin, SettingsMixin):
         keys.connect("key-pressed", self._on_key)
         self.win.add_controller(keys)
 
-        self.win.connect("notify::is-active", lambda *_: self.win.is_active() and self.refresh_status())
+        self.win.connect("notify::is-active", self._active_changed)
 
         self.navigator = Navigator(backend.gamepads(), self.win.is_active, self.move, self.press,
                                    self.back, self.other_button, blocked=home_assistant.input_blocked)
@@ -740,10 +745,45 @@ class Launcher(EditorMixin, SettingsMixin):
         self.weather_place.set_label(place.get("name", ""))
         self.weather_box.set_visible(True)
 
+    def _active_changed(self, *_):
+        if self.win.is_active():
+            self.refresh_status()
+            self.restore_display()
+
     def _every_3s(self):
         if self.win.is_active() and not self.overlays:
             self.refresh_status()
+        if self.win.is_active():
+            self.restore_display()
         return True
+
+    # --- per-app resolution --------------------------------------------------------
+
+    def use_display_mode(self, key):
+        """Switch the screen to an apps.json mode key ("3840x2160@30"), or to the
+        default with None. Nothing happens when it is already there or can't be done."""
+        try:
+            modes = self.display.modes()
+            target = pick_mode(modes, key) if key else self.display.default_mode()
+            if target is None:
+                if key:
+                    log("no", key, "mode on this screen")
+                return False
+            if target.current:
+                return False
+            log("display:", target.label())
+            self.display.apply(target)
+            return True
+        except Exception as e:  # noqa: BLE001 - no Mutter, refused...
+            log("could not change the resolution:", e)
+            return False
+
+    def restore_display(self):
+        """The launcher is in front: the default resolution, unless an app just asked for its own."""
+        if not self.display_changed or time.monotonic() < self.display_app_until:
+            return
+        self.display_changed = False
+        self.use_display_mode(None)
 
     # --- apps --------------------------------------------------------------------
 
@@ -770,6 +810,12 @@ class Launcher(EditorMixin, SettingsMixin):
     def open_app(self, tile):
         app = tile.app
         app_id = app["id"]
+        # The app's own resolution (or the default) before its window shows up.
+        mode = app.get("display_mode")
+        if self.use_display_mode(mode) or mode:
+            self.display_changed = True
+            if mode:
+                self.display_app_until = time.monotonic() + DISPLAY_APP_GRACE
         windows = app.get("preferred_windows")
         if app.get("fullscreen", True):
             # Covers both cases: an open window goes full screen now, a new one when it appears.

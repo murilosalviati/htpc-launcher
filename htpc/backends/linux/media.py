@@ -18,6 +18,33 @@ class MprisMedia(Media):
     def __init__(self):
         self.conn = None
 
+    def _players(self):
+        if self.conn is None:
+            self.conn = open_dbus_connection(bus="SESSION")
+        names = unwrap_msg(self.conn.send_and_get_reply(message_bus.ListNames(), timeout=2))[0]
+        return [n for n in names if n.startswith("org.mpris.MediaPlayer2.")]
+
+    def playback(self):
+        try:
+            statuses = []
+            for name in self._players():
+                player = DBusAddress("/org/mpris/MediaPlayer2", bus_name=name,
+                                     interface="org.mpris.MediaPlayer2.Player")
+                try:
+                    statuses.append(unwrap_msg(self.conn.send_and_get_reply(
+                        Properties(player).get("PlaybackStatus"), timeout=1))[0][1])
+                except Exception as e:  # noqa: BLE001 - one broken player must not hide the rest
+                    log.debug("no status from %s: %s", name, e)
+        except Exception as e:  # noqa: BLE001 - bus gone
+            log.debug("playback: %s", e)
+            self.conn = None
+            return None
+        if "Playing" in statuses:
+            return "playing"
+        if "Paused" in statuses:
+            return "paused"
+        return "stopped"
+
     def pause_all(self):
         if self.conn is None:
             self.conn = open_dbus_connection(bus="SESSION")

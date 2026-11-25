@@ -30,7 +30,7 @@ sys.path.insert(1, str(HERE.parent))
 
 from htpc import config  # noqa: E402
 from htpc.backends import get_backend  # noqa: E402
-from htpc.home_assistant import HomeAssistant, TvGate  # noqa: E402
+from htpc.home_assistant import AppEvents, HomeAssistant, TvGate  # noqa: E402
 from htpc.notifications import Notifier  # noqa: E402
 from htpc.shortcuts import GamepadShortcuts, Shortcuts  # noqa: E402
 
@@ -46,6 +46,7 @@ def run(backend, poll_timeout=2.0):
     home_assistant = HomeAssistant(gamepads)
     tv = TvGate(home_assistant.settings, home_assistant.wake)
     tv.start()
+    events = AppEvents(backend.window_control(), backend.media(), home_assistant.settings)
     while True:
         for event in gamepads.poll(handler.timeout(poll_timeout)):
             if event.kind == "disconnected":
@@ -56,7 +57,7 @@ def run(backend, poll_timeout=2.0):
                 handler.handle(event)
                 home_assistant.button(event)
         handler.tick()   # holding a volume combo keeps changing it
-        for job in (notifier.tick, home_assistant.tick):
+        for job in (notifier.tick, home_assistant.tick, events.tick):
             try:
                 job()
             except Exception as e:  # noqa: BLE001 - extras must never stop the shortcuts

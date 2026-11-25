@@ -186,6 +186,59 @@ def fake_bluez():
         conn.send(r)
 
 
+# --- a fake Mutter DisplayConfig ----------------------------------------------------------
+
+mutter = {
+    "modes": [("3840x2160@30.000", 3840, 2160, 30.0), ("3840x2160@25.000", 3840, 2160, 25.0),
+              ("2560x1440@59.951", 2560, 1440, 59.951), ("1920x1080@60.000", 1920, 1080, 60.0),
+              ("1920x1080@50.000", 1920, 1080, 50.0), ("1280x720@60.000", 1280, 720, 60.0),
+              ("1024x768@60.004", 1024, 768, 60.004)],
+    "current": "2560x1440@59.951",
+    "preferred": "3840x2160@30.000",
+    "serial": 7,
+    "applied": [],
+}
+
+
+def _mutter_state():
+    modes = []
+    for mode_id, w, h, rate in mutter["modes"]:
+        props = {}
+        if mode_id == mutter["current"]:
+            props["is-current"] = ("b", True)
+        if mode_id == mutter["preferred"]:
+            props["is-preferred"] = ("b", True)
+        modes.append((mode_id, w, h, rate, 1.0, [1.0, 2.0], props))
+    spec = ("HDMI-2", "GSM", "LG TV", "0x01")
+    monitors = [(spec, modes, {"display-name": ("s", "LG TV")})]
+    logical = [(0, 0, 1.0, 0, True, [spec], {})]
+    return (mutter["serial"], monitors, logical, {})
+
+
+def fake_mutter():
+    conn = open_dbus_connection(bus="SESSION")
+    conn.send_and_get_reply(message_bus.RequestName("org.gnome.Mutter.DisplayConfig"))
+    while True:
+        m = conn.receive()
+        if m.header.message_type != MessageType.method_call:
+            continue
+        name, args = m.header.fields[3], m.body
+        if name == "GetCurrentState":
+            r = new_method_return(m, "ua((ssss)a(siiddada{sv})a{sv})a(iiduba(ssss)a{sv})a{sv}", _mutter_state())
+        elif name == "ApplyMonitorsConfig":
+            serial, method, config, _props = args
+            if serial != mutter["serial"]:
+                r = new_error(m, "org.freedesktop.DBus.Error.AccessDenied", "s", ("stale serial",))
+            else:
+                mutter["applied"].append((method, config))
+                mutter["current"] = config[0][5][0][1]
+                mutter["serial"] += 1
+                r = new_method_return(m)
+        else:
+            r = new_error(m, "org.freedesktop.DBus.Error.UnknownMethod")
+        conn.send(r)
+
+
 def start():
-    for f in (shell, player, fake_bluez):
+    for f in (shell, player, fake_bluez, fake_mutter):
         threading.Thread(target=f, daemon=True).start()

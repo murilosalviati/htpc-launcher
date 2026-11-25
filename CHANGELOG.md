@@ -2,6 +2,12 @@
 
 The project is in beta: every `0.x` version is a pre-release, and the configuration format or install steps may still change.
 
+## Unreleased
+
+- **Per-app resolution.** In edit mode → Resolution, pick one of the screen's modes for an app (for example 4K for Jellyfin). The screen switches when the app opens or comes back, and returns to the default (GNOME's saved mode) in the launcher. The switch is never saved as GNOME's setting, so there is no "keep these settings?" prompt.
+- **Cinema mode (Home Assistant).** With a second webhook set in Settings → Home Assistant → App and media events, the controller service sends app_opened / app_closed and media_playing / media_paused / media_stopped. `extras/home-assistant/cinema-mode.yaml` dims the lights while a video plays. A separate webhook, because a Home Assistant webhook only triggers one automation.
+- **Updates from Settings.** A new Updates button: the newest launcher release from GitHub (downloaded, installed, and the launcher restarted), and the Flatpak apps (`flatpak update`).
+
 ## 0.1.0-beta.5
 
 Update by running `./install.sh` again, then **log out and back in once** so GNOME loads version 6 of the extension (notices, the hidden pointer and the volume indicator need it). Your `apps.json` is kept. **The "back to the launcher" shortcut changed:** it is now Home + LB + RB instead of the guide button alone.

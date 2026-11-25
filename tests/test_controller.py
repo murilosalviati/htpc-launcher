@@ -225,6 +225,145 @@ press2(*COMBO)
 check("with a custom home combo, the old one does nothing and the new one works",
       fired == ["home", "close"])
 
+# 9a1e. app and media events for Home Assistant (cinema mode)
+from htpc.backends.base import Window  # noqa: E402
+from htpc import home_assistant as hass  # noqa: E402
+ev_cfg = {"apps": [{"name": "Jellyfin", "id": "org.jellyfin.JellyfinDesktop"},
+                   {"name": "Steam", "id": "com.valvesoftware.Steam", "extra_ids": ["steam"]}],
+          "home_assistant": {"url": "http://ha.local:8123", "webhook_id": "w"}}
+ev_windows = []
+ev_play = ["stopped"]
+ev_sent = []
+ev_clock = [0.0]
+events = hass.AppEvents(SimpleNamespace(windows=lambda: list(ev_windows)),
+                        SimpleNamespace(playback=lambda: ev_play[0]), lambda: ev_cfg,
+                        post=lambda url, payload: ev_sent.append((url, payload["event"], payload["app"])),
+                        clock=lambda: ev_clock[0], background=False)
+
+
+def ev_tick():
+    ev_clock[0] += hass.EVENTS_EVERY
+    events.tick()
+
+
+ev_windows[:] = [Window(app_id="htpc-launcher", ids=["htpc-launcher"], title="", pid=1, focused=True)]
+ev_tick()
+ev_windows.append(Window(app_id="org.jellyfin.JellyfinDesktop", ids=["org.jellyfin.jellyfindesktop"],
+                         title="Jellyfin", pid=2, focused=False))
+ev_tick()
+check("events: nothing is sent without the events webhook", ev_sent == [])
+ev_cfg["home_assistant"]["events_webhook_id"] = "ev"
+ev_tick()
+check("events: the first look sends nothing (no startup burst)", ev_sent == [])
+ev_windows[0] = Window(app_id="htpc-launcher", ids=["htpc-launcher"], title="", pid=1, focused=False)
+ev_windows.append(Window(app_id="steam", ids=["steam"], title="Steam", pid=3, focused=True))
+ev_tick()
+check("events: an app opening sends app_opened with its name",
+      ev_sent == [("http://ha.local:8123/api/webhook/ev", "app_opened", "Steam")])
+ev_play[0] = "playing"
+ev_tick()
+ev_play[0] = "paused"
+ev_tick()
+ev_tick()
+check("events: media playing and paused, once each, with the app in front",
+      [e[1:] for e in ev_sent[1:]] == [("media_playing", "Steam"), ("media_paused", "Steam")])
+del ev_windows[2]
+ev_play[0] = "stopped"
+ev_tick()
+check("events: closing it sends app_closed (and media_stopped)",
+      [e[1] for e in ev_sent[3:]] == ["app_closed", "media_stopped"])
+n_sent = len(ev_sent)
+ev_clock[0] += 0.5
+ev_play[0] = "playing"
+events.tick()
+check("events: checked every 2 seconds, not on every loop", len(ev_sent) == n_sent)
+check("MPRIS: the real backend reads the players' state",
+      backend.media().playback() == {"Playing": "playing", "Paused": "paused"}.get(S["player"], "stopped"))
+
+# 9a1f. per-app resolution: Mutter's DisplayConfig (a fake one)
+from htpc.backends.base import pick_mode, parse_mode_key  # noqa: E402
+from htpc.backends.linux import display as ldisplay  # noqa: E402
+mxml = pathlib.Path(tempfile.mkdtemp()) / "monitors.xml"
+mxml.write_text("""<monitors version="2"><configuration><logicalmonitor><x>0</x><y>0</y><scale>1</scale>
+<primary>yes</primary><monitor><monitorspec><connector>HDMI-2</connector><vendor>GSM</vendor>
+<product>LG TV</product><serial>0x01</serial></monitorspec><mode><width>2560</width><height>1440</height>
+<rate>59.951</rate></mode></monitor></logicalmonitor></configuration></monitors>""")
+disp = ldisplay.MutterDisplay(monitors_xml=str(mxml))
+dmodes = disp.modes()
+check("display: the screen's modes, the current one marked",
+      len(dmodes) == 7 and [m.key() for m in dmodes if m.current] == ["2560x1440@60"])
+check("display: apps.json keys pick the closest mode",
+      pick_mode(dmodes, "3840x2160@30").id == "3840x2160@30.000"
+      and pick_mode(dmodes, "3840x2160").id == "3840x2160@30.000"
+      and pick_mode(dmodes, "1920x1080@59.94").id == "1920x1080@60.000"
+      and pick_mode(dmodes, "800x600") is None and pick_mode(dmodes, "junk") is None
+      and parse_mode_key("2560x1440@60") == (2560, 1440, 60.0))
+check("display: the default is the mode GNOME saved", disp.default_mode().id == "2560x1440@59.951")
+disp.apply(pick_mode(dmodes, "3840x2160@30"))
+method, config = fakes.mutter["applied"][-1]
+check("display: applied 'temporary' (no confirmation, not saved), same layout and scale",
+      method == 1 and config == [(0, 0, 1.0, 0, True, [("HDMI-2", "3840x2160@30.000", {})])]
+      and [m.key() for m in disp.modes() if m.current] == ["3840x2160@30"])
+check("display: nothing saved: the monitor's preferred mode",
+      ldisplay.MutterDisplay(monitors_xml="/nonexistent").default_mode().id == "3840x2160@30.000")
+disp.apply(disp.default_mode())
+check("display: back to the default", fakes.mutter["current"] == "2560x1440@59.951")
+
+# 9a1g. updates: GitHub releases and Flatpak
+from htpc import updates as up  # noqa: E402
+import tarfile as _tar  # noqa: E402
+check("updates: versions compare like releases (betas before the final one)",
+      up.is_newer("0.1.0-beta.6", "0.1.0-beta.5") and not up.is_newer("0.1.0-beta.5", "0.1.0-beta.5")
+      and up.is_newer("0.1.0", "0.1.0-beta.9") and up.is_newer("0.1.0-beta.10", "0.1.0-beta.9")
+      and not up.is_newer("0.1.0-beta.4", "0.1.0-beta.5") and up.is_newer("v0.2.0-beta.1", "0.1.0"))
+fake_releases = [
+    {"tag_name": "v0.1.0-beta.7", "draft": True, "assets": []},
+    {"tag_name": "v0.1.0-beta.6", "draft": False, "prerelease": True, "body": "notes", "html_url": "page",
+     "assets": [{"name": "htpc-launcher-0.1.0-beta.6.tar.gz", "browser_download_url": "https://x/r.tar.gz"}]},
+]
+rel = up.latest_release(lambda url: fake_releases)
+check("updates: the newest published release (drafts skipped), with its .tar.gz",
+      rel == {"version": "0.1.0-beta.6", "tag": "v0.1.0-beta.6", "url": "https://x/r.tar.gz",
+              "notes": "notes", "page": "page"})
+# a release archive with an install.sh that leaves a mark, and a newer extension
+src = pathlib.Path(tempfile.mkdtemp()) / "htpc-launcher-0.1.0-beta.6"
+(src / "gnome-extension" / "htpc-launcher@htpc").mkdir(parents=True)
+(src / "gnome-extension" / "htpc-launcher@htpc" / "metadata.json").write_text('{"version": 99}')
+(src / "install.sh").write_text("echo installed > ../mark\n")
+archive = src.parent / "r.tar.gz"
+with _tar.open(archive, "w:gz") as t:
+    t.add(src, arcname=src.name)
+work = pathlib.Path(tempfile.mkdtemp()) / "update"
+old_ext = up.installed_extension_dir
+fake_ext = pathlib.Path(tempfile.mkdtemp())
+(fake_ext / "metadata.json").write_text('{"version": 6}')
+up.installed_extension_dir = lambda: str(fake_ext)
+result = up.install_release(rel, fetch=lambda url, target: __import__("shutil").copy(archive, target),
+                            workdir=str(work))
+check("updates: install downloads, extracts and runs install.sh; tells when the extension changed",
+      result == {"version": "0.1.0-beta.6", "extension_changed": True} and (work / "mark").exists())
+(src / "install.sh").write_text("echo boom >&2; exit 3\n")
+with _tar.open(archive, "w:gz") as t:
+    t.add(src, arcname=src.name)
+try:
+    up.install_release(rel, fetch=lambda url, target: __import__("shutil").copy(archive, target), workdir=str(work))
+    install_error = None
+except RuntimeError as e:
+    install_error = str(e)
+up.installed_extension_dir = old_ext
+check("updates: a failing install.sh raises with its last lines", install_error == "boom")
+
+
+def fake_flatpak(cmd, **kw):
+    out = {"--user": "", "--system": "Application ID\tName\norg.jellyfin.JellyfinDesktop\tJellyfin\n"
+           "com.valvesoftware.Steam\tSteam\n"}
+    return SimpleNamespace(returncode=0, stdout=out.get(cmd[3], ""), stderr="")
+
+
+check("updates: Flatpaks with updates, user and system, by name",
+      up.flatpak_updates(fake_flatpak) == [("org.jellyfin.JellyfinDesktop", "Jellyfin"),
+                                          ("com.valvesoftware.Steam", "Steam")])
+
 # 9a1d. volume: Start + Select + Up / Down, repeating while held
 vol = []
 vclock = [0.0]

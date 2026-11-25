@@ -48,7 +48,8 @@ On Wayland, a regular program can't raise another app's window or find out which
 | `paths.py` | File locations per OS. |
 | `shortcuts.py` | The combos (defaults, validation, labels) and what each does: back to the launcher, close, volume. |
 | `notifications.py` | Decides when to show a notice: gamepads, batteries, internet. |
-| `home_assistant.py` | The webhook events, the TV state over the REST API, and the gate that ignores input while the TV is off. |
+| `home_assistant.py` | The webhook events, the TV state over the REST API, the gate that ignores input while the TV is off, and the app and media events (cinema mode). |
+| `updates.py` | Checking and installing GitHub releases, and Flatpak updates. |
 | `weather.py` | ViaCEP and Open-Meteo lookups. |
 | `i18n.py` | On-screen text in English and Brazilian Portuguese. |
 | `themes.py` | Background colors. |
@@ -88,6 +89,7 @@ A new extension version is only loaded after logging out and back in. The Python
 | `AppCatalog` | Installed apps and their icons. |
 | `System` | Starting and force-closing programs, restart and shut down, the connection type and connectivity, and the volume. |
 | `Bluetooth` | Searching, pairing, trusting and forgetting devices. The default is "no Bluetooth". |
+| `Display` | The screen's modes, the default mode, and switching modes for per-app resolutions. The default can't change modes. |
 
 The Linux backend uses:
 
@@ -96,6 +98,7 @@ The Linux backend uses:
 - **Gio** for `.desktop` files;
 - **systemd** for restart and shut down;
 - **wpctl or pactl** for the volume;
+- **Mutter's DisplayConfig** (D-Bus) for resolutions. Modes are applied "temporary", so there's no confirmation prompt and nothing is saved;
 - **sysfs** for batteries.
 
 ### Porting to another OS
@@ -116,9 +119,12 @@ xvfb-run -s "-screen 0 1920x1080x24" dbus-run-session -- python3 tests/test_laun
   - the shortcut rules and combos, and the volume, repeat included, with a fake `wpctl`;
   - Home Assistant events and the TV gate;
   - BlueZ pairing, against a fake `org.bluez`;
+  - display modes, against a fake Mutter DisplayConfig;
+  - app and media events;
+  - update checks and installs, with a fake release archive;
   - the Linux backend's D-Bus and evdev handling;
   - config migration.
-- **`test_launcher.py`:** drives the real UI with normalized gamepad events, on a virtual screen. It covers navigation, Settings and every submenu, edit mode, the on-screen keyboard, shortcut recording, pairing, Home Assistant and screen sizes. It explains the files it expects in `HOME` for the icon and app-list checks.
+- **`test_launcher.py`:** drives the real UI with normalized gamepad events, on a virtual screen. It covers navigation, Settings and every submenu, edit mode, the on-screen keyboard, shortcut recording, pairing, Home Assistant, the resolution picker, updates and screen sizes. It explains the files it expects in `HOME` for the icon and app-list checks.
 
 Both print `OK` or `FAILED` per check, and end with `ALL OK` or `SOME CHECKS FAILED`.
 

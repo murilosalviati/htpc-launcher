@@ -11,6 +11,8 @@ StartupWMClass=example-player).
 """
 import json
 import os
+import pathlib
+from types import SimpleNamespace as NS2
 import sys
 import tempfile
 import time
@@ -388,7 +390,7 @@ def e5():
     l.overlays[-1]["rows"][0][1].grab_focus()
     l.press()
     check("the chosen icon goes into the draft", l.editor["draft"].get("icon", "").endswith("app-icons/jellyfin.png"))
-    l.overlays[-1]["rows"][3][0].grab_focus()
+    l.overlays[-1]["rows"][-1][0].grab_focus()
     l.press()  # Save
     a = saved_apps()[2]
     check("Save writes the name and icon to apps.json", a["name"] == "Jogos 2" and a["icon"].endswith("jellyfin.png"))
@@ -402,7 +404,7 @@ def e6():
     l.add_tile.grab_focus()
     l.press()
     check("+ Add opens a new-app editor, on the Application field", l.editor["index"] is None and l.win.get_focus() is l.field_app)
-    l.overlays[-1]["rows"][3][0].grab_focus()
+    l.overlays[-1]["rows"][-1][0].grab_focus()
     l.press()
     check("saving without an app shows an error", l.editor_error.get_visible() and len(l.overlays) == 1)
     l.field_app.grab_focus()
@@ -422,7 +424,7 @@ def e7():
     d = l.editor["draft"]
     check("the chosen app fills id, command and name", d["id"] == "org.example.Player" and d["launch"][:2] == ["gio", "launch"] and d["name"] == "Example Player")
     check("the chosen app keeps its WM_CLASS as an extra id", d.get("extra_ids") == ["example-player"])
-    l.overlays[-1]["rows"][3][0].grab_focus()
+    l.overlays[-1]["rows"][-1][0].grab_focus()
     l.press()
     check("the new app goes to the end of the list", saved_apps()[-1]["id"] == "org.example.Player" and len(l.tiles) == 5)
     check("with 5 apps + Add, the grid wraps onto 2 rows", len(l.tile_rows) == 2)
@@ -434,7 +436,7 @@ def e8():
     screenshot(l.win, "10-five-apps")
     l.tiles[0].grab_focus()
     l.press()
-    remove = l.overlays[-1]["rows"][3][1]
+    remove = l.overlays[-1]["rows"][-1][1]
     check("the editor of an existing app has Remove", remove.get_label() == "Remover")
     remove.grab_focus()
     l.press()
@@ -706,7 +708,7 @@ def tv1():
     l.press()
     f = l.ha_fields
     check("it opens the Home Assistant menu", len(l.overlays) == 2
-          and list(f) == ["enabled", "url", "webhook", "token", "tv", "tv_button", "test"]
+          and list(f) == ["enabled", "url", "webhook", "events", "token", "tv", "tv_button", "test"]
           and f["token"].value.get_label() == l.t("ha_token_missing")
           and f["tv"].value.get_label() == l.t("ha_tv_needs_token")
           and f["tv_button"].value.get_label() == l.t("tv_button_needs_ha"))
@@ -719,6 +721,13 @@ def tv1():
     check("the address is typed in lower case and saved without the trailing /",
           l.cfg["home_assistant"] == {"url": "http://192.168.0.22:8123"}
           and l.ha_fields["url"].value.get_label() == "http://192.168.0.22:8123")
+    check("app and media events are off until their webhook is typed",
+          l.ha_fields["events"].value.get_label() == l.t("off"))
+    ha_type(l, "events", "htpc-events_1")
+    check("the events webhook is saved", l.cfg["home_assistant"]["events_webhook_id"] == "htpc-events_1"
+          and l.ha_fields["events"].value.get_label() == "htpc-events_1")
+    ha_type(l, "events", "")
+    check("and cleared again", "events_webhook_id" not in l.cfg["home_assistant"])
     ha_type(l, "webhook", "htpc-gamepad_1")
     check("the webhook id is saved: Home Assistant is set up",
           l.cfg["home_assistant"]["webhook_id"] == "htpc-gamepad_1"
@@ -950,6 +959,134 @@ def vol1():
     nav.move = real_move
     check("Start + Select + ↑/↓ (volume) does not move the selection; ↓ alone still does",
           moved == [(0, 1)])
+    l.tiles[0].grab_focus()
+
+
+# ---------------- updates ----------------
+
+@step(300)
+def up1():
+    l = L()
+    from types import SimpleNamespace as NS
+    while l.overlays:
+        l.pop_overlay()
+    l.updates_get = lambda url: [{"tag_name": "v9.0.0", "draft": False, "body": "", "html_url": "",
+                                  "assets": [{"name": "h.tar.gz", "browser_download_url": "https://x/h.tar.gz"}]}]
+    l.updates_run = lambda cmd, **kw: NS(returncode=0, stderr="",
+                                         stdout="org.jellyfin.JellyfinDesktop\tJellyfin\n" if "--system" in cmd else "")
+    l.open_settings()
+    check("Settings has an Updates button next to Close the launcher",
+          l.settings_updates in l.overlays[-1]["rows"][-1])
+    l.settings_updates.grab_focus()
+    l.press()
+
+
+@step(600)
+def up2():
+    l = L()
+    f = l.update_fields
+    check("Updates: a newer launcher and the Flatpaks waiting are shown",
+          f["launcher"].value.get_label() == l.t("updates_new", version="9.0.0")
+          and f["flatpak"].value.get_label() == l.t("updates_apps", count=1))
+    screenshot(l.win, "19-updates")
+    installed = []
+    import htpc.updates as up
+    real = up.install_release
+    up.install_release = lambda release, **kw: (installed.append(release["version"]),
+                                                {"version": release["version"], "extension_changed": True})[1]
+    l._real_install = real
+    f["launcher"].grab_focus()
+    l.press()                                   # asks first
+    l.overlays[-1]["rows"][0][1].grab_focus()   # Install
+    l.press()
+    l._installed = installed
+
+
+@step(600)
+def up3():
+    l = L()
+    import htpc.updates as up
+    up.install_release = l._real_install
+    names = label_texts(l.overlays[-1]["backdrop"])
+    check("installing: done, asks to restart the launcher and says the extension changed",
+          l._installed == ["9.0.0"] and l.t("updates_installed", version="9.0.0") in names
+          and l.t("updates_relogin") in names)
+    l.pop_overlay()       # not now
+    ran = []
+    l.updates_run = lambda cmd, **kw: (ran.append(cmd[:2]), NS2(returncode=0, stdout="", stderr=""))[1]
+    l.update_fields["flatpak"].grab_focus()
+    l.press()
+    l.overlays[-1]["rows"][0][1].grab_focus()
+    l.press()
+    l._ran = ran
+
+
+@step(600)
+def up4():
+    l = L()
+    check("updating the Flatpaks runs flatpak update and says they are up to date",
+          ["flatpak", "update"] in l._ran and l.t("updates_apps_done") in label_texts(l.overlays[-1]["backdrop"])
+          and l.update_fields["flatpak"].value.get_label() == l.t("updates_none"))
+    while l.overlays:
+        l.pop_overlay()
+    l.tiles[0].grab_focus()
+
+
+# ---------------- per-app resolution (fake Mutter) ----------------
+
+@step(300)
+def disp1():
+    l = L()
+    import tempfile as _tf
+    from htpc.backends.linux.display import MutterDisplay
+    xml = pathlib.Path(_tf.mkdtemp()) / "monitors.xml"
+    xml.write_text("<monitors version='2'><configuration><logicalmonitor><primary>yes</primary><monitor>"
+                   "<monitorspec><connector>HDMI-2</connector></monitorspec><mode><width>2560</width>"
+                   "<height>1440</height><rate>59.951</rate></mode></monitor></logicalmonitor>"
+                   "</configuration></monitors>")
+    l.display = MutterDisplay(monitors_xml=str(xml))
+    fakes.mutter["current"] = "2560x1440@59.951"
+    l.edit_app(0)
+    check("edit mode has a Resolution field, Default when the app has none",
+          l.field_display.value.get_label() == l.t("display_default"))
+    l.field_display.grab_focus()
+    l.press()
+
+
+@step(400)
+def disp2():
+    l = L()
+    top = l.overlays[-1]
+    names = label_texts(top["backdrop"])
+    check("the resolution list: Default (with the saved mode) and the screen's modes, biggest first",
+          "2560×1440 · 60 Hz" in names and len(top["rows"]) == 1 + 6 - 0
+          and "1024×768" not in names and "3840×2160 · 30 Hz" in names)
+    screenshot(l.win, "18-resolution")
+    top["rows"][1][0].grab_focus()     # 3840×2160 · 30 Hz
+    l.press()
+
+
+@step(300)
+def disp3():
+    l = L()
+    check("chosen: the field shows it", l.field_display.value.get_label() == "3840×2160 · 30 Hz")
+    l._save_app()
+    app = l.cfg["apps"][0]
+    check("saved as display_mode in apps.json", app.get("display_mode") == "3840x2160@30")
+    changed = l.use_display_mode(app["display_mode"])
+    check("opening the app switches the screen to its mode", changed and fakes.mutter["current"] == "3840x2160@30.000"
+          and fakes.mutter["applied"][-1][0] == 1)
+    check("already there: nothing to do", l.use_display_mode(app["display_mode"]) is False)
+    l.display_changed = True
+    l.display_app_until = 0
+    l.restore_display()
+    check("back in the launcher: the default again", fakes.mutter["current"] == "2560x1440@59.951")
+    l.edit_app(0)
+    l._display_chosen(None)
+    l._save_app()
+    check("Default removes it from apps.json", "display_mode" not in l.cfg["apps"][0])
+    while l.overlays:
+        l.pop_overlay()
     l.tiles[0].grab_focus()
 
 

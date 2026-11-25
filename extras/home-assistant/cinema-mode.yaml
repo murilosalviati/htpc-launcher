@@ -1,0 +1,69 @@
+# Home Assistant automation: "cinema mode" for the HTPC.
+#
+# The controller service sends app and media events to this webhook when
+# "home_assistant" → "events_webhook_id" is set (Settings → Home Assistant →
+# App and media events). It is a second webhook on purpose: a Home Assistant
+# webhook only triggers one automation, and the gamepad's one (wake-tv.yaml)
+# must not react to these.
+#
+# Events (trigger.json):
+#   {"event": "media_playing" | "media_paused" | "media_stopped", "app": "<app in front>", ...}
+#   {"event": "app_opened" | "app_closed", "app": "<app name in apps.json>", "front": "...", ...}
+#
+# This example dims the lights while a video plays in Jellyfin or YouTube and
+# brings them back when it pauses or stops. Replace:
+#   WEBHOOK_ID          a hard-to-guess id, the same as in the launcher's settings
+#   light.living_room   the lights (a light group for several), or use scenes instead
+#   the app names       as they are in your apps.json
+#
+# Paste it in Settings → Automations & scenes → Create automation → ⋮ → Edit in YAML.
+
+alias: "HTPC: cinema mode"
+description: Dims the lights while a video plays on the HTPC.
+mode: restart
+triggers:
+  - trigger: webhook
+    webhook_id: WEBHOOK_ID
+    allowed_methods: [POST]
+    local_only: true
+variables:
+  event: "{{ (trigger.json or {}).get('event', '') }}"
+  app: "{{ (trigger.json or {}).get('app', '') }}"
+  lights: light.living_room
+  video_apps: ["Jellyfin", "YouTube"]
+actions:
+  # Only lights that are on are dimmed or brightened: never turn them on at night.
+  - condition: template
+    value_template: "{{ is_state(lights, 'on') }}"
+  - choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ event == 'media_playing' and app in video_apps }}"
+        sequence:
+          - action: light.turn_on
+            target:
+              entity_id: "{{ lights }}"
+            data:
+              brightness_pct: 10
+              transition: 3
+      - conditions:
+          - condition: template
+            value_template: "{{ event == 'media_paused' and app in video_apps }}"
+        sequence:
+          - action: light.turn_on
+            target:
+              entity_id: "{{ lights }}"
+            data:
+              brightness_pct: 50
+              transition: 2
+      - conditions:
+          - condition: template
+            value_template: >-
+              {{ event == 'media_stopped' or (event == 'app_closed' and app in video_apps) }}
+        sequence:
+          - action: light.turn_on
+            target:
+              entity_id: "{{ lights }}"
+            data:
+              brightness_pct: 100
+              transition: 3

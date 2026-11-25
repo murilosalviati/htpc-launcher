@@ -66,17 +66,43 @@ Select **Settings** (the gear) in the footer.
 | **Gamepads** | Pair a gamepad over Bluetooth, change the shortcuts, and see the volume shortcut. See [Gamepads](gamepads.md). |
 | **Home Assistant** | The address, the webhook, the TV, the "Turn off TV" button and a connection test. See the [Home Assistant guide](home-assistant.md). |
 
-At the bottom, **Close the launcher** quits it. The "back to the launcher" shortcut opens it again.
+At the bottom:
+
+- **Updates** checks for a new launcher version and for Flatpak app updates. See [Updates](#updates).
+- **Close the launcher** quits it. The "back to the launcher" shortcut opens it again.
 
 ### Edit mode (Settings → Apps)
 
 - **Add an app:** pick it from the list of installed apps, Flatpaks included.
-- **Edit an app:** change its name, its icon, or the app it opens.
+- **Edit an app:** change its name, its icon, the app it opens, or its resolution.
   - **Name:** typed on an on-screen keyboard. Ⓧ deletes, Ⓨ types a space, and a physical keyboard works too.
   - **Icon:** the app's own, or any image in `~/.local/share/htpc-launcher/app-icons/`.
+  - **Resolution:** the default, or one of the screen's modes, as described in [Per-app resolution](#per-app-resolution).
 - **Remove an app:** the grid reflows.
 
 For the fields that aren't in edit mode, such as pause on Home, close commands and preferred windows, see [Configuration](configuration.md).
+
+### Per-app resolution
+
+Each app can use its own screen resolution. Set it in edit mode → **Resolution**. For example:
+
+- **Jellyfin in 4K**, so movies use the full resolution, even at 30 Hz;
+- **the launcher and Steam at 2560×1440 and 60 Hz**, so they feel smooth.
+
+How it behaves:
+
+- The screen switches when you open or come back to the app, and returns to the **default** when the launcher is in front. A TV usually goes black for a second or two while it switches.
+- The default is the mode set in GNOME's Settings → Displays, kept in `~/.config/monitors.xml`.
+- A switch is never saved as GNOME's setting. If anything goes wrong, a restart brings back the default.
+
+### Updates
+
+Settings → **Updates** shows the launcher's version and checks two things.
+
+- **Launcher:** the newest release on GitHub.
+  - If one is available, select it to download and install it. Your apps and settings are kept.
+  - The launcher then offers to restart itself. When the GNOME extension changed too, it says so, and you need to restart the PC or log out and back in once.
+- **Apps (Flatpak):** how many Flatpak apps have updates waiting. Select it to update them all.
 
 ## Steam
 

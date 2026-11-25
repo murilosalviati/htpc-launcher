@@ -55,6 +55,7 @@ Each entry in `apps` is one tile.
 | `close_on_second_press` | The first close combo goes to the app itself (Moonlight uses it to end the stream). A second one within 15 seconds closes the app. |
 | `pause_on_home` | Pause media (MPRIS) when you go back to the launcher from this app. |
 | `fullscreen` | Put the app's windows in full screen when it opens. On by default; Steam defaults to off. |
+| `display_mode` | The screen resolution for this app, such as `"3840x2160@30"` (the refresh rate is optional). The screen switches to it when the app opens or comes back, and returns to the default in the launcher. Set it in edit mode → Resolution. |
 | `preferred_windows` | For apps with several windows: titles to bring to the front, in order of preference. Without it, the most recently used window comes up. |
 | `icon` | A theme icon name or an image path. Without it, the launcher uses the icon the app installed. |
 | `desktop` | The `.desktop` file to take the icon from, when it differs from `id`. |

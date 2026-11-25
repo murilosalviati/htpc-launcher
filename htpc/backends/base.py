@@ -133,6 +133,11 @@ class Media(ABC):
     def pause_all(self):
         """Pause every media player that is playing. Returns their names."""
 
+    def playback(self):
+        """"playing" if any player is playing, else "paused" if any is paused,
+        else "stopped" (also when there are no players). None if it can't tell."""
+        return None
+
 
 class Gamepads(ABC):
     """Reads every connected gamepad without taking the buttons away from other apps."""
@@ -210,6 +215,59 @@ class System(ABC):
 
 
 @dataclass
+class DisplayMode:
+    id: str                     # OS-specific
+    width: int
+    height: int
+    refresh: float              # Hz
+    current: bool = False
+
+    def label(self):
+        return f"{self.width}×{self.height} · {round(self.refresh)} Hz"
+
+    def key(self):
+        """"3840x2160@30": how apps.json names a mode."""
+        return f"{self.width}x{self.height}@{round(self.refresh)}"
+
+
+def parse_mode_key(text):
+    """"3840x2160@30" → (3840, 2160, 30.0); the rate is optional ("3840x2160")."""
+    size, _, rate = str(text).lower().partition("@")
+    w, _, h = size.partition("x")
+    return int(w), int(h), (float(rate) if rate else None)
+
+
+def pick_mode(modes, key):
+    """The mode in `modes` that best matches an apps.json key, or None."""
+    try:
+        w, h, rate = parse_mode_key(key)
+    except ValueError:
+        return None
+    same = [m for m in modes if m.width == w and m.height == h]
+    if not same:
+        return None
+    if rate is None:
+        return max(same, key=lambda m: m.refresh)
+    return min(same, key=lambda m: abs(m.refresh - rate))
+
+
+class Display:
+    """The screen's resolution and refresh rate. The default: can't change it."""
+
+    def modes(self):
+        """[DisplayMode] of the main screen, the current one marked."""
+        return []
+
+    def default_mode(self):
+        """The mode the desktop is set to keep (what to go back to), or None."""
+        return None
+
+    def apply(self, mode):
+        """Switch to mode until told otherwise (not saved as the desktop's setting)."""
+        raise RuntimeError("can't change the resolution here")
+
+
+@dataclass
 class BluetoothDevice:
     address: str
     name: str
@@ -275,3 +333,7 @@ class Backend(ABC):
     def bluetooth(self):
         """A Bluetooth (by default: none)."""
         return Bluetooth()
+
+    def display(self):
+        """A Display (by default: fixed)."""
+        return Display()

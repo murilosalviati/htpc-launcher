@@ -10,6 +10,8 @@
   * Temperature: °C or °F, switched with Ⓐ;
   * Language: rebuilds the screen in the chosen language right away;
   * On-screen notices: turns the gamepad, battery and internet notices on or off;
+  * Updates (a button at the bottom): the launcher, from GitHub releases, and
+    the Flatpak apps;
   * Gamepads: pairing over Bluetooth (or what to do without an adapter;
     paired gamepads can be forgotten from the same list) and the combos that bring the launcher back and close the
     app, recorded by holding the buttons (read by the controller service from
@@ -24,6 +26,7 @@ Everything is saved to apps.json. Like editor.py, this only uses the Launcher
 instance and has nothing specific to an operating system.
 """
 
+import sys
 import threading
 
 import gi
@@ -31,7 +34,11 @@ import gi
 gi.require_version("Gtk", "4.0")
 from gi.repository import GLib, Gtk  # noqa: E402
 
-from htpc import home_assistant, shortcuts, weather  # noqa: E402
+from htpc import __version__, home_assistant, shortcuts, updates, weather  # noqa: E402
+
+
+def log(*args):
+    print("[launcher]", *args, file=sys.stderr, flush=True)
 from htpc.i18n import STRINGS, Translator  # noqa: E402
 
 UNITS = {"celsius": "°C", "fahrenheit": "°F"}
@@ -66,15 +73,17 @@ class SettingsMixin:
         for w in f.values():
             box.append(w)
         close = self.dialog_button(self.t("close"), self.pop_overlay)
+        updates_ = self.dialog_button(self.t("updates"), self.open_updates)
         quit_ = self.dialog_button(self.t("quit_launcher"), self._confirm_quit, danger=True)
         close_box = Gtk.Box(spacing=20, halign=Gtk.Align.CENTER)
         close_box.add_css_class("editor-buttons")
-        close_box.append(close)
-        close_box.append(quit_)
+        for b in (close, updates_, quit_):
+            close_box.append(b)
         box.append(close_box)
         self.settings_quit = quit_
+        self.settings_updates = updates_
         self.refresh_settings()
-        self.push_overlay(box, [[w] for w in f.values()] + [[close, quit_]], focus=f.get(focus))
+        self.push_overlay(box, [[w] for w in f.values()] + [[close, updates_, quit_]], focus=f.get(focus))
 
     def refresh_settings(self):
         f = getattr(self, "settings_fields", None)
@@ -119,6 +128,122 @@ class SettingsMixin:
         self.cfg["notifications"] = not self.cfg.get("notifications", True)
         self.save_config()
         self.refresh_settings()
+
+    # --- updates -------------------------------------------------------------------------
+
+    def open_updates(self):
+        box = self.dialog_box(self.t("updates"), self.t("updates_text", version=__version__))
+        box.add_css_class("editor")
+        box.add_css_class("settings")
+        box.set_spacing(16)
+        f = self.update_fields = {
+            "launcher": self._field(self.t("updates_launcher"), self._update_launcher, title_width=300),
+            "flatpak": self._field(self.t("updates_flatpak"), self._update_flatpak, title_width=300),
+        }
+        for w in f.values():
+            w.value.set_label(self.t("updates_checking"))
+            box.append(w)
+        close = self.dialog_button(self.t("close"), self.pop_overlay)
+        close_box = Gtk.Box(spacing=20, halign=Gtk.Align.CENTER)
+        close_box.add_css_class("editor-buttons")
+        close_box.append(close)
+        box.append(close_box)
+        self.update_state = state = {"release": None, "flatpaks": None}
+        self.push_overlay(box, [[w] for w in f.values()] + [[close]], focus=close)
+        get = getattr(self, "updates_get", None)
+        run = getattr(self, "updates_run", None)
+
+        def release_arrived(result):
+            if self.update_state is not state:
+                return
+            if isinstance(result, Exception):
+                f["launcher"].value.set_label(self.t("updates_failed_check"))
+            elif result and updates.is_newer(result["version"]):
+                state["release"] = result
+                f["launcher"].value.set_label(self.t("updates_new", version=result["version"]))
+            else:
+                f["launcher"].value.set_label(self.t("updates_none"))
+
+        def flatpaks_arrived(result):
+            if self.update_state is not state:
+                return
+            if isinstance(result, Exception):
+                f["flatpak"].value.set_label(self.t("updates_failed_check"))
+            else:
+                state["flatpaks"] = result
+                f["flatpak"].value.set_label(self.t("updates_apps", count=len(result)) if result
+                                             else self.t("updates_none"))
+
+        self._bt(lambda: updates.latest_release(get), release_arrived)
+        self._bt(lambda: updates.flatpak_updates(run), flatpaks_arrived)
+
+    def _update_launcher(self):
+        release = (getattr(self, "update_state", None) or {}).get("release")
+        if not release:
+            return
+        self.confirm(self.t("updates_install_title", version=release["version"]),
+                     self.t("updates_install_text"), self.t("updates_install"),
+                     lambda: self._install_release(release), danger=False)
+
+    def _busy(self, text):
+        box = self.dialog_box(text, self.t("updates_wait"))
+        waiting = {"gone": False}
+        self.push_overlay(box, [[]], cancel=lambda: waiting.update(gone=True))
+        top = self.overlays[-1]
+
+        def close():
+            if not waiting["gone"] and self.overlays and self.overlays[-1] is top:
+                self.pop_overlay()
+        return close
+
+    def _install_release(self, release):
+        done_busy = self._busy(self.t("updates_installing", version=release["version"]))
+        fetch = getattr(self, "updates_fetch", None)
+        run = getattr(self, "updates_run", None)
+
+        def done(result):
+            done_busy()
+            if isinstance(result, Exception):
+                self._message(self.t("updates_install_failed"), self._reason(result))
+                return
+            note = self.t("updates_relogin") if result["extension_changed"] else ""
+            self.confirm(self.t("updates_installed", version=result["version"]),
+                         (self.t("updates_restart_text") + " " + note).strip(),
+                         self.t("updates_restart_now"), self.restart_launcher, danger=False)
+
+        self._bt(lambda: updates.install_release(release, fetch=fetch, run=run), done)
+
+    def restart_launcher(self):
+        """Start a new launcher (the updated one) and quit this one."""
+        log("restarting the launcher")
+        self._spawn(["systemd-run", "--user", "--collect", "-p", "KillMode=process",
+                     "sh", "-c", "sleep 2; exec gtk-launch htpc-launcher"])
+        self.quit_launcher()
+
+    def _update_flatpak(self):
+        apps = (getattr(self, "update_state", None) or {}).get("flatpaks")
+        if not apps:
+            return
+        names = ", ".join(name for _id, name in apps[:6]) + ("…" if len(apps) > 6 else "")
+        self.confirm(self.t("updates_apps_title", count=len(apps)), names, self.t("updates_install"),
+                     self._run_flatpak_update, danger=False)
+
+    def _run_flatpak_update(self):
+        done_busy = self._busy(self.t("updates_updating_apps"))
+        run = getattr(self, "updates_run", None)
+
+        def done(result):
+            done_busy()
+            if isinstance(result, Exception):
+                self._message(self.t("updates_install_failed"), self._reason(result))
+                return
+            state = getattr(self, "update_state", None)
+            if state is not None:
+                state["flatpaks"] = []
+                self.update_fields["flatpak"].value.set_label(self.t("updates_none"))
+            self._message(self.t("updates_apps_done"))
+
+        self._bt(lambda: updates.flatpak_update(run), done)
 
     # --- pairing gamepads over Bluetooth -------------------------------------------------
 
@@ -454,6 +579,7 @@ class SettingsMixin:
             "enabled": self._field(self.t("ha_enabled"), self._ha_toggle_enabled, title_width=300),
             "url": self._field(self.t("ha_url"), self._ha_edit_url, title_width=300),
             "webhook": self._field(self.t("ha_webhook"), self._ha_edit_webhook, title_width=300),
+            "events": self._field(self.t("ha_events"), self._ha_edit_events, title_width=300),
             "token": self._field(self.t("ha_token"), lambda: self._message(self.t("ha_token"), self.t("ha_token_text")),
                                  title_width=300),
             "tv": self._field(self.t("ha_tv"), self._ha_choose_tv, title_width=300),
@@ -478,6 +604,7 @@ class SettingsMixin:
         f["enabled"].value.set_label(self.t("on" if ha.get("enabled", True) else "off"))
         f["url"].value.set_label(ha.get("url") or "—")
         f["webhook"].value.set_label(ha.get("webhook_id") or "—")
+        f["events"].value.set_label(ha.get("events_webhook_id") or self.t("off"))
         f["token"].value.set_label(self.t("ha_token_set" if ha.get("token") else "ha_token_missing"))
         if not ha.get("token"):
             f["tv"].value.set_label(self.t("ha_tv_needs_token"))
@@ -511,6 +638,11 @@ class SettingsMixin:
 
     def _ha_webhook_typed(self, text):
         self._ha_set(webhook_id=text.replace(" ", "") or None)
+
+    def _ha_edit_events(self):
+        self.keyboard(self.t("ha_events_title"), self._ha().get("events_webhook_id", ""),
+                      lambda text: self._ha_set(events_webhook_id=text.replace(" ", "") or None),
+                      note=self.t("ha_events_note"), capitalize=False, extra=":/_")
 
     def _toggle_tv_button(self):
         if not home_assistant.webhook_url(self.cfg):

@@ -301,3 +301,89 @@ class TvGate:
             log.info("tv is off: this press only wakes it")
             self.send_wake(event)
         return True
+
+
+# --- app and media events, for "cinema mode" automations ----------------------------
+#
+# Optional, on a webhook of their own ("events_webhook_id"): a Home Assistant
+# webhook only triggers one automation, and the gamepad's one must not react to
+# these. Events: app_opened / app_closed (an app from apps.json got or lost its
+# windows) and media_playing / media_paused / media_stopped (MPRIS, all players
+# together). Each carries "app": the app in front, by its name in apps.json.
+
+EVENTS_EVERY = 2.0
+
+
+def events_url(cfg):
+    ha = (cfg or {}).get("home_assistant") or {}
+    if not ha.get("enabled", True) or not ha.get("url") or not ha.get("events_webhook_id"):
+        return None
+    return f"{ha['url'].rstrip('/')}/api/webhook/{ha['events_webhook_id']}"
+
+
+class AppEvents:
+    """In the controller service: watches the apps and the media players."""
+
+    def __init__(self, windows, media, settings, post=None, clock=time.monotonic, background=True):
+        from .shortcuts import app_for_window, is_launcher
+        self._app_for_window, self._is_launcher = app_for_window, is_launcher
+        self.windows = windows
+        self.media = media
+        self.settings = settings
+        self.post = post or http_post
+        self.clock = clock
+        self.background = background
+        self.running = None     # names of the apps with windows (None: not looked yet)
+        self.playback = None
+        self.last = None
+
+    def tick(self):
+        now = self.clock()
+        if self.last is not None and now - self.last < EVENTS_EVERY:
+            return
+        self.last = now
+        cfg = self.settings()
+        url = events_url(cfg)
+        if url is None:
+            self.running = self.playback = None   # start fresh when turned on
+            return
+        windows = self.windows.windows()
+        if windows is None:
+            return
+        running, front = set(), ""
+        for w in windows:
+            if self._is_launcher(cfg, w):
+                if w.focused:
+                    front = "launcher"
+                continue
+            app = self._app_for_window(cfg, w)
+            if app:
+                running.add(app["name"])
+                if w.focused:
+                    front = app["name"]
+        playback = self.media.playback()
+        if self.running is not None:
+            for name in sorted(running - self.running):
+                self._send(url, "app_opened", name, front)
+            for name in sorted(self.running - running):
+                self._send(url, "app_closed", name, front)
+        if self.playback is not None and playback is not None and playback != self.playback:
+            self._send(url, "media_" + playback, front, front)
+        self.running = running
+        if playback is not None:
+            self.playback = playback
+
+    def _send(self, url, event, app, front):
+        payload = {"event": event, "app": app, "front": front, "host": socket.gethostname()}
+        log.info("home assistant event: %s (%s)", event, app)
+
+        def go():
+            try:
+                self.post(url, payload)
+            except Exception as e:  # noqa: BLE001
+                log.warning("home assistant event %s failed: %s", event, e)
+
+        if self.background:
+            threading.Thread(target=go, daemon=True).start()
+        else:
+            go()

@@ -55,7 +55,9 @@ launcher/install.sh
 
 ## Updating
 
-Download the new version and run `./install.sh` again. Your `apps.json` is kept.
+The easy way is from the couch: **Settings → Updates → Launcher** downloads and installs the newest release, then restarts the launcher. See [Using the launcher → Updates](using.md#updates).
+
+By hand: download the new version and run `./install.sh` again. Your `apps.json` is kept either way.
 
 When a release says the **GNOME extension changed**, log out and back in once after updating. GNOME only loads a new extension version at login. The release notes and the [CHANGELOG](../CHANGELOG.md) say when the extension changed. The current version is 6.
 
