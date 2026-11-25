@@ -7,10 +7,12 @@ A full-screen home screen driven by a gamepad (or a keyboard):
   * in the middle, one tile per app in apps.json; if the app is already
     running, its tile brings the existing window back (resumes it) instead
     of starting a second copy;
-  * top bar: the weather on the left (if a location is set), the clock in the
-    middle, gamepad and network status on the right;
-  * in the footer, on the right: settings, restart and shut down (the last
-    two ask for confirmation). Settings (see settings.py) has the apps
+  * above the apps, what was added to Jellyfin lately; below them (scrolled
+    into view by going down), lights and switches from Home Assistant
+    (see home.py);
+  * top bar: the weather on the left (if a location is set); on the right
+    gamepad and network status, the clock, and settings, restart and shut
+    down (the last two ask for confirmation). Settings (see settings.py) has the apps
     (edit mode, see editor.py), the background, the weather location, the
     temperature unit and the language.
 
@@ -67,6 +69,7 @@ from htpc.backends.base import STICK_DEAD_ZONE, pick_mode  # noqa: E402
 from htpc.i18n import Translator  # noqa: E402
 from background import in_background  # noqa: E402
 from editor import EditorMixin  # noqa: E402
+from home import HOUSE_EVERY, HomeMixin  # noqa: E402
 from settings import SettingsMixin  # noqa: E402
 
 CSS = HERE / "launcher.css"
@@ -87,8 +90,9 @@ EDGE = {
     "clock": 56, "date": 20,                      # pt
     "weather_temp": 38, "weather_place": 17,      # pt
     "status_text": 20, "hint": 17, "footer_label": 17,  # pt
-    "weather_icon": 72, "status_icon": 42, "footer_icon": 28,  # px
+    "weather_icon": 30, "status_icon": 42, "footer_icon": 28,  # px
     "footer_height": 56, "footer_pad_x": 24, "footer_gap": 18,  # px
+    "top_button": 60,                             # px, the round buttons at the top right
     "pad_top": 44, "pad_side": 72, "pad_bottom": 40,  # px, around the screen
 }
 EDGE_MIN_SCALE, EDGE_MAX_SCALE = 0.6, 3.0
@@ -112,13 +116,20 @@ class Navigator:
     BROKEN = GLib.IOCondition.HUP | GLib.IOCondition.ERR | GLib.IOCondition.NVAL
     DIRECTIONS = {"left": (-1, 0), "right": (1, 0), "up": (0, -1), "down": (0, 1)}
 
-    def __init__(self, gamepads, active, move, press, back, other_button, blocked=lambda: False):
+    HOLD_MS = 500         # Ⓐ held this long on a light opens its settings
+
+    def __init__(self, gamepads, active, move, press, back, other_button, blocked=lambda: False,
+                 shoulder=lambda step: None, can_hold=lambda: False, long_press=lambda: None):
         self.gamepads = gamepads
         self.blocked = blocked  # True while the TV is off: input is ignored (it only wakes the TV)
         self.capture = None     # set while Settings records a shortcut: gets every button event
         self.held = {}          # device -> buttons held (Start + Select + ↑/↓ is the volume)
         self.active, self.move, self.press, self.back = active, move, press, back
         self.other_button = other_button  # called with "x" or "y"
+        self.shoulder = shoulder          # called with -1 (LB) or 1 (RB) when one is tapped alone
+        self.tapping = None               # (device, "l1"/"r1") pressed with nothing else so far
+        self.can_hold, self.long_press = can_hold, long_press
+        self.hold_timer = 0               # Ⓐ down on something that does more when held
         self.stick = {}         # (device, axis) -> -1 / 0 / 1
         self.direction = None   # (dx, dy) being held
         self.repeat = 0
@@ -195,17 +206,34 @@ class Navigator:
         if ev.kind == "button":
             held = self.held.setdefault(ev.device, set())
             (held.add if ev.value else held.discard)(ev.name)
-            if ev.value and {"start", "select"} <= held:
-                return   # a combo in progress (volume, close): the controller service handles it
+            # LB / RB turn the page when tapped alone, on release: pressed with other
+            # buttons they are a shortcut (Home + LB + RB...), and must not turn it.
+            if ev.value:
+                self.tapping = (ev.device, ev.name) if ev.name in ("l1", "r1") and held == {ev.name} else None
+            elif self.tapping == (ev.device, ev.name):
+                self.tapping = None
+                if self.active() and not self.blocked():
+                    self.shoulder(-1 if ev.name == "l1" else 1)
+                return
+            if ev.value and ({"start", "select"} <= held or "guide" in held):
+                return   # a combo in progress (volume, close, home): the controller service handles it
         elif ev.kind == "disconnected":
             self.held.pop(ev.device, None)
         if home_assistant.is_press(ev, self.DEAD_ZONE) and self.blocked():
             return
         if ev.kind == "button":
-            if ev.name in self.DIRECTIONS:
+            if ev.name == "a" and not ev.value and self.hold_timer:
+                GLib.source_remove(self.hold_timer)   # let go before it counted as held: a press
+                self.hold_timer = 0
+                self.press()
+            elif ev.name in self.DIRECTIONS:
                 self._hold(self.DIRECTIONS[ev.name] if ev.value else None)
             elif ev.value and self.active():
-                if ev.name == "a":
+                if ev.name == "a" and self.can_hold():
+                    if self.hold_timer:
+                        GLib.source_remove(self.hold_timer)
+                    self.hold_timer = GLib.timeout_add(self.HOLD_MS, self._held)
+                elif ev.name == "a":
                     self.press()
                 elif ev.name == "b":
                     self.back()
@@ -225,6 +253,11 @@ class Navigator:
         elif ev.kind == "disconnected":
             for key in [k for k in self.stick if k[0] == ev.device]:
                 del self.stick[key]
+
+    def _held(self):
+        self.hold_timer = 0
+        self.long_press()
+        return False
 
     def _hold(self, direction):
         if self.repeat:
@@ -342,8 +375,9 @@ class AddTile(Gtk.Button):
 # ---------------------------------------------------------------------------
 # The launcher window
 
-class Launcher(EditorMixin, SettingsMixin):
+class Launcher(HomeMixin, EditorMixin, SettingsMixin):
     gicon = staticmethod(gicon)  # the editor turns backend icons into GTK icons with it
+    svg_icon = staticmethod(svg_icon)
 
     def __init__(self, gtk_app):
         self.gtk_app = gtk_app
@@ -402,9 +436,12 @@ class Launcher(EditorMixin, SettingsMixin):
         self.win.add_controller(keys)
 
         self.win.connect("notify::is-active", self._active_changed)
+        self.win.connect("notify::focus-widget", self._focus_moved)
 
         self.navigator = Navigator(backend.gamepads(), self.win.is_active, self.move, self.press,
-                                   self.back, self.other_button, blocked=home_assistant.input_blocked)
+                                   self.back, self.other_button, blocked=home_assistant.input_blocked,
+                                   shoulder=self.page_media, can_hold=self.can_hold,
+                                   long_press=self.long_press)
         self.gamepads = self.navigator.gamepads
 
         GLib.timeout_add_seconds(1, self._update_clock)
@@ -418,8 +455,11 @@ class Launcher(EditorMixin, SettingsMixin):
         GLib.timeout_add_seconds(1, lambda: self.opening and self._check_opening() or True)
         GLib.timeout_add_seconds(3, self._every_3s)
         GLib.timeout_add(500, self._check_screen_size)
+        GLib.timeout_add_seconds(HOUSE_EVERY, self._home_tick)
         self.refresh_top_bar()
         self.update_weather()
+        self.update_media(force=True)
+        self.update_house()
 
         self.win.set_cursor(Gdk.Cursor.new_from_name("none", None))
         self.win.fullscreen()
@@ -431,15 +471,18 @@ class Launcher(EditorMixin, SettingsMixin):
         """(Re)build everything on screen in the current language. Called again
         when the language changes; the timers keep working on the new widgets."""
         self.footer_images = []
+        recent, house = getattr(self, "recent_items", []), getattr(self, "house_data", None)
         root = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         root.add_css_class("root")
         root.append(self._top_bar())
-        self.grid = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=44,
-                            halign=Gtk.Align.CENTER, valign=Gtk.Align.CENTER, vexpand=True)
-        root.append(self.grid)
+        root.append(self._home_body())
         root.append(self._footer())
         self.overlay.set_child(root)
         self.build_grid()
+        if recent:
+            self._show_recent(recent)
+        if house:
+            self._show_house(house)
 
     # --- sizes that follow the screen -----------------------------------------------
 
@@ -469,6 +512,7 @@ class Launcher(EditorMixin, SettingsMixin):
             button.footer-button {{ min-height: {e['footer_height']:.0f}px;
                                     padding: 4px {e['footer_pad_x']:.0f}px; }}
             .footer {{ border-spacing: {e['footer_gap']:.0f}px; }}
+            button.top-button {{ min-width: {e['top_button']:.0f}px; min-height: {e['top_button']:.0f}px; }}
         """
         if hasattr(self.edge_provider, "load_from_string"):  # GTK 4.12+
             self.edge_provider.load_from_string(css)
@@ -498,15 +542,16 @@ class Launcher(EditorMixin, SettingsMixin):
         return self.t("hint_normal", home=shortcuts.combo_label(current["home"]),
                       close=shortcuts.combo_label(current["close"]))
 
-    def tv_button_enabled(self):
-        """The footer's "Turn off TV" shows only when it is switched on in Settings
-        (and Home Assistant is set up, since that is what it calls)."""
-        return bool(self.cfg.get("tv_off_button", False) and home_assistant.webhook_url(self.cfg))
+    def tv_off_available(self):
+        """The power menu offers "Turn off the TV" when Home Assistant is set up
+        (its webhook is what turns the TV off)."""
+        return bool(home_assistant.webhook_url(self.cfg))
 
     @property
     def rows(self):
-        footer = [self.btn_tv] if self.btn_tv.get_visible() else []
-        return self.tile_rows + [footer + [self.btn_settings, self.btn_restart, self.btn_power]]
+        """Top to bottom: settings and the power menu, the media tabs and their row,
+        the apps, the house."""
+        return [self.top_buttons, self.tab_row, self.recent_row] + self.tile_rows + self.house_rows
 
     def apply_theme(self, theme_id):
         """Switch the background color right away (does not save it)."""
@@ -575,21 +620,20 @@ class Launcher(EditorMixin, SettingsMixin):
         bar = Gtk.CenterBox()
         bar.add_css_class("top-bar")
 
-        # Weather: icon and temperature, the place below in small print. Hidden
-        # until a location is set and the first answer arrives.
-        self.weather_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, valign=Gtk.Align.START)
+        # Weather: "● 24°" and its icon, on the date's line and in its style.
+        # Hidden until a location is set and the first answer arrives.
+        self.weather_box = Gtk.Box(spacing=10, valign=Gtk.Align.CENTER)
         self.weather_box.add_css_class("weather")
-        line = Gtk.Box(spacing=12)
+        dot = Gtk.Label(label="•")
+        dot.add_css_class("date")
+        dot.add_css_class("weather-dot")
+        self.weather_temp = Gtk.Label(label="", xalign=0)
+        self.weather_temp.add_css_class("date")
         self.weather_icon = Gtk.Image()
         self.weather_icon.set_pixel_size(self.px("weather_icon"))
-        self.weather_temp = Gtk.Label(label="", xalign=0)
-        self.weather_temp.add_css_class("weather-temp")
-        line.append(self.weather_icon)
-        line.append(self.weather_temp)
-        self.weather_place = Gtk.Label(label="", xalign=0)
-        self.weather_place.add_css_class("weather-place")
-        self.weather_box.append(line)
-        self.weather_box.append(self.weather_place)
+        for w in (dot, self.weather_temp, self.weather_icon):
+            self.weather_box.append(w)
+        self.weather_place = Gtk.Label(label="")   # kept for Settings; not on screen
         self.weather_box.set_visible(False)
 
         clock = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, valign=Gtk.Align.START)
@@ -597,8 +641,11 @@ class Launcher(EditorMixin, SettingsMixin):
         self.time_label.add_css_class("clock")
         self.date_label = Gtk.Label(label="")
         self.date_label.add_css_class("date")
+        date_line = Gtk.Box(spacing=16)
+        date_line.append(self.date_label)
+        date_line.append(self.weather_box)
         clock.append(self.time_label)
-        clock.append(self.date_label)
+        clock.append(date_line)
 
         # Connected: just the icon. Text only when something is wrong.
         net = Gtk.Box(spacing=10, valign=Gtk.Align.START)
@@ -627,45 +674,68 @@ class Launcher(EditorMixin, SettingsMixin):
         net.append(self.net_text)
         net.append(self.net_icon)
 
-        bar.set_start_widget(self.weather_box)
-        bar.set_center_widget(clock)
-        bar.set_end_widget(net)
+        # Left: the clock, the date and the weather. Right: status, settings and the power menu.
+        self.time_label.set_xalign(0)
+        self.date_label.set_xalign(0)
+        left = Gtk.Box(valign=Gtk.Align.START)
+        left.append(clock)
+        self.btn_settings = self._top_button("settings.svg", self.t("settings"), self.settings_button)
+        self.btn_power = self._top_button("power.svg", self.t("power_menu"), self.power_menu)
+        self.top_buttons = [self.btn_settings, self.btn_power]
+        buttons = Gtk.Box(spacing=12, valign=Gtk.Align.CENTER)
+        buttons.add_css_class("top-buttons")
+        for b in self.top_buttons:
+            buttons.append(b)
+        net.set_valign(Gtk.Align.CENTER)
+        right = Gtk.Box(spacing=32, valign=Gtk.Align.START)
+        right.append(net)
+        right.append(buttons)
+
+        bar.set_start_widget(left)
+        bar.set_end_widget(right)
         return bar
 
     # --- footer ----------------------------------------------------------------
 
     def _footer(self):
-        """Hints on the left, "Turn off TV" in the middle (when Home Assistant is
-        set up), settings / restart / shut down on the right."""
+        """Only shown in edit mode, to say how it works. (The button and shortcut
+        hints it used to show all the time are gone: see docs/gamepads.md.)"""
         bar = Gtk.CenterBox()
         bar.add_css_class("footer-bar")
-        buttons = Gtk.Box(spacing=14, valign=Gtk.Align.CENTER)
-        buttons.add_css_class("footer")
-
         self.hint = Gtk.Label(label=self.hint_text(), xalign=0, valign=Gtk.Align.CENTER)
         self.hint.add_css_class("hint")
+        self.hint.set_visible(self.editing)
         bar.set_start_widget(self.hint)
-
-        self.btn_tv = self._footer_button("tv-off.svg", self.t("tv_off"), self.turn_tv_off)
-        self.btn_tv.set_valign(Gtk.Align.CENTER)
-        self.btn_tv.set_visible(self.tv_button_enabled())
-        bar.set_center_widget(self.btn_tv)
-
-        self.btn_settings = self._footer_button("settings.svg", self.t("settings"), self.settings_button)
-        self.btn_restart = self._footer_button("restart.svg", self.t("restart"),
-                                               lambda: self.confirm_power("restart"))
-        self.btn_power = self._footer_button("power.svg", self.t("power_off"),
-                                             lambda: self.confirm_power("power_off"))
-        for b in (self.btn_settings, self.btn_restart, self.btn_power):
-            buttons.append(b)
-        bar.set_end_widget(buttons)
         return bar
 
+    def _top_button(self, icon, text, action):
+        """A round icon button for the top right. Its label is only shown when it
+        says something the icon can't (the gear reads "Done" in edit mode)."""
+        b = self._footer_button(icon, text, action)
+        b.remove_css_class("footer-button")
+        b.add_css_class("top-button")
+        b.label.set_visible(False)
+        b.get_child().set_halign(Gtk.Align.CENTER)   # the icon in the middle of the circle
+        b.get_child().set_valign(Gtk.Align.CENTER)
+        b.update_property([Gtk.AccessibleProperty.LABEL], [text])
+        return b
+
     def turn_tv_off(self):
-        """Asks Home Assistant to turn the TV off (the "tv_off" webhook event).
-        Any gamepad button wakes it again through the same automation."""
+        """Asks Home Assistant to turn the TV off (the "tv_off" webhook event), and
+        puts the launcher back on its start: menus closed, the first app selected,
+        scrolled to the top. Any gamepad button wakes the TV again through the
+        same automation."""
         log("asking Home Assistant to turn the TV off")
         home_assistant.turn_tv_off(self.cfg)
+        self.go_home()
+
+    def go_home(self):
+        while self.overlays:
+            self.pop_overlay()
+        if self.editing:
+            self.toggle_edit_mode()
+        (self.tiles[0] if self.tiles else self.btn_settings).grab_focus()
+        self._scroll_to(0.0)
 
     def _footer_button(self, icon, text, action):
         b = Gtk.Button()
@@ -687,7 +757,8 @@ class Launcher(EditorMixin, SettingsMixin):
     def _update_clock(self):
         now = GLib.DateTime.new_now_local()
         self.time_label.set_label(now.format("%H:%M"))
-        self.date_label.set_label(self.t.date(now.get_day_of_week(), now.get_day_of_month(), now.get_month()))
+        self.date_label.set_label(self.t.date(now.get_day_of_week(), now.get_day_of_month(), now.get_month(),
+                                              now.get_year()))
         return True
 
     def _update_network(self):
@@ -825,6 +896,7 @@ class Launcher(EditorMixin, SettingsMixin):
             self.restore_display()
             self._update_gamepads()
             self._update_network()
+            self._home_tick()
 
     def _every_3s(self):
         if self.win.is_active() and not self.overlays:
@@ -996,14 +1068,47 @@ class Launcher(EditorMixin, SettingsMixin):
         box.append(buttons)
         self.push_overlay(box, [[cancel, yes]], focus=cancel)
 
-    # --- restart / shut down ----------------------------------------------------------
+    # --- the power menu: TV off, restart, shut down ------------------------------------
 
-    def confirm_power(self, action):
-        title = self.t("confirm_restart") if action == "restart" else self.t("confirm_power_off")
-        label = self.t("restart") if action == "restart" else self.t("power_off")
-        self.confirm(title, self.t("power_warning"), label, lambda: self._run_power(action))
+    def _menu_option(self, icon, text, action, danger=False):
+        b = Gtk.Button()
+        b.add_css_class("dialog-button")
+        b.add_css_class("menu-option")
+        if danger:
+            b.add_css_class("danger")
+        b.set_focus_on_click(False)
+        box = Gtk.Box(spacing=20)
+        image = Gtk.Image.new_from_gicon(svg_icon(icon))
+        image.set_pixel_size(34)
+        b.label = Gtk.Label(label=text, xalign=0)
+        box.append(image)
+        box.append(b.label)
+        b.set_child(box)
+        b.connect("clicked", lambda _b: action())
+        return b
+
+    def power_menu(self):
+        """The power button: turn off the TV (with Home Assistant), restart or shut
+        down the computer. The menu itself is the confirmation: the selection
+        starts on the TV (or on Cancel), never on restart or shut down."""
+        box = self.dialog_box(self.t("power_menu"))
+        options = []
+        if self.tv_off_available():
+            options.append(self._menu_option("tv-off.svg", self.t("tv_off"), self.turn_tv_off))
+        options.append(self._menu_option("restart.svg", self.t("restart_computer"),
+                                         lambda: self._run_power("restart"), danger=True))
+        options.append(self._menu_option("power.svg", self.t("power_off_computer"),
+                                         lambda: self._run_power("power_off"), danger=True))
+        cancel = self.dialog_button(self.t("cancel"), self.pop_overlay)
+        for b in options:
+            box.append(b)
+        box.append(cancel)
+        self.power_options = options
+        self.push_overlay(box, [[b] for b in options] + [[cancel]],
+                          focus=options[0] if self.tv_off_available() else cancel)
 
     def _run_power(self, action):
+        self.pop_overlay()
         log("power:", action)
         if action == "restart":
             self.system.reboot()
@@ -1060,6 +1165,8 @@ class Launcher(EditorMixin, SettingsMixin):
         hook = {"x": "delete", "y": "space"}[name]
         if self.overlays and self.overlays[-1].get(hook):
             self.overlays[-1][hook]()
+        elif not self.overlays and name == "y" and self.can_hold():
+            self.open_light(self.win.get_focus())
 
     def _on_key(self, _ctl, keyval, _code, _mods):
         top = self.overlays[-1] if self.overlays else {}
@@ -1082,6 +1189,8 @@ class Launcher(EditorMixin, SettingsMixin):
             self.press()
         elif keyval == Gdk.KEY_Escape:
             self.back()
+        elif keyval in (Gdk.KEY_Page_Down, Gdk.KEY_Page_Up):
+            self.page_media(1 if keyval == Gdk.KEY_Page_Down else -1)
         else:
             return False
         return True

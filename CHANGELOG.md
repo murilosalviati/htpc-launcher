@@ -2,6 +2,21 @@
 
 The project is in beta: every `0.x` version is a pre-release, and the configuration format or install steps may still change.
 
+## Unreleased
+
+**A new home screen.** The apps are now the middle row of three:
+
+- **A row of cards above the apps that follows the app in focus.** With Jellyfin in focus, three tabs: **Explore** (this week's popular titles on TMDB that are in your Jellyfin library, matched by the TMDB id Jellyfin keeps; without a TMDB key, what was added lately), **Series** and **Films** (added lately). With Steam in focus, **Games**: last played first, read from Steam's own files (Flatpak or native, every library folder), including games streamed from another computer (names from the Steam store, cached; covers from Steam's cache or image servers). An installed game starts through Steam; a streamed one opens its Steam page, where Stream is. Other apps show nothing, and the space stays so nothing jumps. **RB / LB** turn the page (five cards a page) when tapped alone. Selecting a film or series opens the Jellyfin app. Set up in the new Settings → Jellyfin (address, API key, user, TMDB key, test).
+- **Home (Home Assistant)** below the apps, reached by going down: lights and switches by room, and scenes. Ⓐ turns one on or off (shown at once), Ⓨ on a dimmable light opens its brightness (−/+ by 10%). Every light by default; choose in Settings → Home Assistant → Lights on the home screen. Needs the address and the token. States are read every 5 seconds while the launcher is in front.
+- **The clock moved to the top left**, with the weather next to it.
+- **One power button** at the top right, next to Settings, replaces Restart, Shut down and the footer's "Turn off TV". It opens a menu: Turn off the TV (when Home Assistant is set up, and selected first), Restart the computer, Shut down the computer, Cancel. Turning off the TV also puts the launcher back on its start (menus closed, first app selected, scrolled up) for the next time. The menu is the confirmation; restart and shut down never start selected. The `tv_off_button` setting is gone.
+- **The weather moved onto the date's line**, in its style: "Wednesday, 25/11/2026 • 24°" and the icon. Dates read dd/mm/yyyy.
+- **Explore shows what's new**, not all-time favourites: trending films and series from the last 18 months (`recent_days` in `tmdb`), series with new episodes this week, films in cinemas, then the most popular series with an episode in the last 45 days and films from the window (to match more of a library).
+- **Lights: hold Ⓐ** (or Ⓨ) for a panel with brightness, white temperature and colour, as far as the light supports them; **Separate by room** puts each room's name over its lights.
+- The icons in the round buttons at the top right are centred.
+- **No more button reminders** at the bottom left; the bottom of the screen only explains edit mode while it's on.
+- Without Jellyfin and Home Assistant set up, the screen looks as before: the apps alone in the middle.
+
 ## 0.1.0-beta.7
 
 - **Fixed:** the beta.6 package still called itself beta.5 inside (`htpc.__version__`), so Settings → Updates kept offering beta.6 after it was installed. A unit test and the release workflow now check that the version matches the VERSION file.

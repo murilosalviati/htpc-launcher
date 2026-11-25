@@ -6,9 +6,17 @@
 
 ![The home screen](preview.png)
 
+The screen has up to three rows, top to bottom:
+
+1. **The app's row:** follows the app in focus. With Jellyfin in focus: Explore, Series and Films; with Steam: the games played lately; other apps have none. See [The app's row](#the-apps-row).
+2. **The apps:** one tile per app.
+3. **Home:** lights, switches and scenes from Home Assistant, once its address and token are set. Go down from the apps to reach it. See [Home](#home).
+
+Without Jellyfin, Steam and Home Assistant, the apps sit alone in the middle of the screen.
+
 ### Tiles
 
-The middle of the screen has one tile per app. Move between them with the d-pad or the left stick, and press **Ⓐ** to open an app.
+The apps row has one tile per app. Move between them with the d-pad or the left stick, and press **Ⓐ** to open an app.
 
 - **Selection:** the selected tile lifts and glows.
 - **Opening:** pressing Ⓐ plays a short "button pressed" animation, and the tile pulses green while the app opens.
@@ -18,22 +26,60 @@ The middle of the screen has one tile per app. Move between them with the d-pad 
 
 ### The top bar
 
-- **Left:** the weather (an icon, the temperature and the place), once you set a location. At night the sun becomes a moon. It updates every 30 minutes.
-- **Middle:** the clock and the date.
-- **Right:**
+- **Left:** the clock, and under it the date (as 25/11/2026) followed by the weather: the temperature and an icon, in the date's style, once you set a location. At night the sun becomes a moon. It updates every 30 minutes.
+- **Right**, from left to right:
   - **Gamepads:** an icon that lights up when a gamepad is connected (USB, Bluetooth or a wireless receiver). With more than one connected, it shows how many.
   - **Batteries:** one battery icon per wireless gamepad that reports its charge, from empty (red) to full, with a bolt while charging. A gamepad on a cable reports no charge, so no icon shows for it.
   - **Network:** a cable symbol on a wired connection, or Wi-Fi bars on Wi-Fi. Text appears only when the connection is limited or down.
+  - **Settings** and **power:** two round buttons. Go up from the top row to reach them.
+
+The power button opens a menu:
+
+- **Turn off the TV**, when Home Assistant is set up. The TV turns off through Home Assistant, and the launcher goes back to its start (menus closed, the first app selected), ready for the next time. This option is selected when the menu opens.
+- **Restart the computer** and **Shut down the computer**.
+- **Cancel**, selected when there is no TV option. The menu is the confirmation: restart and shut down never start selected.
 
 Everything around the edges keeps the same share of the screen on 1080p, 1440p or 4K. The icons are vectors, so they stay sharp.
 
-### The footer
+### Buttons
 
-- **Left:** reminders of the buttons and the current shortcuts.
-- **Middle:** **Turn off TV**. It only shows when it's switched on in Settings → Home Assistant. See the [Home Assistant guide](home-assistant.md).
-- **Right:** **Settings**, **Restart** and **Shut down**. Restart and Shut down ask first, and Cancel is selected by default.
+**Ⓐ** opens or selects, **Ⓑ** goes back: it closes a menu or leaves edit mode. The screen shows no button reminders, except in edit mode; the shortcuts are listed in [Gamepads](gamepads.md) and in Settings → Gamepads.
 
-**Ⓑ** goes back: it closes a menu, or moves the selection from the footer back up to the tiles.
+### The app's row
+
+Above the apps, a row of cards that follows the app in focus:
+
+| App in focus | Tabs | What they show |
+|---|---|---|
+| **Jellyfin** | **Explore** | What is new and popular on [TMDB](https://www.themoviedb.org/) **and is in your library**: this week's trending films and series that came out in the last 18 months, series with new episodes this week, films in cinemas, then the most popular series with an episode in the last 45 days and recent films. Old favourites that trend without anything new (a 90s sitcom) are left out. Without a TMDB key: what was added lately. |
+| | **Series**, **Films** | What was added lately to Jellyfin. New episodes are grouped under their series, with how many are new. |
+| **Steam** | **Games** | Your Steam games, the last played first, with when and how long you played. Games streamed from another computer (Remote Play) count too. |
+| Any other app | none | The space stays empty, so nothing on screen jumps. |
+
+- **Tabs:** go up from the cards to reach them. Moving onto a tab shows it; the launcher remembers the last one per app.
+- **More:** **RB** shows the next five cards and **LB** goes back, with the app or a card in focus. The note next to the tabs says which page you're on. LB and RB only turn the page when tapped alone, so Home + LB + RB still brings the launcher back.
+- **Select a card:** a film or series opens the Jellyfin app (on its home screen). An installed game starts through Steam (`steam://rungameid/…`), using the same Steam shortcut as the tile. A game that isn't installed here opens its page in Steam, where **Stream** plays it from the computer that has it.
+- **Updates:** at start, then while the launcher is in front: Explore every hour, Series and Films every 10 minutes, Games every minute (they're read from Steam's own files, without its API). If something can't be reached, the row keeps what it had and tries again a minute later.
+
+**Setup:**
+- **Jellyfin:** Settings → **Jellyfin**: the address (such as `http://localhost:8096`), an API key (in Jellyfin: Dashboard → API Keys → +), and whose library to show. **Test** checks it. Typing the 32-character key with the gamepad is slow: you can also put it in `apps.json` (see [Configuration](configuration.md#jellyfin)).
+- **TMDB (for Explore):** a free account at themoviedb.org → Settings → API. Type the short API key in Settings → Jellyfin → **Popular (TMDB)**, or put the key or the long Read Access Token in `apps.json`. Jellyfin matches each title by the TMDB id it stores, so nothing has to be renamed.
+- **Steam:** nothing to set up. The Flatpak Steam and a native one are both found, with every library folder. Names of games that aren't installed here come from the Steam store, once per game (kept in `~/.cache/htpc-launcher/steam-apps.json`), and their covers from Steam's cache or its image servers. Non-Steam games added on another computer don't show yet.
+
+This product uses the TMDB API but is not endorsed or certified by TMDB.
+
+### Home
+
+Go down from the apps to reach your lights. The apps dim and the screen scrolls.
+
+- **Ⓐ** turns a light or switch on or off. The card changes at once; Home Assistant's own answer follows a moment later.
+- **Hold Ⓐ** (or press **Ⓨ**) on a light to open its panel, with what the light supports: brightness (**−** and **+**, by 10%), white temperature (2200 K to 6500 K, within the light's range) and colour (eight colours). The current ones are marked.
+- **By room:** Settings → Home Assistant → Lights on the home screen → **Separate by room** shows each room's name with its lights under it.
+- **Scenes** sit in a row above the lights. Ⓐ runs one.
+- **Which ones:** every light, by room, until you choose. Choose in Settings → Home Assistant → **Lights on the home screen**, which also lists switches. Without a choice, the first 6 scenes show.
+- **Updates:** the states are read every 5 seconds while the launcher is in front.
+
+It needs Home Assistant's address and access token. See the [Home Assistant guide](home-assistant.md#5-optional-lights-on-the-home-screen).
 
 ### No stray mouse pointer
 
@@ -51,7 +97,7 @@ Notices show **over anything**, a full-screen video or game included. They don't
 
 ## Settings
 
-Select **Settings** (the gear) in the footer.
+Select **Settings** (the gear) at the top right.
 
 ![Settings](settings.png)
 
@@ -65,7 +111,8 @@ Select **Settings** (the gear) in the footer.
 | **On-screen notices** | Turns the notices on or off. |
 | **Audio** | Where the sound goes: the TV, a soundbar, Bluetooth headphones or a speaker. Also pairs Bluetooth headphones and speakers. See [Audio](#audio). |
 | **Gamepads** | Pair a gamepad, keyboard or mouse over Bluetooth, change the shortcuts, and see the volume shortcut. See [Gamepads](gamepads.md). |
-| **Home Assistant** | The address, the webhook, the TV, the "Turn off TV" button and a connection test. See the [Home Assistant guide](home-assistant.md). |
+| **Home Assistant** | The address, the webhook, the TV, the lights on the home screen and a connection test. See the [Home Assistant guide](home-assistant.md). |
+| **Jellyfin** | The address, API key and user for the Recently added row, and a test. See [Recently added](#recently-added). |
 
 At the bottom:
 

@@ -68,7 +68,11 @@ def screenshot(win, name):
     p = Gtk.WidgetPaintable.new(win)
     snap = Gtk.Snapshot()
     p.snapshot(snap, win.get_width(), win.get_height())
-    tex = win.get_native().get_renderer().render_texture(snap.to_node(), None)
+    node = snap.to_node()
+    if node is None:   # caught mid-layout (it happens under load): no picture this time
+        print(f"(screenshot {name} skipped: nothing drawn yet)", flush=True)
+        return
+    tex = win.get_native().get_renderer().render_texture(node, None)
     tex.save_to_png(f"{OUT}/{name}.png")
 
 
@@ -119,7 +123,7 @@ def s1():
     screenshot(l.win, "1-home")
     check("edge sizes follow the screen: scale 1 on 1920×1080", abs((l.edge_scale or 0) - 1.0) < 0.01)
     l.apply_edge_scale(2.0)
-    check("on a screen twice as big, the edge icons double", l.weather_icon.get_pixel_size() == 144
+    check("on a screen twice as big, the edge icons double", l.weather_icon.get_pixel_size() == 60
           and l.net_icon.get_pixel_size() == 84 and all(i.get_pixel_size() == 56 for i in l.footer_images))
     from gi.repository import Gio as _Gio
     check("edge icons are drawn from the vector at their size (GIcon, not a stretched file)",
@@ -175,11 +179,14 @@ def s4():
         l.move(1, 0)
     check("does not go past the last app", l.win.get_focus() is l.tiles[-1])
     l.move(0, 1)
-    check("down goes to the footer (closest button)", l.win.get_focus() in (l.btn_settings, l.btn_restart, l.btn_power))
+    check("down from the apps stays there when nothing is below", l.win.get_focus() is l.tiles[-1])
+    l.move(0, -1)
+    check("up goes to the round buttons at the top right (closest one)",
+          l.win.get_focus() in (l.btn_settings, l.btn_power))
     l.move(-1, 0)
     for _ in range(3):
         l.move(1, 0)
-    check("right in the footer reaches Shut down", l.win.get_focus() is l.btn_power)
+    check("right along the top reaches the power button", l.win.get_focus() is l.btn_power)
 
 
 @step(400)
@@ -191,10 +198,12 @@ def s4b():
 def s5():
     l = L()
     l.press()
-    check("Shut down asks for confirmation", len(l.overlays) == 1)
-    check("default focus is Cancel", l.win.get_focus() is l.overlays[-1]["rows"][0][0])
+    check("the power button opens its menu: restart, shut down (no TV without Home Assistant)",
+          len(l.overlays) == 1 and [b.label.get_label() for b in l.power_options]
+          == [l.t("restart_computer"), l.t("power_off_computer")])
+    check("default focus is Cancel", l.win.get_focus() is l.overlays[-1]["rows"][-1][0])
     l.move(0, 1)
-    check("down inside the dialog stays in the dialog", l.win.get_focus() in l.overlays[-1]["rows"][0])
+    check("down inside the menu stays in the menu", l.win.get_focus() is l.overlays[-1]["rows"][-1][0])
 
 
 @step(400)
@@ -202,12 +211,12 @@ def s6():
     l = L()
     screenshot(l.win, "3-confirm-power-off")
     l.back()
-    check("B closes the confirmation", not l.overlays)
-    check("focus returns to Shut down", l.win.get_focus() is l.btn_power)
-    l.move(0, -1)
-    check("up goes back to the apps", l.win.get_focus() in l.tiles)
-    l.move(0, -1)
-    check("up from the apps stays on the apps", l.win.get_focus() in l.tiles)
+    check("B closes the menu", not l.overlays)
+    check("focus returns to the power button", l.win.get_focus() is l.btn_power)
+    l.move(0, 1)
+    check("down goes back to the apps", l.win.get_focus() in l.tiles)
+    l.move(0, 1)
+    check("down from the apps stays on the apps", l.win.get_focus() in l.tiles)
 
 
 @step(300)
@@ -267,14 +276,14 @@ def s9():
 @step(300)
 def e1():
     l = L()
-    l.tiles[-1].grab_focus()
-    l.move(0, 1)
-    check("down from the last app reaches the footer", l.win.get_focus() in (l.btn_settings, l.btn_restart, l.btn_power))
+    l.tiles[0].grab_focus()
+    l.move(0, -1)
+    check("up from the first app reaches the top buttons", l.win.get_focus() in (l.btn_settings, l.btn_power))
     l.btn_settings.grab_focus()
     l.press()
     f = l.settings_fields
     check("the gear opens Settings with apps, background, location, temperature and language",
-          len(l.overlays) == 1 and list(f) == ["apps", "background", "location", "unit", "language", "notifications", "audio", "shortcuts", "home_assistant"])
+          len(l.overlays) == 1 and list(f) == ["apps", "background", "location", "unit", "language", "notifications", "audio", "shortcuts", "home_assistant", "jellyfin"])
     check("Settings shows the current values",
           f["background"].value.get_label() == "Meia-noite" and f["unit"].value.get_label() == "°C"
           and f["language"].value.get_label() == "Português (Brasil)"
@@ -471,8 +480,8 @@ def n1():
     check("gamepad: left stick moves back", l.win.get_focus() is l.tiles[0])
     nav.handle(E("pad", "axis", "lx", 0.3))
     check("gamepad: a small stick movement is ignored", l.win.get_focus() is l.tiles[0])
-    nav.handle(E("pad", "button", "down", 1)); nav.handle(E("pad", "button", "down", 0))
-    check("gamepad: d-pad down reaches the footer", l.win.get_focus() in l.rows[-1])
+    nav.handle(E("pad", "button", "up", 1)); nav.handle(E("pad", "button", "up", 0))
+    check("gamepad: d-pad up reaches the top buttons", l.win.get_focus() in l.top_buttons)
     l.btn_power.grab_focus()
     nav.handle(E("pad", "button", "a", 1))
     check("gamepad: A presses the focused button", len(l.overlays) == 1)
@@ -671,6 +680,19 @@ def w10():
 
 # ---------------- Home Assistant settings and "Turn off TV" ----------------
 
+def label_texts_widgets(widget):
+    found, stack = [], [widget]
+    while stack:
+        w = stack.pop()
+        if isinstance(w, Gtk.Label):
+            found.append(w)
+        child = w.get_last_child()
+        while child is not None:
+            stack.append(child)
+            child = child.get_prev_sibling()
+    return found
+
+
 def label_texts(widget):
     """All the label texts inside a widget, joined."""
     out = []
@@ -700,18 +722,16 @@ def tv1():
     l = L()
     while l.overlays:
         l.pop_overlay()
-    check("no Home Assistant set up: no 'Desligar TV' button", not l.btn_tv.get_visible()
-          and l.btn_tv not in l.rows[-1])
+    check("no Home Assistant set up: no 'turn off the TV' in the power menu", not l.tv_off_available())
     l.open_settings(focus="home_assistant")
     check("Settings has a Home Assistant row saying it is not set up",
           l.settings_fields["home_assistant"].value.get_label() == l.t("ha_not_set"))
     l.press()
     f = l.ha_fields
     check("it opens the Home Assistant menu", len(l.overlays) == 2
-          and list(f) == ["enabled", "url", "webhook", "events", "token", "tv", "tv_button", "test"]
+          and list(f) == ["enabled", "url", "webhook", "events", "token", "tv", "home", "test"]
           and f["token"].value.get_label() == l.t("ha_token_missing")
-          and f["tv"].value.get_label() == l.t("ha_tv_needs_token")
-          and f["tv_button"].value.get_label() == l.t("tv_button_needs_ha"))
+          and f["tv"].value.get_label() == l.t("ha_tv_needs_token"))
     l.pop_overlay()
     ha_type(l, "url", "192.168.0.22:8123")
     check("an address without http:// is refused", "home_assistant" not in l.cfg
@@ -732,32 +752,33 @@ def tv1():
     check("the webhook id is saved: Home Assistant is set up",
           l.cfg["home_assistant"]["webhook_id"] == "htpc-gamepad_1"
           and l.settings_fields["home_assistant"].value.get_label() == l.t("ha_on_at", host="192.168.0.22:8123")
-          and l.ha_fields["tv_button"].value.get_label() == l.t("off") and not l.btn_tv.get_visible())
-    l.ha_fields["tv_button"].grab_focus()
-    l.press()  # A switches the footer button on
+          and l.tv_off_available())
 
 
 @step(500)
 def tv2():
     l = L()
     from htpc import home_assistant as hass
-    check("'Desligar TV' switched on in the Home Assistant menu: saved and shown",
-          l.cfg.get("tv_off_button") is True and l.ha_fields["tv_button"].value.get_label() == l.t("on")
-          and l.btn_tv.get_visible())
     screenshot(l.win, "14-settings-home-assistant")
     while l.overlays:
         l.pop_overlay()
-    l.btn_tv.grab_focus()
-    while GLib.MainContext.default().iteration(False):
-        pass
-    ok, r = l.btn_tv.compute_bounds(l.win)
-    middle = r.get_x() + r.get_width() / 2
-    check("'Desligar TV' in the middle of the footer",
-          abs(middle - l.win.get_width() / 2) < 4
-          and l.btn_tv.label.get_label() == l.t("tv_off") and l.rows[-1][0] is l.btn_tv)
-    screenshot(l.win, "15-tv-off-button")
+    l.btn_power.grab_focus()
+    l.press()
+    check("with Home Assistant, the power menu starts on 'turn off the TV'",
+          [b.label.get_label() for b in l.power_options]
+          == [l.t("tv_off"), l.t("restart_computer"), l.t("power_off_computer")]
+          and l.win.get_focus() is l.power_options[0])
+
+
+@step(400)
+def tv2b():
+    l = L()
+    from htpc import home_assistant as hass
+    screenshot(l.win, "15-power-menu")
     hass.http_post = lambda url, payload: None
     l.press()
+    check("turning off the TV closes the menu and goes back to the start (first app, top of the screen)",
+          not l.overlays and l.win.get_focus() is l.tiles[0] and l.scroller.get_vadjustment().get_value() == 0)
 
 
 @step(400)
@@ -794,15 +815,14 @@ def tv5():
     l.pop_overlay()
     l.ha_fields["enabled"].grab_focus()
     l.press()
-    check("switching Home Assistant off hides the button and keeps the address",
-          l.cfg["home_assistant"].get("enabled") is False and not l.btn_tv.get_visible()
-          and l.cfg["home_assistant"]["url"] == "http://192.168.0.22:8123"
-          and l.ha_fields["tv_button"].value.get_label() == l.t("tv_button_needs_ha"))
+    check("switching Home Assistant off takes the TV out of the power menu and keeps the address",
+          l.cfg["home_assistant"].get("enabled") is False and not l.tv_off_available()
+          and l.cfg["home_assistant"]["url"] == "http://192.168.0.22:8123")
     l.press()
-    check("and on again brings it back", "enabled" not in l.cfg["home_assistant"] and l.btn_tv.get_visible())
+    check("and on again brings it back", "enabled" not in l.cfg["home_assistant"] and l.tv_off_available())
     ha_type(l, "webhook", "")
     check("an empty webhook id leaves it not set up", "webhook_id" not in l.cfg["home_assistant"]
-          and not l.btn_tv.get_visible())
+          and not l.tv_off_available())
     ha_type(l, "url", "")
     check("and with both empty the entry is gone", "home_assistant" not in l.cfg)
     while l.overlays:
@@ -1296,6 +1316,495 @@ def bt8():
     check("discovery is off after closing", fakes.bluez["adapter"]["Discovering"] is False)
     while l.overlays:
         l.pop_overlay()
+    l.tiles[0].grab_focus()
+
+# ---------------- home screen: recently added (Jellyfin) and the house (Home Assistant) ----------------
+
+def png(rgb):
+    from gi.repository import Gdk as _Gdk
+    tex = _Gdk.MemoryTexture.new(4, 4, _Gdk.MemoryFormat.R8G8B8A8, GLib.Bytes.new(bytes([*rgb, 255]) * 16), 16)
+    return tex.save_to_png_bytes().get_data()
+
+
+JF_LATEST = [
+    {"Id": "m1", "Type": "Movie", "Name": "Filme Um", "ProductionYear": 2024, "RunTimeTicks": 112 * 600_000_000,
+     "ImageTags": {"Primary": "p"}, "BackdropImageTags": ["b"]},
+    {"Id": "s1", "Type": "Series", "Name": "Série Dois", "ChildCount": 3, "ImageTags": {"Primary": "p"}},
+    {"Id": "e1", "Type": "Episode", "Name": "Piloto", "SeriesName": "Série Três", "SeriesId": "s3",
+     "SeriesPrimaryImageTag": "p", "ParentIndexNumber": 1, "IndexNumber": 2},
+]
+HA_STATES = [
+    {"entity_id": "light.sala", "state": "on",
+     "attributes": {"friendly_name": "Luz do teto", "brightness": 204, "supported_color_modes": ["brightness"]}},
+    {"entity_id": "light.abajur", "state": "off", "attributes": {"friendly_name": "Abajur", "supported_color_modes": ["onoff"]}},
+    {"entity_id": "switch.som", "state": "on", "attributes": {"friendly_name": "Tomada do som"}},
+    {"entity_id": "scene.cinema", "state": "x", "attributes": {"friendly_name": "Modo cinema"}},
+    {"entity_id": "media_player.tv", "state": "on", "attributes": {"friendly_name": "TV"}},
+]
+
+
+JF_LIBRARY = {"Items": [
+    {"Id": "lib1", "Type": "Movie", "Name": "Filme em Alta", "ProviderIds": {"Tmdb": "77"}, "ImageTags": {"Primary": "p"},
+     "BackdropImageTags": ["b"], "ProductionYear": 2025},
+    {"Id": "lib2", "Type": "Series", "Name": "Série em Alta", "ProviderIds": {"Tmdb": "88"}, "ImageTags": {"Primary": "p"}},
+    {"Id": "lib3", "Type": "Movie", "Name": "Fora da lista", "ProviderIds": {"Tmdb": "5"}},
+]}
+
+
+def jf_get(url, key):
+    import urllib.parse as up
+    state.setdefault("jf_calls", []).append(url)
+    parts = up.urlsplit(url)
+    path, query = parts.path, dict(up.parse_qsl(parts.query))
+    if path == "/Users":
+        return json.dumps([{"Id": "u1", "Name": "mu", "Policy": {"IsAdministrator": True}}]).encode()
+    if path.endswith("/Items/Latest"):
+        types = query.get("IncludeItemTypes", "")
+        items = [i for i in JF_LATEST if types != "Movie" or i["Type"] == "Movie"]
+        items = [i for i in items if types != "Episode,Series" or i["Type"] != "Movie"]
+        return json.dumps(items).encode()
+    if path.endswith("/Items"):
+        return json.dumps(JF_LIBRARY).encode()
+    if path == "/System/Info":
+        return json.dumps({"ServerName": "servidor", "Version": "10.11.0"}).encode()
+    return png((200, 120, 60))
+
+
+def ha_states(url, token):
+    return HA_STATES
+
+
+def ha_api_post(url, token, payload):
+    state.setdefault("ha_posts", []).append((url.split("/api/", 1)[1], payload))
+    if url.endswith("/template"):
+        return json.dumps({"light.sala": "Sala", "light.abajur": "Quarto", "switch.som": "Sala", "light.fita": "Sala"})
+    return "[]"
+
+
+@step(300)
+def h1():
+    l = L()
+    while l.overlays:
+        l.pop_overlay()
+    check("not set up: no Recently added and no house; the apps are alone, in the middle",
+          not l.recent_section.get_visible() and not l.house_section.get_visible() and l.grid.get_vexpand())
+    l.jellyfin_get, l.ha_get, l.ha_api_post = jf_get, ha_states, ha_api_post
+    l.cfg["jellyfin"] = {"url": "http://jf:8096", "api_key": "k"}
+    ha = dict(l.cfg.get("home_assistant") or {})
+    ha.update(url="http://192.168.0.22:8123", token="T")
+    ha.pop("devices", None)
+    ha.pop("home_screen", None)
+    l.cfg["home_assistant"] = ha
+    l.tiles[1].grab_focus()
+    l.tiles[0].grab_focus()   # Jellyfin in focus: its row shows
+    l.update_recent(force=True)
+    l.update_house()
+
+
+@step(900)
+def h2():
+    l = L()
+    check("Recently added shows Jellyfin's newest, the first one wide",
+          l.recent_section.get_visible() and [c.item["title"] for c in l.recent_cards] == ["Filme Um", "Série Dois", "Série Três"]
+          and l.recent_cards[0].has_css_class("wide"))
+    check("their pictures arrive", all(c.picture.get_paintable() is not None for c in l.recent_cards))
+    check("the house shows every light by room, plus the scenes",
+          l.house_section.get_visible() and [t.device["entity"] for t in l.device_tiles] == ["light.abajur", "light.sala"]
+          and [b.scene["entity"] for b in l.scene_buttons] == ["scene.cinema"]
+          and l.device_tiles[1].state.get_label() == l.t("dev_brightness", pct=80) and l.device_tiles[1].has_css_class("on"))
+    check("rows: top buttons, the tabs, their row, apps, scenes, lights",
+          l.rows[0] == l.top_buttons and l.rows[1] == l.tab_row and l.rows[2] == l.recent_cards
+          and l.rows[3] == l.tiles and l.rows[4] == l.scene_buttons and l.rows[5] == l.device_tiles)
+    check("without a TMDB key and without Steam: Explore, Series and Films; Explore shows what's new",
+          [b.tab for b in l.tab_row] == ["explore", "series", "movies"] and l.media_tab == "explore"
+          and l.media_note.get_label() == l.t("explore_note_no_tmdb"))
+    check("with other rows, the apps sit at the top of their space", not l.grid.get_vexpand())
+    l.tiles[0].grab_focus()
+    l.move(0, -1)
+    check("up from the apps reaches Recently added", l.win.get_focus() in l.recent_cards)
+    screenshot(l.win, "30-home-recently-added")
+    l.move(0, 1)
+    l.move(0, 1)
+    check("down from the apps reaches the scenes, the apps dim and the screen scrolls",
+          l.win.get_focus() in l.scene_buttons and l.grid.has_css_class("dimmed")
+          and l.scroller.get_vadjustment().get_value() > 0)
+    l.move(0, 1)
+    l.move(1, 0)
+    check("then the lights", l.win.get_focus() is l.device_tiles[1])
+
+
+@step(300)
+def h2b():
+    l = L()
+    screenshot(l.win, "31-home-house")
+    state["ha_posts"] = []
+    l.press()
+    check("Ⓐ turns the light off at once", not l.device_tiles[1].has_css_class("on"))
+
+
+@step(300)
+def h3():
+    l = L()
+    check("...and asks Home Assistant to", ("services/light/toggle", {"entity_id": "light.sala"}) in state["ha_posts"])
+    l.device_tiles[1].grab_focus()
+    l.device_tiles[1].update(HA_STATES and l.device_tiles[1].device | {"on": True, "brightness": 80})
+    l.other_button("y")
+    check("Ⓨ on a dimmable light opens its brightness", len(l.overlays) == 1 and l.brightness_value.get_label() == "80%")
+    state["ha_posts"] = []
+    l.press()   # focus starts on +
+    check("+ raises it by 10 %", l.brightness_value.get_label() == "90%")
+
+
+@step(300)
+def h3b():
+    l = L()
+    screenshot(l.win, "32-brightness")
+    l.back()
+    l.device_tiles[0].grab_focus()
+    l.other_button("y")
+    check("Ⓨ on an on/off light does nothing", not l.overlays)
+
+
+COLOR_LIGHT = {"entity_id": "light.fita", "state": "on", "attributes": {
+    "friendly_name": "Fita LED", "brightness": 128, "supported_color_modes": ["hs", "color_temp"],
+    "color_mode": "color_temp", "color_temp_kelvin": 2700, "min_color_temp_kelvin": 2200,
+    "max_color_temp_kelvin": 6500}}
+
+
+@step(600)
+def hc1():
+    l = L()
+    check("the brightness went to Home Assistant",
+          ("services/light/turn_on", {"entity_id": "light.sala", "brightness_pct": 90}) in state["ha_posts"])
+    l.ha_get = lambda url, token: HA_STATES + [COLOR_LIGHT]
+    l.update_house()
+
+
+@step(700)
+def hc2():
+    from htpc.backends.base import GamepadEvent as E
+    l = L()
+    fita = next(t for t in l.device_tiles if t.device["entity"] == "light.fita")
+    fita.grab_focus()
+    nav = l.navigator
+    nav.active = lambda: True
+    state["ha_posts"] = []
+    nav.handle(E("pad", "button", "a", 1))
+    check("Ⓐ down on a light waits to see if it is held", not l.overlays and not state["ha_posts"])
+    state["fita"] = fita
+
+
+@step(800)
+def hc3():
+    from htpc.backends.base import GamepadEvent as E
+    l = L()
+    l.navigator.handle(E("pad", "button", "a", 0))
+    rows = l.overlays[-1]["rows"] if l.overlays else []
+    check("held: the light's panel, with brightness, white temperatures and colours",
+          len(l.overlays) == 1 and len(rows) == 4 and l.brightness_value.get_label() == "50%"
+          and [b.value for b in rows[1]] == [2200, 2700, 3000, 4000, 5000, 6500] and len(rows[2]) == 8
+          and rows[1][1].has_css_class("selected"))
+    check("letting go after the panel opened does not toggle the light", not state["ha_posts"])
+
+
+@step(300)
+def hc4():
+    l = L()
+    screenshot(l.win, "37-light-panel")
+    rows = l.overlays[-1]["rows"]
+    rows[2][5].grab_focus()   # blue
+    l.press()
+    rows[1][4].grab_focus()   # 5000 K
+    l.press()
+    check("a colour and a white marked as chosen", rows[2][5].has_css_class("selected")
+          and rows[1][4].has_css_class("selected") and not rows[1][1].has_css_class("selected"))
+
+
+@step(600)
+def hc5():
+    from htpc.backends.base import GamepadEvent as E
+    l = L()
+    check("they went to Home Assistant", ("services/light/turn_on", {"entity_id": "light.fita", "hs_color": [225, 100]})
+          in state["ha_posts"] and ("services/light/turn_on", {"entity_id": "light.fita", "color_temp_kelvin": 5000})
+          in state["ha_posts"])
+    l.back()
+    fita = next(t for t in l.device_tiles if t.device["entity"] == "light.fita")
+    fita.grab_focus()
+    state["ha_posts"] = []
+    l.navigator.handle(E("pad", "button", "a", 1))
+    l.navigator.handle(E("pad", "button", "a", 0))
+    check("a quick Ⓐ on the same light still turns it on or off", not l.overlays and not fita.has_css_class("on"))
+    l.cfg["home_assistant"]["group_by_area"] = True
+    l.update_house()
+
+
+@step(700)
+def hc6():
+    l = L()
+    titles = [w.get_label() for w in label_texts_widgets(l.device_box) if w.has_css_class("area-title")]
+    check("separated by room: a title per room, a row of lights under each",
+          titles == ["Quarto", "Sala"] and [[t.device["entity"] for t in r] for r in l.device_rows]
+          == [["light.abajur"], ["light.fita", "light.sala"]] and l.house_rows[-2:] == l.device_rows)
+    l.device_rows[1][0].grab_focus()
+
+
+@step(400)
+def hc7():
+    l = L()
+    screenshot(l.win, "38-lights-by-room")
+    l.cfg["home_assistant"].pop("group_by_area", None)
+    l.ha_get = ha_states
+    l.update_house()
+
+
+@step(500)
+def h4():
+    l = L()
+    l.device_tiles[1].grab_focus()
+    l.move(0, -1)
+    l.move(0, -1)
+    check("back up to the apps: not dimmed, scrolled back to the top",
+          l.win.get_focus() in l.tiles and not l.grid.has_css_class("dimmed")
+          and l.scroller.get_vadjustment().get_value() == 0)
+    opened = []
+    real = l.open_app
+    l.open_app = lambda tile: opened.append(tile.app["id"])
+    l.recent_cards[1].grab_focus()
+    l.press()
+    l.open_app = real
+    check("a Recently added card opens the Jellyfin app", opened == ["org.jellyfin.JellyfinDesktop"])
+    l.open_settings(focus="jellyfin")
+    check("Settings has a Jellyfin row", l.settings_fields["jellyfin"].value.get_label() == "jf:8096")
+    l.press()
+    f = l.jf_fields
+    check("it opens the Jellyfin menu", list(f) == ["enabled", "url", "key", "user", "tmdb", "test"]
+          and f["key"].value.get_label() == l.t("jf_key_set") and f["user"].value.get_label() == l.t("jf_user_auto"))
+
+
+
+@step(300)
+def h4b():
+    l = L()
+    screenshot(l.win, "33-settings-jellyfin")
+    l.jf_fields["test"].grab_focus()
+    l.press()
+
+
+@step(500)
+def h5():
+    l = L()
+    check("the test says where it connected", l.t("jf_test_ok", server="servidor", version="10.11.0", count=3)
+          in label_texts(l.overlays[-1]["backdrop"]))
+    while l.overlays:
+        l.pop_overlay()
+    l.open_home_assistant(focus="home")
+    check("Home Assistant → Lights on the home screen: all lights", l.ha_fields["home"].value.get_label() == l.t("ha_home_all"))
+    l.press()
+
+
+@step(500)
+def h6():
+    l = L()
+    f = l.ha_home_fields
+    check("the list has every light and switch, the lights ticked",
+          [b.entity for b in f["items"]] == ["light.abajur", "light.sala", "switch.som"]
+          and [b.value.get_label() for b in f["items"]] == ["✓", "✓", ""])
+
+
+@step(300)
+def h6b():
+    l = L()
+    f = l.ha_home_fields
+    screenshot(l.win, "34-home-lights-choice")
+    f["items"][2].grab_focus()
+    l.press()
+    check("ticking the switch saves a choice", l.cfg["home_assistant"]["devices"] == ["light.abajur", "light.sala", "switch.som"]
+          and l.ha_fields["home"].value.get_label() == l.t("ha_home_some", n=3))
+    f["items"][0].grab_focus()
+    l.press()
+    check("unticking a light keeps the others", l.cfg["home_assistant"]["devices"] == ["light.sala", "switch.som"])
+
+
+@step(700)
+def h7():
+    l = L()
+    check("the house follows the choice, in its order",
+          [t.device["entity"] for t in l.device_tiles] == ["light.sala", "switch.som"])
+    l.ha_home_fields["show"].grab_focus()
+    l.press()
+    check("'Show under the apps' off is saved", l.cfg["home_assistant"]["home_screen"] is False)
+    while l.overlays:
+        l.pop_overlay()
+    l.cfg["jellyfin"]["enabled"] = False
+    l.update_recent(force=True)
+
+
+@step(500)
+def h8():
+    l = L()
+    check("both switched off: the rows go away and the apps are alone again",
+          not l.recent_section.get_visible() and not l.house_section.get_visible() and l.grid.get_vexpand()
+          and l.rows[1] == [] and l.house_rows == [])
+    l.cfg.pop("jellyfin", None)
+    l.cfg["home_assistant"].pop("devices", None)
+    l.cfg["home_assistant"].pop("home_screen", None)
+    l.cfg["home_assistant"].pop("token", None)
+    l.save_config()
+    l.tiles[0].grab_focus()
+
+
+# ---------------- media tabs: Explore (TMDB × Jellyfin), Series, Films, Games (Steam) ----------------
+
+def tmdb_get(url, headers):
+    import urllib.parse as up
+    path = up.urlsplit(url).path
+    import datetime as _dt
+    recent = (_dt.date.today() - _dt.timedelta(days=30)).isoformat()
+    if path == "/3/trending/movie/week":
+        return {"results": [{"id": 1, "release_date": recent}, {"id": 77, "release_date": recent},
+                            {"id": 5, "release_date": "1994-01-01"}]}
+    if path == "/3/trending/tv/week":
+        return {"results": [{"id": 88, "first_air_date": recent}]}
+    if path == "/3/trending/all/week":
+        return {"results": [{"id": 1}] * 20}
+    return {"results": []}
+
+
+def fake_steam(home):
+    import time as _time
+    root = pathlib.Path(home) / ".var/app/com.valvesoftware.Steam/.local/share/Steam"
+    (root / "steamapps").mkdir(parents=True, exist_ok=True)
+    (root / "userdata/1/config").mkdir(parents=True, exist_ok=True)
+    now = int(_time.time())
+    (root / "userdata/1/config/localconfig.vdf").write_text(
+        '"UserLocalConfigStore" { "Software" { "Valve" { "Steam" { "apps" { '
+        f'"620" {{ "LastPlayed" "{now - 3600}" "Playtime" "300" }} '
+        f'"440" {{ "LastPlayed" "{now - 3 * 86400}" }} '
+        f'"730" {{ "LastPlayed" "{now - 2 * 86400}" "Playtime" "90" }} }} }} }} }} }}')
+    for appid, name in (("620", "Portal 2"), ("440", "Team Fortress 2")):
+        (root / f"steamapps/appmanifest_{appid}.acf").write_text(f'"AppState" {{ "appid" "{appid}" "name" "{name}" }}')
+    cache = root / "appcache/librarycache/620"
+    cache.mkdir(parents=True, exist_ok=True)
+    (cache / "library_600x900.jpg").write_bytes(png((60, 120, 200)))
+
+
+@step(300)
+def m1():
+    l = L()
+    while l.overlays:
+        l.pop_overlay()
+    steam_home = tempfile.mkdtemp()
+    fake_steam(steam_home)
+    l.steam_home_dir = steam_home
+    from htpc import steam as _steam
+    l.steam_names = _steam.Names(pathlib.Path(steam_home) / "names.json",
+                                 lambda appid: ("Jogo Por Streaming", "game") if appid == "730" else None)
+    l.steam_image_get = lambda url: state.setdefault("steam_cdn", []).append(url) or png((200, 60, 60))
+    l.jellyfin_get, l.tmdb_get = jf_get, tmdb_get
+    l.cfg["jellyfin"] = {"url": "http://jf:8096", "api_key": "k"}
+    l.cfg["tmdb"] = {"api_key": "a" * 32}
+    l.media_tab = "explore"
+    l.update_media(force=True)
+
+
+@step(900)
+def m2():
+    l = L()
+    check("Jellyfin in focus: Explore, Series and Films (no Games)",
+          l.media_context == "jellyfin" and [b.tab for b in l.tab_row] == ["explore", "series", "movies"])
+    check("Explore: TMDB's popular titles that are in the library, in TMDB's order",
+          [c.item["title"] for c in l.recent_cards] == ["Série em Alta", "Filme em Alta"]
+          and l.media_note.get_label() == l.t("explore_note")
+          and l.recent_cards[0].get_child().get_last_child().get_first_child().get_label() == l.t("media_kind_hot_series"))
+    l.move(0, -1)
+    l.move(0, -1)
+    check("up from Jellyfin reaches the tabs", l.win.get_focus() in l.tab_row)
+    l.tab_buttons["explore"].grab_focus()
+    l.move(1, 0)
+    check("moving onto Series shows the series", l.media_tab == "series"
+          and [c.item["title"] for c in l.recent_cards] == ["Série Dois", "Série Três"])
+    l.move(1, 0)
+    l.move(1, 0)
+    check("Films shows the films, and is the last tab", l.win.get_focus() is l.tab_buttons["movies"]
+          and [c.item["title"] for c in l.recent_cards] == ["Filme Um"])
+    moonlight = next(t for t in l.tiles if "moonlight" in t.app["id"].lower())
+    moonlight.grab_focus()
+    check("an app without a row: no tabs and no cards, the space stays",
+          l.media_context is None and l.tab_row == [] and l.recent_cards == [] and l.recent_section.get_visible())
+    steam_tile = next(t for t in l.tiles if "steam" in t.app["id"].lower())
+    steam_tile.grab_focus()
+    check("Steam in focus: only Games, last played first, streamed ones (named by the store) too",
+          [b.tab for b in l.tab_row] == ["games"] and l.media_note.get_label() == l.t("games_note")
+          and [c.item["title"] for c in l.recent_cards] == ["Portal 2", "Jogo Por Streaming", "Team Fortress 2"])
+
+
+@step(500)
+def m3():
+    l = L()
+    screenshot(l.win, "35-games-with-steam-in-focus")
+    check("the game's cover comes from Steam's own cache", l.recent_cards[0].picture.get_paintable() is not None)
+    spawned = []
+    real = l._spawn
+    l._spawn = lambda command: spawned.append(command) or True
+    l.move(0, -1)
+    check("up from Steam reaches its games", l.win.get_focus() in l.recent_cards)
+    l.recent_cards[0].grab_focus()
+    l.press()
+    l._spawn = real
+    steam_app = next(t.app for t in l.tiles if "steam" in t.app["id"].lower())
+    check("a game starts through the same Steam shortcut", spawned and spawned[0][-1] == "steam://rungameid/620"
+          and spawned[0][0] == steam_app["launch"][0])
+    check("a streamed game's cover comes from Steam's image servers",
+          any("/apps/730/" in u for u in state.get("steam_cdn", [])) and l.recent_cards[1].picture.get_paintable() is not None)
+    l.recent_cards[1].grab_focus()
+    l._spawn = lambda command: spawned.append(command) or True
+    l.press()
+    l._spawn = real
+    check("a streamed game opens its Steam page (where Stream is)", spawned[-1][-1] == "steam://nav/games/details/730")
+    # Pages: twelve films, five a page
+    from htpc.backends.base import GamepadEvent as E
+    nav = l.navigator
+    nav.active = lambda: True
+    l.tiles[0].grab_focus()
+    l.select_tab("movies")
+    l.media["movies"] = [{"id": f"f{n}", "kind": "movie", "title": f"Filme {n}"} for n in range(12)]
+    l.media_page["movies"] = 0
+    l._show_media()
+    check("five cards a page, and the note says which page", [c.item["title"] for c in l.recent_cards]
+          == [f"Filme {n}" for n in range(5)] and l.media_note.get_label().endswith(l.t("media_pages", page=1, pages=3)))
+    nav.handle(E("pad", "button", "r1", 1)); nav.handle(E("pad", "button", "r1", 0))
+    check("RB: the next five, with Jellyfin still in focus", [c.item["title"] for c in l.recent_cards]
+          == [f"Filme {n}" for n in range(5, 10)] and l.win.get_focus() is l.tiles[0])
+    nav.handle(E("pad", "button", "r1", 1)); nav.handle(E("pad", "button", "r1", 0))
+    nav.handle(E("pad", "button", "r1", 1)); nav.handle(E("pad", "button", "r1", 0))
+    check("RB on the last page stays there", [c.item["title"] for c in l.recent_cards] == ["Filme 10", "Filme 11"])
+    nav.handle(E("pad", "button", "l1", 1)); nav.handle(E("pad", "button", "l1", 0))
+    check("LB goes back", l.recent_cards[0].item["title"] == "Filme 5")
+    nav.handle(E("pad", "button", "guide", 1)); nav.handle(E("pad", "button", "l1", 1))
+    nav.handle(E("pad", "button", "r1", 1))
+    for b in ("r1", "l1", "guide"):
+        nav.handle(E("pad", "button", b, 0))
+    check("Home + LB + RB (back to the launcher) does not turn the page", l.recent_cards[0].item["title"] == "Filme 5")
+    nav.handle(E("pad", "button", "l1", 1)); nav.handle(E("pad", "button", "r1", 1))
+    nav.handle(E("pad", "button", "l1", 0)); nav.handle(E("pad", "button", "r1", 0))
+    check("nor do LB and RB together", l.recent_cards[0].item["title"] == "Filme 5")
+    l.recent_cards[2].grab_focus()
+    l.page_media(-1)
+    check("turning the page with a card in focus keeps the focus in the row", l.win.get_focus() is l.recent_cards[2]
+          and l.recent_cards[0].item["title"] == "Filme 0")
+    l.tiles[0].grab_focus()
+
+
+@step(300)
+def m4():
+    l = L()
+    screenshot(l.win, "36-films-page-1")
+    l.cfg.pop("jellyfin", None)
+    l.cfg.pop("tmdb", None)
+    l.steam_home_dir = tempfile.mkdtemp()
+    l.update_media(force=True)
+    check("nothing set up: no tabs", not l.recent_section.get_visible() and l.tab_row == [])
+    l.save_config()
     l.tiles[0].grab_focus()
 
 

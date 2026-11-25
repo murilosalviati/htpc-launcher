@@ -58,12 +58,15 @@ class EditorMixin:
     def toggle_edit_mode(self):
         self.editing = not self.editing
         self.hint.set_label(self.t("hint_edit") if self.editing else self.hint_text())
+        self.hint.set_visible(self.editing)
         if self.editing:
             self.hint.add_css_class("editing")
             self.btn_settings.label.set_label(self.t("done"))
+            self.btn_settings.label.set_visible(True)
         else:
             self.hint.remove_css_class("editing")
             self.btn_settings.label.set_label(self.t("settings"))
+            self.btn_settings.label.set_visible(False)
         self.build_grid(focus=0 if self.cfg.get("apps") else -1)
 
     def new_app(self):

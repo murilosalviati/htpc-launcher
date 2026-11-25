@@ -3,8 +3,9 @@
 The launcher can work with [Home Assistant](https://www.home-assistant.io/) to control the TV:
 
 - **Wake the TV with the gamepad.** Plug in a gamepad, turn one on, or press any button. If the TV is off, Home Assistant turns it on and switches it to the HTPC's input.
-- **Turn the TV off from the launcher.** A "Turn off TV" button in the middle of the footer.
+- **Turn the TV off from the launcher.** "Turn off the TV" in the power menu (the power button at the top right).
 - **Ignore the gamepad while the TV is off.** The launcher and the gamepad shortcuts do nothing while the screen is dark. The first press only wakes the TV, so you never open an app you can't see.
+- **Lights on the home screen.** Lights, switches and scenes under the apps: turn them on and off, and dim them, with the gamepad.
 - **Cinema mode.** The launcher tells Home Assistant when an app opens or closes and when a video plays, pauses or stops, so an automation can dim the lights.
 
 All of this is optional. Without Home Assistant the launcher works exactly as before.
@@ -20,6 +21,7 @@ All of this is optional. Without Home Assistant the launcher works exactly as be
   - [2. The launcher's settings](#2-the-launchers-settings)
   - [3. Optional: ignore the gamepad while the TV is off](#3-optional-ignore-the-gamepad-while-the-tv-is-off)
   - [4. Optional: cinema mode](#4-optional-cinema-mode)
+  - [5. Optional: lights on the home screen](#5-optional-lights-on-the-home-screen)
 - [Using it](#using-it)
 - [Settings reference](#settings-reference)
 - [Events](#events)
@@ -74,7 +76,7 @@ The automation runs in `queued` mode, so the events of the "Turn off TV" press a
 
 ### 2. The launcher's settings
 
-On the HTPC, open Settings (the gear in the footer) → **Home Assistant**:
+On the HTPC, open Settings (the gear at the top right) → **Home Assistant**:
 
 1. **Address:** type Home Assistant's address, such as `http://192.168.0.22:8123`.
    - The on-screen keyboard gets an extra `: / _` row here.
@@ -84,7 +86,7 @@ On the HTPC, open Settings (the gear in the footer) → **Home Assistant**:
 
 From now on, the gamepad wakes the TV. Changes apply right away, with nothing to restart.
 
-To show the **"Turn off TV" button** in the footer, switch it on in the same menu.
+The power menu (top right) now offers **Turn off the TV**.
 
 ### 3. Optional: ignore the gamepad while the TV is off
 
@@ -114,13 +116,24 @@ App and media events go to a **second webhook**. A Home Assistant webhook only t
 
 The events, with what they carry, are listed under [Events](#events). Adapt the automation to anything else: a soundbar's sound mode, blinds, or pausing a robot vacuum.
 
+### 5. Optional: lights on the home screen
+
+With the address and the [access token](#3-optional-ignore-the-gamepad-while-the-tv-is-off), the launcher shows a **Home** row under the apps: go down from the apps to reach it. No automation is needed; the launcher calls Home Assistant's API directly.
+
+- **What shows:** every light, grouped by room (Home Assistant's areas), plus up to 6 scenes.
+- **Choose:** Settings → Home Assistant → **Lights on the home screen** lists every light and switch (also fans and input booleans). Tick the ones you want; they show in the order you ticked them. **All lights** goes back to the default. **Show under the apps** turns the row off.
+- **Use it:** Ⓐ turns a light or switch on or off, or runs a scene. Holding Ⓐ (or Ⓨ) on a light opens its brightness, white temperature and colour, as far as the light supports them (`light.turn_on` with `brightness_pct`, `color_temp_kelvin` or `hs_color`).
+- **By room:** **Separate by room**, in the same menu, puts each room's name over its lights.
+
+The token needs no extra permission, but rooms come from a template call: a token of a non-admin user still works, without the room names.
+
 ## Using it
 
 **Wake the TV:**
 - Press any button or plug in a gamepad. The TV turns on and switches to the HTPC.
 - A connected gamepad sends button presses at most once a minute, so Home Assistant isn't flooded. The exception is right after "Turn off TV": then the next press is sent at once.
 
-**Turn the TV off:** select **Turn off TV** in the footer and press Ⓐ. Wait about 15 seconds before pressing a button to wake it again.
+**Turn the TV off:** open the power menu (top right) and press Ⓐ on **Turn off the TV**, which is already selected. The launcher goes back to its start for the next time. Wait about 15 seconds before pressing a button to wake the TV again.
 
 **TV off, with the token set:**
 - The launcher and the gamepad shortcuts (back to the launcher, close the app) ignore the gamepad.
@@ -144,8 +157,11 @@ The `home_assistant` entry of `apps.json`:
 | `token` | A long-lived access token, used to read the TV's state. | Access token (shows only whether it is set) |
 | `tv_entity` | The TV's entity, such as `media_player.living_room_tv`. | TV |
 | `tv_name` | The TV's name as shown in Settings. Filled in when you pick the TV. | TV |
+| `home_screen` | `false` hides the lights under the apps. Defaults to `true`. | Lights on the home screen → Show under the apps |
+| `devices` | The lights and switches under the apps, in order (entity ids). Without it, every light, by room. | Lights on the home screen |
+| `group_by_area` | `true` shows each room's name over its lights. | Lights on the home screen → Separate by room |
+| `scenes` | The scenes or scripts above them (entity ids). Without it, the first 6 scenes. | (apps.json only) |
 
-At the top level of `apps.json`, `tv_off_button` (`true`/`false`, default `false`) shows or hides the "Turn off TV" button. In Settings it's **"Turn off TV" button**.
 
 ## Events
 
@@ -159,7 +175,7 @@ Each event is a `POST` to `<url>/api/webhook/<webhook_id>` with a JSON body:
 |---|---|---|
 | `gamepad_connected` | controller service | A gamepad shows up (plugged in, or turned on). |
 | `gamepad_activity` | controller service | A button is pressed: at most once a minute, right away after "Turn off TV", and on every wake press while the TV is off. |
-| `tv_off` | launcher | The "Turn off TV" button. |
+| `tv_off` | launcher | "Turn off the TV" in the power menu. |
 | `test` | launcher | Settings → Home Assistant → Test the connection. |
 
 On the **events webhook** (`events_webhook_id`), only if it is set, the controller service checks every 2 seconds and sends:

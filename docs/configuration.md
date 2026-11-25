@@ -74,8 +74,37 @@ Each entry in `apps` is one tile.
 | `notifications` | `true`, `false` | `true` | On-screen notices |
 | `shortcuts` | `{"home": [...], "close": [...]}`: only the combos you changed. Button names: `guide`, `start`, `select`, `l1`, `r1`, `a`, `b`, `x`, `y`. Invalid combos fall back to the defaults. | Home + LB + RB, Start + Select + LB + RB | Gamepads |
 | `home_assistant` | See the [Home Assistant settings reference](home-assistant.md#settings-reference). | none | Home Assistant |
-| `tv_off_button` | `true`, `false` | `false` | Home Assistant → "Turn off TV" button |
+| `jellyfin` | See [Jellyfin](#jellyfin) below. | none | Jellyfin |
+| `tmdb` | `{"api_key": "..."}`, for Explore. See [Jellyfin](#jellyfin). | none | Jellyfin → Popular (TMDB) |
 | `launcher.launch` | The command the service uses to start the launcher when it isn't running. `launcher/install.sh` fills it in. | | |
+
+## Jellyfin
+
+The `jellyfin` entry sets up the home screen's Recently added row:
+
+```json
+"jellyfin": {
+  "url": "http://localhost:8096",
+  "api_key": "0123456789abcdef0123456789abcdef",
+  "user_id": "…",
+  "user_name": "mu"
+}
+```
+
+| Field | What it does | In Settings |
+|---|---|---|
+| `url` | Jellyfin's address. | Address |
+| `api_key` | An API key, from Jellyfin's Dashboard → API Keys. | API key |
+| `user_id`, `user_name` | Whose library and "latest" list to show. Without them, the first administrator. | User |
+| `enabled` | `false` hides the row and keeps the rest. Defaults to `true`. | Films and series row |
+
+For Explore, a `tmdb` entry with TMDB's short API key or its long API Read Access Token (Settings → Jellyfin → Popular (TMDB)):
+
+```json
+"tmdb": {"api_key": "0123456789abcdef0123456789abcdef", "recent_days": 540}
+```
+
+`recent_days` (optional, 540 by default) is how recently a trending title must have come out to count as new.
 
 Older versions used Portuguese field names (`nome`, `abrir`...). They are converted automatically the first time the launcher starts.
 
