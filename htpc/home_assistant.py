@@ -41,6 +41,7 @@ import urllib.request
 from collections import Counter
 
 from . import __version__, config, paths
+from .backends.base import STICK_DEAD_ZONE
 
 log = logging.getLogger("htpc-controller")
 
@@ -243,7 +244,7 @@ def input_blocked(path=None, now=time.time):
     return bool(data.get("blocked")) and now() - float(data.get("at", 0)) < GATE_FRESH
 
 
-def is_press(event, dead_zone=0.55):
+def is_press(event, dead_zone=STICK_DEAD_ZONE):
     if event.kind == "button":
         return bool(event.value)
     if event.kind == "axis":
@@ -264,7 +265,16 @@ class TvGate:
         self.last_wake = None
         self.wakes = []                 # times of the recent wake requests
         self.distrust_until = None      # Home Assistant says "off" but the TV doesn't wake up
+        self.gate_written = None        # what the gate file says now (None: not written yet)
         self._lock = threading.Lock()
+
+    def _set_gate(self, blocked):
+        """Write the gate file when it changes, and keep a closed one fresh (the
+        launcher ignores a gate older than GATE_FRESH). An open gate is written
+        once: rewriting it every few seconds, all day, would only wear the disk."""
+        if blocked or self.gate_written is not False:
+            self.gate(blocked)
+            self.gate_written = bool(blocked)
 
     def check(self):
         """Ask Home Assistant once (runs in its own thread in the service)."""
@@ -283,7 +293,7 @@ class TvGate:
                 self.wakes = []
                 self.distrust_until = None
             blocked = state == "off" and not self._distrusted()
-        self.gate(blocked)
+        self._set_gate(blocked)
 
     def _distrusted(self):
         return self.distrust_until is not None and self.clock() < self.distrust_until
@@ -319,7 +329,7 @@ class TvGate:
                     self.wakes = []
                     wake = False
         if self._distrusted():
-            self.gate(False)
+            self._set_gate(False)
             return False
         if wake:
             log.info("tv is off: this press only wakes it")

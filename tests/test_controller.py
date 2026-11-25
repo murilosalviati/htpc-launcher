@@ -177,6 +177,28 @@ check("evdev: the d-pad hat becomes right press, right release, left press",
       [(e.name, e.value) for e in ev] == [("right", 1), ("right", 0), ("left", 1)])
 ev = pads.translate("p", dev, raw(ecodes.EV_ABS, ecodes.ABS_X, 32767))
 check("evdev: the left stick becomes a -1..1 axis", ev[0].name == "lx" and abs(ev[0].value - 1.0) < 0.01)
+pads = EvdevGamepads()
+ranges_read = []
+dev2 = SimpleNamespace(absinfo=lambda code: ranges_read.append(code) or SimpleNamespace(min=-32768, max=32767))
+ev = [e for v in (0, 5000, 20000, 30000, 32767, 31000, 1000, -30000, -32000, 0)
+      for e in pads.translate("p", dev2, raw(ecodes.EV_ABS, ecodes.ABS_X, v))]
+check("evdev: a stick only sends an event when it crosses the dead zone, and its range is read once",
+      [round(e.value, 2) for e in ev] == [0.61, 0.03, -0.92, 0.0] and ranges_read == [ecodes.ABS_X])
+class Pending:
+    def __init__(self, n):
+        self.n = n
+    def read_one(self):
+        if self.n:
+            self.n -= 1
+            return object()
+        return None
+waiting = Pending(5)
+pads.devs = {"p": waiting}
+pads.sticks[("p", ecodes.ABS_X)] = 1
+pads.flush()
+check("evdev: flush drops what is waiting and puts the sticks back in the middle",
+      waiting.n == 0 and pads.sticks == {})
+pads.devs = {}
 
 # 9a1. using the gamepad hides the mouse pointer, at most once every few seconds
 from htpc import shortcuts as sc  # noqa: E402
@@ -507,6 +529,15 @@ check("apps.json and its copy are readable only by the owner (it can hold a toke
 cpath.write_text("{ not json")
 check("the service reads the last good copy of a broken apps.json, without touching it",
       cfgmod.load_quietly(cpath)["apps"][0]["id"] == "a" and cpath.read_text() == "{ not json")
+qpath = cdir / "quiet.json"
+qpath.write_text(json.dumps({"apps": [{"id": "q1"}]}))
+fresh = cfgmod.load_quietly(qpath) is not cfgmod.load_quietly(qpath)
+settled_at = time.time() - 10
+os.utime(qpath, (settled_at, settled_at))
+cached = cfgmod.load_quietly(qpath) is cfgmod.load_quietly(qpath)
+qpath.write_text(json.dumps({"apps": [{"id": "q2"}]}))
+check("the service reads apps.json again only when it changed (a just-written one every time)",
+      fresh and cached and cfgmod.load_quietly(qpath)["apps"][0]["id"] == "q2")
 good, _ = cfgmod.load(cpath, fallback=True)
 check("the launcher restores the last good copy and keeps the broken file aside",
       good["apps"][0]["id"] == "a" and json.loads(cpath.read_text())["apps"][0]["id"] == "a"
@@ -893,6 +924,19 @@ gate.check()
 check("HA unreachable: unknown, nothing blocked", not gate.blocks(a_press) and not hass.input_blocked(gate_path))
 hass.write_gate(True, gate_path, now=lambda: time.time() - 60)
 check("an old gate file (service not running) does not block the launcher", not hass.input_blocked(gate_path))
+gate_writes, gate_tv = [], {"state": "on"}
+quiet_gate = hass.TvGate(lambda: tv_cfg, lambda e: None, get=lambda url, token: {"state": gate_tv["state"]},
+                         clock=lambda: gclock[0], gate=gate_writes.append)
+for _ in range(3):
+    quiet_gate.check()
+gate_tv["state"] = "off"
+for _ in range(2):
+    quiet_gate.check()
+gate_tv["state"] = "on"
+for _ in range(2):
+    quiet_gate.check()
+check("the gate file is written once while open, and kept fresh only while closed",
+      gate_writes == [False, True, True, False])
 h.last_activity = hclock[0]
 before = len(sent)
 ha_cfg["home_assistant"]["enabled"] = True

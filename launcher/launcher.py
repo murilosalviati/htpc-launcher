@@ -57,7 +57,7 @@ sys.path.insert(0, str(HERE))
 sys.path.insert(1, str(HERE.parent))
 from htpc import config, home_assistant, paths, shortcuts, themes, weather  # noqa: E402
 from htpc.backends import get_backend  # noqa: E402
-from htpc.backends.base import pick_mode  # noqa: E402
+from htpc.backends.base import STICK_DEAD_ZONE, pick_mode  # noqa: E402
 from htpc.i18n import Translator  # noqa: E402
 from editor import EditorMixin  # noqa: E402
 from settings import SettingsMixin  # noqa: E402
@@ -98,7 +98,7 @@ def log(*args):
 # moves, with key repeat while a direction is held. Only acts while the launcher is in front.
 
 class Navigator:
-    DEAD_ZONE = 0.55      # how far the stick must go to count as a press
+    DEAD_ZONE = STICK_DEAD_ZONE  # how far the stick must go to count as a press
     REPEAT_AFTER = 0.40   # holding a direction repeats after this...
     REPEAT_EVERY = 0.14   # ...at this pace
     POLL_MS = 16          # how often to read the gamepads (about 60 times a second)
@@ -114,10 +114,29 @@ class Navigator:
         self.stick = {}         # (device, axis) -> -1 / 0 / 1
         self.direction = None   # (dx, dy) being held
         self.repeat = 0
+        self.timer = 0
         if not gamepads.available():
             log("gamepads not available (is python3-evdev installed?): keyboard only")
             return
-        GLib.timeout_add(self.POLL_MS, self._poll)
+        self.listen(True)
+
+    def listen(self, on):
+        """Read the gamepads (about 60 times a second) only while the launcher is in
+        front. Behind an app there is nothing for it to do (the controller service
+        has the shortcuts), and polling would wake it up all through a film or game."""
+        if not self.gamepads.available() or bool(on) == bool(self.timer):
+            return
+        if not on:
+            GLib.source_remove(self.timer)
+            self.timer = 0
+            self._hold(None)
+            return
+        # What was pressed inside the app (A in Jellyfin...) must not act here now.
+        self.gamepads.flush()
+        self.held.clear()
+        self.stick.clear()
+        self.timer = GLib.timeout_add(self.POLL_MS, self._poll)
+        self._poll()   # also picks up gamepads plugged in meanwhile, for the top bar
 
     def _poll(self):
         for ev in self.gamepads.poll(0):
@@ -347,8 +366,10 @@ class Launcher(EditorMixin, SettingsMixin):
         self.network = Gio.NetworkMonitor.get_default()
         self.network.connect("notify::connectivity", lambda *_: self._update_network())
         self.network.connect("network-changed", lambda *_: self._update_network())
-        GLib.timeout_add_seconds(5, lambda: self._update_network() or True)
-        GLib.timeout_add_seconds(1, self._update_gamepads)
+        # These read D-Bus and sysfs for the top bar, which can't be seen behind an
+        # app: they skip their work there, and _active_changed catches up on return.
+        GLib.timeout_add_seconds(5, self._in_front(self._update_network))
+        GLib.timeout_add_seconds(1, self._in_front(self._update_gamepads))
         GLib.timeout_add_seconds(1, lambda: self.opening and self._check_opening() or True)
         GLib.timeout_add_seconds(3, self._every_3s)
         GLib.timeout_add(500, self._check_screen_size)
@@ -747,10 +768,24 @@ class Launcher(EditorMixin, SettingsMixin):
         self.weather_place.set_label(place.get("name", ""))
         self.weather_box.set_visible(True)
 
+    def _in_front(self, job):
+        """A timer callback that only does `job` while the launcher is in front."""
+        def tick():
+            if self.win.is_active():
+                job()
+            return True
+        return tick
+
     def _active_changed(self, *_):
-        if self.win.is_active():
+        active = self.win.is_active()
+        if not hasattr(self, "navigator"):
+            return   # still being built
+        self.navigator.listen(active)
+        if active:
             self.refresh_status()
             self.restore_display()
+            self._update_gamepads()
+            self._update_network()
 
     def _every_3s(self):
         if self.win.is_active() and not self.overlays:

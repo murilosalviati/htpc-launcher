@@ -13,6 +13,7 @@ since that is what its owner was already seeing.
 import json
 import logging
 import os
+import time
 from pathlib import Path
 
 from . import paths
@@ -124,17 +125,40 @@ def load(path=None, fallback=False):
     return cfg, migrated
 
 
+_quiet_cache = {}   # path -> ((inode, size, mtime), config) for load_quietly
+SETTLED = 2.0       # seconds: a file changed more recently than this is read again
+
+
 def load_quietly(path=None):
     """For the background service: apps.json, else the last good copy, else {}.
-    Never raises and never writes (the launcher is the one that repairs the file)."""
+    Never raises and never writes (the launcher is the one that repairs the file).
+
+    The service asks for it on every combo press and every few seconds, so an
+    unchanged file is not read again: the answer is shared, and callers must not
+    change it. A file is only remembered once it has not changed for SETTLED
+    seconds, so a second write within the file system's timestamp step (same
+    size, same mtime) can't leave an old copy in use."""
     path = Path(path or paths.config_file())
+    try:
+        st = os.stat(path)
+        key = (st.st_ino, st.st_size, st.st_mtime_ns)
+    except OSError:
+        key = None
+    cached = _quiet_cache.get(path)
+    if key is not None and cached is not None and cached[0] == key:
+        return cached[1]
     for candidate in (path, backup_path(path)):
         try:
             cfg = _read(candidate)
         except (OSError, ValueError):
             continue
         migrate(cfg)
+        if candidate == path and key is not None and time.time() - st.st_mtime >= SETTLED:
+            _quiet_cache[path] = (key, cfg)
+        else:
+            _quiet_cache.pop(path, None)
         return cfg
+    _quiet_cache.pop(path, None)
     return {}
 
 

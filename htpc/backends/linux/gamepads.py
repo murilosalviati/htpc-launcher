@@ -11,7 +11,7 @@ import os
 import select
 import time
 
-from ..base import Battery, GamepadEvent, Gamepads
+from ..base import STICK_DEAD_ZONE, Battery, GamepadEvent, Gamepads
 
 try:
     import evdev
@@ -113,6 +113,8 @@ class EvdevGamepads(Gamepads):
         self.devs = {}       # path -> InputDevice
         self.ignored = set()
         self.hats = {}       # (path, hat axis) -> -1 / 0 / 1
+        self.sticks = {}     # (path, stick axis) -> -1 / 0 / 1: which side of the dead zone
+        self.ranges = {}     # (path, stick axis) -> (middle, half): absinfo never changes
         self.next_scan = 0.0
         self.virtual = {}    # path -> made by software (not counted in connected())
         self.sysfs = {}      # path -> the input device's real sysfs path
@@ -163,13 +165,19 @@ class EvdevGamepads(Gamepads):
             except OSError:
                 self.ignored.add(path)  # no permission: keyboards, mice...
                 continue
-            if is_gamepad(dev):
+            if is_gamepad(dev) and is_virtual(path):
+                # Steam Input's copy of a real pad: its events would double every
+                # press, and reading them would wake us for every mirrored stick move.
+                # Not opened at all (it stays in `ignored` while it exists).
+                log.info("virtual gamepad left alone: %s (%s)", dev.name, path)
+                dev.close()
+                self.ignored.add(path)
+            elif is_gamepad(dev):
                 self.devs[path] = dev
-                self.virtual[path] = is_virtual(path)
+                self.virtual[path] = False
                 self.sysfs[path] = os.path.realpath(f"/sys/class/input/{os.path.basename(path)}/device")
                 self.xbox_codes[path] = uses_xbox_codes(path, dev.name)
-                log.info("gamepad connected: %s (%s)%s%s", dev.name, path,
-                         " [virtual]" if self.virtual[path] else "",
+                log.info("gamepad connected: %s (%s)%s", dev.name, path,
                          " [Xbox X/Y codes]" if self.xbox_codes[path] else "")
             else:
                 dev.close()
@@ -180,8 +188,9 @@ class EvdevGamepads(Gamepads):
         self.virtual.pop(path, None)
         self.sysfs.pop(path, None)
         self.xbox_codes.pop(path, None)
-        for key in [k for k in self.hats if k[0] == path]:
-            del self.hats[key]
+        for table in (self.hats, self.sticks, self.ranges):
+            for key in [k for k in table if k[0] == path]:
+                del table[key]
         if dev:
             log.info("gamepad disconnected: %s", dev.name)
             try:
@@ -214,12 +223,36 @@ class EvdevGamepads(Gamepads):
                 out.append(GamepadEvent(path, "button", neg if value < 0 else pos, 1))
             return out
         if ev.code in STICK:
-            info = dev.absinfo(ev.code)
-            middle = (info.max + info.min) / 2
-            half = (info.max - info.min) / 2 or 1
+            key = (path, ev.code)
+            if key not in self.ranges:
+                info = dev.absinfo(ev.code)   # an ioctl: once per stick, not per event
+                self.ranges[key] = ((info.max + info.min) / 2, (info.max - info.min) / 2 or 1)
+            middle, half = self.ranges[key]
             value = max(-1.0, min(1.0, (ev.value - middle) / half))
+            side = 1 if value > STICK_DEAD_ZONE else -1 if value < -STICK_DEAD_ZONE else 0
+            if side == self.sticks.get(key, 0):
+                return []   # still on the same side of the dead zone: nothing new
+            self.sticks[key] = side
             return [GamepadEvent(path, "axis", STICK[ev.code], value)]
         return []
+
+    def flush(self):
+        """Read and drop whatever is waiting on every gamepad."""
+        if evdev is None:
+            return
+        events = []
+        for path, dev in list(self.devs.items()):
+            try:
+                for _ in range(100_000):   # a bound, in case events keep arriving as fast as we read
+                    if dev.read_one() is None:
+                        break
+            except BlockingIOError:
+                pass
+            except OSError:
+                self._remove(path, events)
+        # The dropped events may have moved the d-pad or a stick: start again from the middle.
+        self.hats.clear()
+        self.sticks.clear()
 
     def poll(self, timeout):
         if evdev is None:
@@ -242,8 +275,6 @@ class EvdevGamepads(Gamepads):
             dev = self.devs.get(path)
             try:
                 for ev in dev.read():
-                    if self.virtual.get(path):
-                        continue   # Steam Input's copy of a real pad: counting it too would double every press
                     events.extend(self.translate(path, dev, ev))
             except BlockingIOError:
                 pass

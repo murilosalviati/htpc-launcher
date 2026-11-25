@@ -962,6 +962,30 @@ def vol1():
     l.tiles[0].grab_focus()
 
 
+# ---------------- the launcher stops reading the gamepads behind an app ----------------
+
+@step(300)
+def bg1():
+    l = L()
+    nav = l.navigator
+    if not nav.gamepads.available():
+        check("gamepad polling stops behind an app (skipped: no evdev here)", True)
+        return
+    flushed = []
+    real_flush = nav.gamepads.flush
+    nav.gamepads.flush = lambda: flushed.append(True)
+    nav.listen(True)
+    running = bool(nav.timer)
+    nav.held["pad"] = "a"
+    nav.listen(False)
+    stopped = nav.timer == 0
+    nav.listen(True)
+    check("behind an app the launcher stops reading the gamepads; back in front it drops what was "
+          "pressed meanwhile and reads again",
+          running and stopped and nav.timer != 0 and flushed and nav.held == {})
+    nav.gamepads.flush = real_flush
+
+
 # ---------------- updates ----------------
 
 @step(300)

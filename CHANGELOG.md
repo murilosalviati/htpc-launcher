@@ -19,6 +19,10 @@ The project is in beta: every `0.x` version is a pre-release, and the configurat
 - **The GNOME extension (version 7):** removes its pending timers when disabled; takes over its D-Bus name if something else holds it, and logs if it is lost; and limits notices (30 s at most, 4 on screen, 200 characters).
 - **Releases run the tests first.** A new Tests workflow (on every push, and before every release) runs shellcheck, an extension syntax check, and both test suites. The release workflow checks the version against the VERSION file.
 - **Smaller fixes.** The installer's "is the extension active" check no longer matches INACTIVE, the launcher's `.desktop` works with spaces in your home folder, pactl and wpctl output is read in the C locale, a failure to pause media no longer stops "back to the launcher", and the service no longer restarts every 3 seconds when python3-evdev is missing (the log says what to install).
+- **Less work in the background.**
+  - The launcher stops reading the gamepads (it did so 60 times a second, all the time) and skips its network and gamepad checks while an app is in front. What was pressed inside the app is thrown away when the launcher comes back, so it doesn't act on it.
+  - A stick only sends an event when it crosses the dead zone, instead of hundreds a second while it moves, and Steam Input's virtual gamepads are no longer opened at all.
+  - The service reads apps.json again only when it changes, and writes the TV-gate file only while the TV is off or when that changes (it was every 3 seconds, all day).
 
 - **Settings → Audio:** pick where the sound goes (the TV, a soundbar, Bluetooth headphones or a speaker); what is playing moves along. It also pairs Bluetooth headphones and speakers. Uses PipeWire's `pw-dump` and `wpctl`, or `pactl` when installed.
 - **Bluetooth pairing for keyboards and mice** too, next to gamepads (Settings → Gamepads → Pair a gamepad, keyboard or mouse), each marked with its kind.

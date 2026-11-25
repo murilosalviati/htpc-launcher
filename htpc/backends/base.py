@@ -65,6 +65,13 @@ class Battery:
         return {"full": 4, "high": 3, "normal": 2, "low": 1, "critical": 0}.get(self.level, 2)
 
 
+# How far a stick must go to count as a press. Backends only send an "axis" event
+# when the stick crosses it (into or out of the middle, or to the other side): the
+# launcher and the shortcuts only care about that, and a moving stick would
+# otherwise send hundreds of events a second.
+STICK_DEAD_ZONE = 0.55
+
+
 @dataclass
 class GamepadEvent:
     device: str                 # stable id of the gamepad while it is connected
@@ -146,6 +153,10 @@ class Gamepads(ABC):
     def poll(self, timeout):
         """Wait up to `timeout` seconds and return a list of GamepadEvent.
         Also picks up gamepads that were plugged in or removed."""
+
+    def flush(self):
+        """Throw away the input that piled up while nobody called poll() (the
+        launcher stops reading while an app is in front), so it is not acted on later."""
 
     def available(self):
         """False when this backend cannot read gamepads here (e.g. a missing library)."""
