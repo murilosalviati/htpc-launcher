@@ -10,7 +10,7 @@ HTPC Launcher turns a PC running Ubuntu with GNOME into a TV box you use from th
 | Page | What's in it |
 |---|---|
 | **[Installation](installation.md)** | Requirements, installing, updating, the Jellyfin and Steam notes, uninstalling. |
-| **[Using the launcher](using.md)** | The home screen, the top bar, the footer, notices, and every Settings menu. |
+| **[Using the launcher](using.md)** | The home screen (Recently added, the apps, the lights), the top bar, the footer, notices, and every Settings menu. |
 | **[Gamepads](gamepads.md)** | Supported gamepads, the shortcuts, volume, changing the shortcuts, pairing over Bluetooth, batteries. |
 | **[Configuration](configuration.md)** | The `apps.json` reference: per-app fields and every top-level setting. |
 | **[Home Assistant](home-assistant.md)** | Waking the TV with the gamepad, the "Turn off TV" button, ignoring the gamepad while the TV is off. |

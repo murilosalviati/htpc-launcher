@@ -6,9 +6,17 @@
 
 ![The home screen](preview.png)
 
+The screen has up to three rows, top to bottom:
+
+1. **Recently added:** the newest films and series on your Jellyfin server, once it's set up in Settings → Jellyfin. See [Recently added](#recently-added).
+2. **The apps:** one tile per app.
+3. **Home:** lights, switches and scenes from Home Assistant, once its address and token are set. Go down from the apps to reach it. See [Home](#home).
+
+Without Jellyfin and Home Assistant, the apps sit alone in the middle of the screen.
+
 ### Tiles
 
-The middle of the screen has one tile per app. Move between them with the d-pad or the left stick, and press **Ⓐ** to open an app.
+The apps row has one tile per app. Move between them with the d-pad or the left stick, and press **Ⓐ** to open an app.
 
 - **Selection:** the selected tile lifts and glows.
 - **Opening:** pressing Ⓐ plays a short "button pressed" animation, and the tile pulses green while the app opens.
@@ -19,11 +27,12 @@ The middle of the screen has one tile per app. Move between them with the d-pad 
 ### The top bar
 
 - **Left:** the weather (an icon, the temperature and the place), once you set a location. At night the sun becomes a moon. It updates every 30 minutes.
-- **Middle:** the clock and the date.
-- **Right:**
+- **Right**, from left to right:
   - **Gamepads:** an icon that lights up when a gamepad is connected (USB, Bluetooth or a wireless receiver). With more than one connected, it shows how many.
   - **Batteries:** one battery icon per wireless gamepad that reports its charge, from empty (red) to full, with a bolt while charging. A gamepad on a cable reports no charge, so no icon shows for it.
   - **Network:** a cable symbol on a wired connection, or Wi-Fi bars on Wi-Fi. Text appears only when the connection is limited or down.
+  - **The clock** and the date.
+  - **Settings, Restart and Shut down:** three round buttons. Go up from the top row to reach them. Restart and Shut down ask first, and Cancel is selected by default.
 
 Everything around the edges keeps the same share of the screen on 1080p, 1440p or 4K. The icons are vectors, so they stay sharp.
 
@@ -31,9 +40,30 @@ Everything around the edges keeps the same share of the screen on 1080p, 1440p o
 
 - **Left:** reminders of the buttons and the current shortcuts.
 - **Middle:** **Turn off TV**. It only shows when it's switched on in Settings → Home Assistant. See the [Home Assistant guide](home-assistant.md).
-- **Right:** **Settings**, **Restart** and **Shut down**. Restart and Shut down ask first, and Cancel is selected by default.
 
-**Ⓑ** goes back: it closes a menu, or moves the selection from the footer back up to the tiles.
+**Ⓑ** goes back: it closes a menu or leaves edit mode.
+
+### Recently added
+
+The newest films and series on your Jellyfin server, newest first. The first one is wide, with its backdrop; new episodes of a series are grouped under the series, with how many are new.
+
+- **Select one** to open the Jellyfin app, on its home screen, where the new items are at the top. Jellyfin must be one of your apps.
+- **Updates:** the list is fetched when the launcher starts, then every 10 minutes while it's in front.
+- **Setup:** Settings → **Jellyfin**: the address (such as `http://localhost:8096`), an API key (in Jellyfin: Dashboard → API Keys → +), and whose library to show. **Test** checks it. Typing the 32-character key with the gamepad is slow: you can also put it in `apps.json` (see [Configuration](configuration.md#jellyfin)).
+
+If Jellyfin can't be reached, the row stays as it was, or hidden, and is tried again a minute later.
+
+### Home
+
+Go down from the apps to reach your lights. The apps dim and the screen scrolls.
+
+- **Ⓐ** turns a light or switch on or off. The card changes at once; Home Assistant's own answer follows a moment later.
+- **Ⓨ** on a dimmable light opens its brightness: **−** and **+** change it by 10%.
+- **Scenes** sit in a row above the lights. Ⓐ runs one.
+- **Which ones:** every light, by room, until you choose. Choose in Settings → Home Assistant → **Lights on the home screen**, which also lists switches. Without a choice, the first 6 scenes show.
+- **Updates:** the states are read every 5 seconds while the launcher is in front.
+
+It needs Home Assistant's address and access token. See the [Home Assistant guide](home-assistant.md#5-optional-lights-on-the-home-screen).
 
 ### No stray mouse pointer
 
@@ -51,7 +81,7 @@ Notices show **over anything**, a full-screen video or game included. They don't
 
 ## Settings
 
-Select **Settings** (the gear) in the footer.
+Select **Settings** (the gear) at the top right.
 
 ![Settings](settings.png)
 
@@ -65,7 +95,8 @@ Select **Settings** (the gear) in the footer.
 | **On-screen notices** | Turns the notices on or off. |
 | **Audio** | Where the sound goes: the TV, a soundbar, Bluetooth headphones or a speaker. Also pairs Bluetooth headphones and speakers. See [Audio](#audio). |
 | **Gamepads** | Pair a gamepad, keyboard or mouse over Bluetooth, change the shortcuts, and see the volume shortcut. See [Gamepads](gamepads.md). |
-| **Home Assistant** | The address, the webhook, the TV, the "Turn off TV" button and a connection test. See the [Home Assistant guide](home-assistant.md). |
+| **Home Assistant** | The address, the webhook, the TV, the "Turn off TV" button, the lights on the home screen and a connection test. See the [Home Assistant guide](home-assistant.md). |
+| **Jellyfin** | The address, API key and user for the Recently added row, and a test. See [Recently added](#recently-added). |
 
 At the bottom:
 

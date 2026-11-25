@@ -61,9 +61,11 @@ class EditorMixin:
         if self.editing:
             self.hint.add_css_class("editing")
             self.btn_settings.label.set_label(self.t("done"))
+            self.btn_settings.label.set_visible(True)
         else:
             self.hint.remove_css_class("editing")
             self.btn_settings.label.set_label(self.t("settings"))
+            self.btn_settings.label.set_visible(False)
         self.build_grid(focus=0 if self.cfg.get("apps") else -1)
 
     def new_app(self):

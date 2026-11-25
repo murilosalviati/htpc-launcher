@@ -72,6 +72,163 @@ button.footer-button:focus {
   font-size: 12pt;
 }
 
+/* settings / restart / shut down: round icon buttons at the top right */
+button.top-button {
+  min-width: 60px;
+  min-height: 60px;
+  padding: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.07);
+  border: 3px solid transparent;
+  box-shadow: none;
+  color: #eef2f8;
+  outline: none;
+  transition: all 120ms ease-out;
+}
+button.top-button > box {
+  margin: 0 14px;
+}
+button.top-button:focus {
+  background: rgba(255, 255, 255, 0.16);
+  border-color: #7cb7ff;
+}
+
+/* ---------- rows around the apps (home.py) ---------- */
+
+.section-title {
+  font-size: 22pt;
+  font-weight: 800;
+}
+.section-note {
+  font-size: 14pt;
+  color: #7d8aa3;
+}
+.recent-row {
+  padding: 14px 14px 18px 14px;   /* room for the focus ring */
+}
+
+button.media-card {
+  padding: 0;
+  border-radius: 22px;
+  background: #1a2335;
+  border: 4px solid transparent;
+  box-shadow: none;
+  outline: none;
+  transition: all 150ms ease-out;
+}
+button.media-card:focus {
+  border-color: #7cb7ff;
+  box-shadow: 0 16px 44px rgba(0, 0, 0, 0.55), 0 0 0 6px rgba(124, 183, 255, 0.28);
+}
+.media-picture {
+  border-radius: 18px;
+}
+.media-band {
+  padding: 16px 20px 18px 20px;
+  border-radius: 0 0 18px 18px;
+  background-color: rgba(8, 12, 20, 0.84);
+}
+.media-kind {
+  font-size: 11pt;
+  font-weight: 800;
+  letter-spacing: 2px;
+  color: #7cb7ff;
+}
+.media-title {
+  font-size: 17pt;
+  font-weight: 800;
+  color: #ffffff;
+}
+button.media-card.wide .media-title {
+  font-size: 26pt;
+}
+.media-detail {
+  font-size: 12pt;
+  color: #b4c0d6;
+}
+
+/* the apps, dimmed while the house below has the focus */
+.apps {
+  transition: opacity 180ms ease-out;
+}
+.apps.dimmed {
+  opacity: 0.45;
+}
+
+button.scene {
+  min-height: 60px;
+  padding: 0 30px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 3px solid transparent;
+  box-shadow: none;
+  color: #eef2f8;
+  outline: none;
+  font-size: 16pt;
+  font-weight: 700;
+}
+button.scene:focus {
+  background: rgba(255, 255, 255, 0.16);
+  border-color: #7cb7ff;
+}
+
+button.device {
+  min-height: 140px;
+  padding: 18px 22px;
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 4px solid transparent;
+  box-shadow: none;
+  color: #c6cfde;
+  outline: none;
+  transition: all 120ms ease-out;
+}
+button.device:focus {
+  border-color: #7cb7ff;
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.5);
+}
+button.device.on {
+  background: #2f2716;
+  color: #fff4df;
+}
+button.device.unavailable {
+  opacity: 0.5;
+}
+.device-badge {
+  min-width: 46px;
+  min-height: 46px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+}
+button.device.on .device-badge {
+  background: #f5b14c;
+}
+.device-area {
+  font-size: 12pt;
+  font-weight: 600;
+  color: #7d8aa3;
+}
+.device-name {
+  font-size: 16pt;
+  font-weight: 700;
+}
+.device-state {
+  font-size: 13pt;
+  color: #7d8aa3;
+}
+button.device.on .device-state {
+  color: #f5c77a;
+}
+.brightness-value {
+  font-size: 44pt;
+  font-weight: 800;
+  color: #f5c77a;
+}
+button.dialog-button.brightness-step {
+  min-width: 120px;
+  font-size: 28pt;
+}
+
 /* ---------- apps ---------- */
 
 button.tile {
@@ -309,7 +466,7 @@ button.field:focus {
   padding-bottom: 28px;
 }
 .dialog.settings-main button.field {
-  min-height: 58px;
+  min-height: 54px;
 }
 .dialog.settings .editor-buttons {
   margin-top: 14px;

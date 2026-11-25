@@ -74,8 +74,29 @@ Each entry in `apps` is one tile.
 | `notifications` | `true`, `false` | `true` | On-screen notices |
 | `shortcuts` | `{"home": [...], "close": [...]}`: only the combos you changed. Button names: `guide`, `start`, `select`, `l1`, `r1`, `a`, `b`, `x`, `y`. Invalid combos fall back to the defaults. | Home + LB + RB, Start + Select + LB + RB | Gamepads |
 | `home_assistant` | See the [Home Assistant settings reference](home-assistant.md#settings-reference). | none | Home Assistant |
+| `jellyfin` | See [Jellyfin](#jellyfin) below. | none | Jellyfin |
 | `tv_off_button` | `true`, `false` | `false` | Home Assistant → "Turn off TV" button |
 | `launcher.launch` | The command the service uses to start the launcher when it isn't running. `launcher/install.sh` fills it in. | | |
+
+## Jellyfin
+
+The `jellyfin` entry sets up the home screen's Recently added row:
+
+```json
+"jellyfin": {
+  "url": "http://localhost:8096",
+  "api_key": "0123456789abcdef0123456789abcdef",
+  "user_id": "…",
+  "user_name": "mu"
+}
+```
+
+| Field | What it does | In Settings |
+|---|---|---|
+| `url` | Jellyfin's address. | Address |
+| `api_key` | An API key, from Jellyfin's Dashboard → API Keys. | API key |
+| `user_id`, `user_name` | Whose library and "latest" list to show. Without them, the first administrator. | User |
+| `enabled` | `false` hides the row and keeps the rest. Defaults to `true`. | Recently added row |
 
 Older versions used Portuguese field names (`nome`, `abrir`...). They are converted automatically the first time the launcher starts.
 

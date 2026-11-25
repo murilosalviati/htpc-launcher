@@ -2,6 +2,15 @@
 
 The project is in beta: every `0.x` version is a pre-release, and the configuration format or install steps may still change.
 
+## Unreleased
+
+**A new home screen.** The apps are now the middle row of three:
+
+- **Recently added (Jellyfin)** above the apps: the newest films and series, the first one wide with its backdrop, new episodes grouped under their series. Selecting one opens the Jellyfin app. Set up in the new Settings → Jellyfin (address, API key, user, test). Fetched at start and every 10 minutes while the launcher is in front.
+- **Home (Home Assistant)** below the apps, reached by going down: lights and switches by room, and scenes. Ⓐ turns one on or off (shown at once), Ⓨ on a dimmable light opens its brightness (−/+ by 10%). Every light by default; choose in Settings → Home Assistant → Lights on the home screen. Needs the address and the token. States are read every 5 seconds while the launcher is in front.
+- **Settings, Restart and Shut down** moved to the top right, as round buttons next to the clock (the clock moved there too). The footer keeps the hints and "Turn off TV".
+- Without Jellyfin and Home Assistant set up, the screen looks as before: the apps alone in the middle.
+
 ## 0.1.0-beta.7
 
 - **Fixed:** the beta.6 package still called itself beta.5 inside (`htpc.__version__`), so Settings → Updates kept offering beta.6 after it was installed. A unit test and the release workflow now check that the version matches the VERSION file.

@@ -419,3 +419,121 @@ class AppEvents:
             threading.Thread(target=go, daemon=True).start()
         else:
             go()
+
+
+# --- the home screen's "Home" row: lights and switches --------------------------------
+#
+# With the address and the token, the launcher lists lights and switches under
+# the apps and turns them on and off. Which ones: "devices" (entity ids, in
+# that order) in the "home_assistant" entry, chosen in Settings → Home
+# Assistant → Devices; without it, every light. Scenes: "scenes", likewise;
+# without it, every scene. "home_screen": false hides the row.
+
+DEVICE_DOMAINS = ("light", "switch", "fan", "input_boolean")
+SCENE_DOMAINS = ("scene", "script")
+DEFAULT_SCENES = 6
+
+
+def home_ready(cfg):
+    """Can the home screen show the house? (enabled, address and token set)"""
+    ha = (cfg or {}).get("home_assistant") or {}
+    return bool(ha.get("enabled", True) and ha.get("home_screen", True) and ha.get("url") and ha.get("token"))
+
+
+def http_post_api(url, token, payload):
+    """POST to the REST API with the token; the reply's text."""
+    request = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), method="POST", headers={
+        "Authorization": f"Bearer {token}", "Content-Type": "application/json",
+        "User-Agent": f"htpc-launcher/{__version__}"})
+    with urllib.request.urlopen(request, timeout=TIMEOUT) as response:
+        return response.read().decode("utf-8")
+
+
+def _post(cfg, path, payload, post=None):
+    ha = cfg["home_assistant"]
+    return (post or http_post_api)(f"{ha['url'].rstrip('/')}/api/{path}", ha["token"], payload)
+
+
+def _domain(entity):
+    return entity.split(".", 1)[0]
+
+
+def _name(state):
+    return (state.get("attributes") or {}).get("friendly_name") or state.get("entity_id", "?")
+
+
+def areas(cfg, entities, post=None):
+    """{entity: area name or None}, in one template call. {} if that fails
+    (an old Home Assistant, or a token without access to templates)."""
+    if not entities:
+        return {}
+    pairs = ", ".join(f"{json.dumps(e)}: area_name({json.dumps(e)})" for e in entities)
+    try:
+        found = json.loads(_post(cfg, "template", {"template": "{{ {" + pairs + "} | tojson }}"}, post))
+    except Exception as e:  # noqa: BLE001 - without areas the cards just don't say the room
+        log.debug("Home Assistant areas: %s", e)
+        return {}
+    return found if isinstance(found, dict) else {}
+
+
+def _device(state, area):
+    entity = state["entity_id"]
+    attrs = state.get("attributes") or {}
+    brightness = attrs.get("brightness")
+    modes = attrs.get("supported_color_modes") or []
+    return {
+        "entity": entity,
+        "domain": _domain(entity),
+        "name": _name(state),
+        "area": area,
+        "state": state.get("state"),
+        "on": state.get("state") == "on",
+        "available": state.get("state") not in ("unavailable", "unknown", None),
+        "brightness": round(brightness / 2.55) if isinstance(brightness, (int, float)) and state.get("state") == "on" else None,
+        "dimmable": _domain(entity) == "light" and any(m != "onoff" for m in modes),
+    }
+
+
+def device_candidates(cfg, get=None):
+    """[(entity, name)] of every light and switch, for Settings → Devices."""
+    found = [(s["entity_id"], _name(s)) for s in _api(cfg, "states", get)
+             if _domain(str(s.get("entity_id", ""))) in DEVICE_DOMAINS]
+    return sorted(found, key=lambda item: (_domain(item[0]) != "light", item[1].lower()))
+
+
+def house(cfg, get=None, post=None):
+    """{"devices": [...], "scenes": [...]} for the home screen's Home row."""
+    ha = cfg["home_assistant"]
+    states = {s.get("entity_id"): s for s in _api(cfg, "states", get) if s.get("entity_id")}
+    chosen = ha.get("devices")
+    if isinstance(chosen, list):
+        ids = [e for e in chosen if e in states]
+    else:
+        ids = [e for e in states if _domain(e) == "light"]
+    found = areas(cfg, ids, post)
+    devices = [_device(states[e], found.get(e)) for e in ids]
+    if not isinstance(chosen, list):   # no choice made: by room, then name
+        devices.sort(key=lambda d: ((d["area"] or "￿").lower(), d["name"].lower()))
+    scene_ids = ha.get("scenes")
+    if isinstance(scene_ids, list):
+        scene_ids = [e for e in scene_ids if e in states]
+    else:
+        scene_ids = sorted((e for e in states if _domain(e) == "scene"),
+                           key=lambda e: _name(states[e]).lower())[:DEFAULT_SCENES]
+    scenes = [{"entity": e, "name": _name(states[e])} for e in scene_ids]
+    return {"devices": devices, "scenes": scenes}
+
+
+def toggle(cfg, entity, post=None):
+    """Turn a light or switch on/off, or run a scene or script."""
+    domain = _domain(entity)
+    service = "turn_on" if domain in SCENE_DOMAINS else "toggle"
+    _post(cfg, f"services/{domain}/{service}", {"entity_id": entity}, post)
+
+
+def set_brightness(cfg, entity, percent, post=None):
+    """A light's brightness, 1-100 % (0 turns it off)."""
+    if percent <= 0:
+        _post(cfg, "services/light/turn_off", {"entity_id": entity}, post)
+    else:
+        _post(cfg, "services/light/turn_on", {"entity_id": entity, "brightness_pct": min(100, int(percent))}, post)

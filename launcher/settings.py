@@ -19,8 +19,10 @@
     app, recorded by holding the buttons (read by the controller service from
     the same apps.json);
   * Home Assistant: its own menu with the address and webhook id (typed on the
-    on-screen keyboard), on/off, the footer's "Turn off TV" button, and a
-    connection test. The controller service reads the same apps.json entry;
+    on-screen keyboard), on/off, the footer's "Turn off TV" button, which
+    lights and switches show on the home screen, and a connection test. The
+    controller service reads the same apps.json entry;
+  * Jellyfin: the address, API key and user for the "Recently added" row;
   * Close the launcher: quits it, after a confirmation (the guide button opens
     it again, through the controller service).
 
@@ -36,7 +38,7 @@ import gi
 gi.require_version("Gtk", "4.0")
 from gi.repository import GLib, Gtk  # noqa: E402
 
-from htpc import __version__, home_assistant, shortcuts, updates, weather  # noqa: E402
+from htpc import __version__, home_assistant, jellyfin, shortcuts, updates, weather  # noqa: E402
 from background import in_background  # noqa: E402
 
 
@@ -61,7 +63,7 @@ class SettingsMixin:
         box = self.dialog_box(self.t("settings"))
         box.add_css_class("editor")
         box.add_css_class("settings")
-        box.set_spacing(10)  # nine rows plus the buttons fit a 1080p screen
+        box.set_spacing(8)  # ten rows plus the buttons fit a 1080p screen
         box.add_css_class("settings-main")
         f = self.settings_fields = {
             "apps": self._field(self.t("settings_apps"), self._settings_apps, title_width=300),
@@ -74,6 +76,7 @@ class SettingsMixin:
             "audio": self._field(self.t("settings_audio"), self.open_audio, title_width=300),
             "shortcuts": self._field(self.t("settings_shortcuts"), self.open_shortcuts, title_width=300),
             "home_assistant": self._field(self.t("settings_ha"), self.open_home_assistant, title_width=300),
+            "jellyfin": self._field(self.t("settings_jellyfin"), self.open_jellyfin, title_width=300),
         }
         for w in f.values():
             box.append(w)
@@ -109,6 +112,7 @@ class SettingsMixin:
         f["language"].value.set_label(self.t("language_name"))
         f["notifications"].value.set_label(self.t("on" if self.cfg.get("notifications", True) else "off"))
         f["home_assistant"].value.set_label(self._ha_summary())
+        f["jellyfin"].value.set_label(self._jf_summary())
         f["audio"].value.set_label(getattr(self, "audio_current", None) or self.t("audio_value"))
         f["shortcuts"].value.set_label(shortcuts.combo_label(shortcuts.combos(self.cfg)["home"]))
 
@@ -697,6 +701,7 @@ class SettingsMixin:
                                  title_width=300),
             "tv": self._field(self.t("ha_tv"), self._ha_choose_tv, title_width=300),
             "tv_button": self._field(self.t("settings_tv_button"), self._toggle_tv_button, title_width=300),
+            "home": self._field(self.t("ha_home"), self._ha_choose_home, title_width=300),
             "test": self._field(self.t("ha_test"), self._ha_test, title_width=300),
         }
         for w in f.values():
@@ -728,6 +733,7 @@ class SettingsMixin:
         else:
             f["tv_button"].value.set_label(self.t("on" if self.cfg.get("tv_off_button", False) else "off"))
         f["test"].value.set_label(self.t("ha_test_value"))
+        f["home"].value.set_label(self._ha_home_summary())
 
     def _ha_toggle_enabled(self):
         self._ha_set(enabled=None if not self._ha().get("enabled", True) else False)
@@ -766,10 +772,10 @@ class SettingsMixin:
         self.btn_tv.set_visible(self.tv_button_enabled())
         self.refresh_home_assistant()
 
-    def _ha_ask(self, job, done):
+    def _ha_ask(self, job, done, title=None):
         """Run job() in a thread behind a "Calling Home Assistant…" box (with Cancel),
         then done(result) on the main loop; result is an exception if job failed."""
-        box = self.dialog_box(self.t("ha_testing"))
+        box = self.dialog_box(title or self.t("ha_testing"))
         token = object()
         self.ha_request = token
 
@@ -849,6 +855,234 @@ class SettingsMixin:
     def _ha_tv_chosen(self, entity, name):
         self.pop_overlay()
         self._ha_set(tv_entity=entity, tv_name=name)
+
+    # --- Home Assistant: lights on the home screen -------------------------------------
+
+    def _ha_home_summary(self):
+        ha = self._ha()
+        if not ha.get("url") or not ha.get("token"):
+            return self.t("ha_tv_needs_token")
+        if not ha.get("home_screen", True):
+            return self.t("off")
+        chosen = ha.get("devices")
+        return self.t("ha_home_some", n=len(chosen)) if isinstance(chosen, list) else self.t("ha_home_all")
+
+    def _ha_choose_home(self):
+        ha = self._ha()
+        if not ha.get("url") or not ha.get("token"):
+            self._message(self.t("ha_token"), self.t("ha_token_text"))
+            return
+        get = getattr(self, "ha_get", None)
+        cfg = dict(self.cfg)
+        self._ha_ask(lambda: home_assistant.device_candidates(cfg, get), self._ha_home_list)
+
+    def _ha_home_list(self, result):
+        if isinstance(result, Exception):
+            self._message(self.t("ha_list_failed", error=self._reason(result)))
+            return
+        if not result:
+            self._message(self.t("ha_no_devices"))
+            return
+        box = self.dialog_box(self.t("ha_home_title"))
+        box.add_css_class("editor")
+        show = self._field(self.t("ha_home_show"), lambda: self._ha_home_toggle_show(), title_width=380)
+        default = self._field(self.t("ha_home_default"), lambda: self._ha_home_default(), title_width=380)
+        items = []
+        for entity, name in result:
+            b = self._field(name, lambda e=entity: self._ha_home_toggle(e), title_width=380)
+            b.entity = entity
+            items.append(b)
+        self.ha_home_fields = {"show": show, "default": default, "items": items, "all": [e for e, _ in result]}
+        listing = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        for b in items:
+            listing.append(b)
+        scroll = Gtk.ScrolledWindow(propagate_natural_height=True, max_content_height=480)
+        scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        scroll.add_css_class("picker")
+        scroll.set_child(listing)
+        close = self.dialog_button(self.t("close"), self.pop_overlay)
+        close_box = Gtk.Box(spacing=20, halign=Gtk.Align.CENTER)
+        close_box.add_css_class("editor-buttons")
+        close_box.append(close)
+        for w in (show, default, scroll, close_box):
+            box.append(w)
+        self._ha_home_refresh()
+        self.push_overlay(box, [[show], [default]] + [[b] for b in items] + [[close]], focus=show)
+
+    def _ha_home_refresh(self):
+        f = getattr(self, "ha_home_fields", None)
+        if not f:
+            return
+        ha = self._ha()
+        f["show"].value.set_label(self.t("on" if ha.get("home_screen", True) else "off"))
+        chosen = ha.get("devices")
+        f["default"].value.set_label("✓" if not isinstance(chosen, list) else "")
+        lights = [e for e in f["all"] if e.startswith("light.")]
+        current = set(chosen if isinstance(chosen, list) else lights)
+        for b in f["items"]:
+            b.value.set_label("✓" if b.entity in current else "")
+
+    def _ha_home_changed(self, **values):
+        self._ha_set(**values)
+        self._ha_home_refresh()
+        self.update_house()
+
+    def _ha_home_toggle_show(self):
+        self._ha_home_changed(home_screen=None if not self._ha().get("home_screen", True) else False)
+
+    def _ha_home_default(self):
+        self._ha_home_changed(devices=None)
+
+    def _ha_home_toggle(self, entity):
+        f = self.ha_home_fields
+        chosen = self._ha().get("devices")
+        if not isinstance(chosen, list):   # starting from "every light"
+            chosen = [e for e in f["all"] if e.startswith("light.")]
+        chosen = [e for e in chosen if e != entity] if entity in chosen else chosen + [entity]
+        # Kept even when empty: an empty choice shows no devices (scenes still show).
+        ha = dict(self._ha())
+        ha["devices"] = chosen
+        self.cfg["home_assistant"] = ha
+        self.save_config()
+        self.refresh_home_assistant()
+        self._ha_home_refresh()
+        self.update_house()
+
+    # --- Jellyfin -----------------------------------------------------------------------
+
+    def _jf(self):
+        return self.cfg.get("jellyfin") or {}
+
+    def _jf_set(self, **values):
+        j = dict(self._jf())
+        for key, value in values.items():
+            if value in (None, ""):
+                j.pop(key, None)
+            else:
+                j[key] = value
+        if j:
+            self.cfg["jellyfin"] = j
+        else:
+            self.cfg.pop("jellyfin", None)
+        self.save_config()
+        self.refresh_jellyfin()
+        self.refresh_settings()
+        self.update_recent(force=True)
+
+    def _jf_summary(self):
+        j = self._jf()
+        if not j.get("url") or not j.get("api_key"):
+            return self.t("jf_not_set")
+        if not j.get("enabled", True):
+            return self.t("off")
+        return j["url"].split("://", 1)[-1].rstrip("/")
+
+    def open_jellyfin(self, focus=None):
+        box = self.dialog_box(self.t("settings_jellyfin"))
+        box.add_css_class("editor")
+        box.add_css_class("settings")
+        box.set_spacing(16)
+        f = self.jf_fields = {
+            "enabled": self._field(self.t("jf_enabled"), self._jf_toggle, title_width=300),
+            "url": self._field(self.t("jf_url"), self._jf_edit_url, title_width=300),
+            "key": self._field(self.t("jf_key"), self._jf_edit_key, title_width=300),
+            "user": self._field(self.t("jf_user"), self._jf_choose_user, title_width=300),
+            "test": self._field(self.t("jf_test"), self._jf_test, title_width=300),
+        }
+        for w in f.values():
+            box.append(w)
+        close = self.dialog_button(self.t("close"), self.pop_overlay)
+        close_box = Gtk.Box(spacing=20, halign=Gtk.Align.CENTER)
+        close_box.add_css_class("editor-buttons")
+        close_box.append(close)
+        box.append(close_box)
+        self.refresh_jellyfin()
+        self.push_overlay(box, [[w] for w in f.values()] + [[close]], focus=f.get(focus))
+
+    def refresh_jellyfin(self):
+        f = getattr(self, "jf_fields", None)
+        if not f:
+            return
+        j = self._jf()
+        f["enabled"].value.set_label(self.t("on" if j.get("enabled", True) else "off"))
+        f["url"].value.set_label(j.get("url") or "—")
+        f["key"].value.set_label(self.t("jf_key_set" if j.get("api_key") else "jf_key_missing"))
+        f["user"].value.set_label(j.get("user_name") or self.t("jf_user_auto"))
+        f["test"].value.set_label(self.t("jf_test_value"))
+
+    def _jf_toggle(self):
+        self._jf_set(enabled=None if not self._jf().get("enabled", True) else False)
+
+    def _jf_edit_url(self):
+        self.keyboard(self.t("jf_url_title"), self._jf().get("url", "http://localhost:8096"), self._jf_url_typed,
+                      note=self.t("jf_url_note"), capitalize=False, extra=":/_")
+
+    def _jf_url_typed(self, text):
+        text = text.replace(" ", "").rstrip("/")
+        if text in ("", "http:", "https:"):
+            self._jf_set(url=None)
+        elif not text.lower().startswith(("http://", "https://")):
+            self._message(self.t("ha_bad_url"))
+        else:
+            self._jf_set(url=text)
+
+    def _jf_edit_key(self):
+        self.keyboard(self.t("jf_key_title"), self._jf().get("api_key", ""),
+                      lambda text: self._jf_set(api_key=text.replace(" ", "").lower() or None),
+                      note=self.t("jf_key_note"), capitalize=False)
+
+    def _jf_ready_or_say(self):
+        if jellyfin.settings(self.cfg).get("url") and jellyfin.settings(self.cfg).get("api_key"):
+            return True
+        self._message(self.t("jf_needs_setup"))
+        return False
+
+    def _jf_choose_user(self):
+        if not self._jf_ready_or_say():
+            return
+        cfg, get = dict(self.cfg), getattr(self, "jellyfin_get", None)
+        self._ha_ask(lambda: jellyfin.users(cfg, get), self._jf_users_arrived, title=self.t("jf_calling"))
+
+    def _jf_users_arrived(self, result):
+        if isinstance(result, Exception):
+            self._message(self.t("jf_failed", error=self._reason(result)))
+            return
+        if not result:
+            self._message(self.t("jf_no_users"))
+            return
+        box = self.dialog_box(self.t("jf_choose_user"))
+        box.add_css_class("editor")
+        rows, focus = [], None
+        auto = self._field(self.t("jf_user_auto"), lambda: self._jf_user_chosen(None, None), title_width=380)
+        box.append(auto)
+        rows.append([auto])
+        current = self._jf().get("user_id")
+        for uid, name, admin in result[:8]:
+            b = self._field(name, lambda u=uid, n=name: self._jf_user_chosen(u, n), title_width=380)
+            b.value.set_label("admin" if admin else "")
+            if uid == current:
+                focus = b
+            box.append(b)
+            rows.append([b])
+        self.push_overlay(box, rows, focus=focus or auto)
+
+    def _jf_user_chosen(self, uid, name):
+        self.pop_overlay()
+        self._jf_set(user_id=uid, user_name=name)
+
+    def _jf_test(self):
+        if not self._jf_ready_or_say():
+            return
+        cfg, get = dict(self.cfg), getattr(self, "jellyfin_get", None)
+
+        def done(result):
+            if isinstance(result, Exception):
+                self._message(self.t("jf_failed", error=self._reason(result)))
+            else:
+                server, version, count = result
+                self._message(self.t("jf_test_ok", server=server, version=version, count=count))
+
+        self._ha_ask(lambda: jellyfin.test(cfg, get), done, title=self.t("jf_calling"))
 
     # --- language ---------------------------------------------------------------------
 

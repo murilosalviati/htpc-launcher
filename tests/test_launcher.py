@@ -175,11 +175,14 @@ def s4():
         l.move(1, 0)
     check("does not go past the last app", l.win.get_focus() is l.tiles[-1])
     l.move(0, 1)
-    check("down goes to the footer (closest button)", l.win.get_focus() in (l.btn_settings, l.btn_restart, l.btn_power))
+    check("down from the apps stays there when nothing is below", l.win.get_focus() is l.tiles[-1])
+    l.move(0, -1)
+    check("up goes to the round buttons at the top right (closest one)",
+          l.win.get_focus() in (l.btn_settings, l.btn_restart, l.btn_power))
     l.move(-1, 0)
     for _ in range(3):
         l.move(1, 0)
-    check("right in the footer reaches Shut down", l.win.get_focus() is l.btn_power)
+    check("right along the top reaches Shut down", l.win.get_focus() is l.btn_power)
 
 
 @step(400)
@@ -204,10 +207,10 @@ def s6():
     l.back()
     check("B closes the confirmation", not l.overlays)
     check("focus returns to Shut down", l.win.get_focus() is l.btn_power)
-    l.move(0, -1)
-    check("up goes back to the apps", l.win.get_focus() in l.tiles)
-    l.move(0, -1)
-    check("up from the apps stays on the apps", l.win.get_focus() in l.tiles)
+    l.move(0, 1)
+    check("down goes back to the apps", l.win.get_focus() in l.tiles)
+    l.move(0, 1)
+    check("down from the apps stays on the apps", l.win.get_focus() in l.tiles)
 
 
 @step(300)
@@ -267,14 +270,14 @@ def s9():
 @step(300)
 def e1():
     l = L()
-    l.tiles[-1].grab_focus()
-    l.move(0, 1)
-    check("down from the last app reaches the footer", l.win.get_focus() in (l.btn_settings, l.btn_restart, l.btn_power))
+    l.tiles[0].grab_focus()
+    l.move(0, -1)
+    check("up from the first app reaches the top buttons", l.win.get_focus() in (l.btn_settings, l.btn_restart, l.btn_power))
     l.btn_settings.grab_focus()
     l.press()
     f = l.settings_fields
     check("the gear opens Settings with apps, background, location, temperature and language",
-          len(l.overlays) == 1 and list(f) == ["apps", "background", "location", "unit", "language", "notifications", "audio", "shortcuts", "home_assistant"])
+          len(l.overlays) == 1 and list(f) == ["apps", "background", "location", "unit", "language", "notifications", "audio", "shortcuts", "home_assistant", "jellyfin"])
     check("Settings shows the current values",
           f["background"].value.get_label() == "Meia-noite" and f["unit"].value.get_label() == "°C"
           and f["language"].value.get_label() == "Português (Brasil)"
@@ -471,8 +474,8 @@ def n1():
     check("gamepad: left stick moves back", l.win.get_focus() is l.tiles[0])
     nav.handle(E("pad", "axis", "lx", 0.3))
     check("gamepad: a small stick movement is ignored", l.win.get_focus() is l.tiles[0])
-    nav.handle(E("pad", "button", "down", 1)); nav.handle(E("pad", "button", "down", 0))
-    check("gamepad: d-pad down reaches the footer", l.win.get_focus() in l.rows[-1])
+    nav.handle(E("pad", "button", "up", 1)); nav.handle(E("pad", "button", "up", 0))
+    check("gamepad: d-pad up reaches the top buttons", l.win.get_focus() in l.top_buttons)
     l.btn_power.grab_focus()
     nav.handle(E("pad", "button", "a", 1))
     check("gamepad: A presses the focused button", len(l.overlays) == 1)
@@ -708,7 +711,7 @@ def tv1():
     l.press()
     f = l.ha_fields
     check("it opens the Home Assistant menu", len(l.overlays) == 2
-          and list(f) == ["enabled", "url", "webhook", "events", "token", "tv", "tv_button", "test"]
+          and list(f) == ["enabled", "url", "webhook", "events", "token", "tv", "tv_button", "home", "test"]
           and f["token"].value.get_label() == l.t("ha_token_missing")
           and f["tv"].value.get_label() == l.t("ha_tv_needs_token")
           and f["tv_button"].value.get_label() == l.t("tv_button_needs_ha"))
@@ -1296,6 +1299,230 @@ def bt8():
     check("discovery is off after closing", fakes.bluez["adapter"]["Discovering"] is False)
     while l.overlays:
         l.pop_overlay()
+    l.tiles[0].grab_focus()
+
+# ---------------- home screen: recently added (Jellyfin) and the house (Home Assistant) ----------------
+
+def png(rgb):
+    from gi.repository import Gdk as _Gdk
+    tex = _Gdk.MemoryTexture.new(4, 4, _Gdk.MemoryFormat.R8G8B8A8, GLib.Bytes.new(bytes([*rgb, 255]) * 16), 16)
+    return tex.save_to_png_bytes().get_data()
+
+
+JF_LATEST = [
+    {"Id": "m1", "Type": "Movie", "Name": "Filme Um", "ProductionYear": 2024, "RunTimeTicks": 112 * 600_000_000,
+     "ImageTags": {"Primary": "p"}, "BackdropImageTags": ["b"]},
+    {"Id": "s1", "Type": "Series", "Name": "Série Dois", "ChildCount": 3, "ImageTags": {"Primary": "p"}},
+    {"Id": "e1", "Type": "Episode", "Name": "Piloto", "SeriesName": "Série Três", "SeriesId": "s3",
+     "SeriesPrimaryImageTag": "p", "ParentIndexNumber": 1, "IndexNumber": 2},
+]
+HA_STATES = [
+    {"entity_id": "light.sala", "state": "on",
+     "attributes": {"friendly_name": "Luz do teto", "brightness": 204, "supported_color_modes": ["brightness"]}},
+    {"entity_id": "light.abajur", "state": "off", "attributes": {"friendly_name": "Abajur", "supported_color_modes": ["onoff"]}},
+    {"entity_id": "switch.som", "state": "on", "attributes": {"friendly_name": "Tomada do som"}},
+    {"entity_id": "scene.cinema", "state": "x", "attributes": {"friendly_name": "Modo cinema"}},
+    {"entity_id": "media_player.tv", "state": "on", "attributes": {"friendly_name": "TV"}},
+]
+
+
+def jf_get(url, key):
+    import urllib.parse as up
+    state.setdefault("jf_calls", []).append(url)
+    path = up.urlsplit(url).path
+    if path == "/Users":
+        return json.dumps([{"Id": "u1", "Name": "mu", "Policy": {"IsAdministrator": True}}]).encode()
+    if path.endswith("/Items/Latest"):
+        return json.dumps(JF_LATEST).encode()
+    if path == "/System/Info":
+        return json.dumps({"ServerName": "servidor", "Version": "10.11.0"}).encode()
+    return png((200, 120, 60))
+
+
+def ha_states(url, token):
+    return HA_STATES
+
+
+def ha_api_post(url, token, payload):
+    state.setdefault("ha_posts", []).append((url.split("/api/", 1)[1], payload))
+    if url.endswith("/template"):
+        return json.dumps({"light.sala": "Sala", "light.abajur": "Quarto", "switch.som": "Sala"})
+    return "[]"
+
+
+@step(300)
+def h1():
+    l = L()
+    while l.overlays:
+        l.pop_overlay()
+    check("not set up: no Recently added and no house; the apps are alone, in the middle",
+          not l.recent_section.get_visible() and not l.house_section.get_visible() and l.grid.get_vexpand())
+    l.jellyfin_get, l.ha_get, l.ha_api_post = jf_get, ha_states, ha_api_post
+    l.cfg["jellyfin"] = {"url": "http://jf:8096", "api_key": "k"}
+    ha = dict(l.cfg.get("home_assistant") or {})
+    ha.update(url="http://192.168.0.22:8123", token="T")
+    ha.pop("devices", None)
+    ha.pop("home_screen", None)
+    l.cfg["home_assistant"] = ha
+    l.update_recent(force=True)
+    l.update_house()
+
+
+@step(900)
+def h2():
+    l = L()
+    check("Recently added shows Jellyfin's newest, the first one wide",
+          l.recent_section.get_visible() and [c.item["title"] for c in l.recent_cards] == ["Filme Um", "Série Dois", "Série Três"]
+          and l.recent_cards[0].has_css_class("wide"))
+    check("their pictures arrive", all(c.picture.get_paintable() is not None for c in l.recent_cards))
+    check("the house shows every light by room, plus the scenes",
+          l.house_section.get_visible() and [t.device["entity"] for t in l.device_tiles] == ["light.abajur", "light.sala"]
+          and [b.scene["entity"] for b in l.scene_buttons] == ["scene.cinema"]
+          and l.device_tiles[1].state.get_label() == l.t("dev_brightness", pct=80) and l.device_tiles[1].has_css_class("on"))
+    check("rows: top buttons, recently added, apps, scenes, lights",
+          l.rows[0] == l.top_buttons and l.rows[1] == l.recent_cards and l.rows[2] == l.tiles
+          and l.rows[3] == l.scene_buttons and l.rows[4] == l.device_tiles)
+    check("with other rows, the apps sit at the top of their space", not l.grid.get_vexpand())
+    l.tiles[0].grab_focus()
+    l.move(0, -1)
+    check("up from the apps reaches Recently added", l.win.get_focus() in l.recent_cards)
+    screenshot(l.win, "30-home-recently-added")
+    l.move(0, 1)
+    l.move(0, 1)
+    check("down from the apps reaches the scenes, the apps dim and the screen scrolls",
+          l.win.get_focus() in l.scene_buttons and l.grid.has_css_class("dimmed")
+          and l.scroller.get_vadjustment().get_value() > 0)
+    l.move(0, 1)
+    l.move(1, 0)
+    check("then the lights", l.win.get_focus() is l.device_tiles[1])
+
+
+@step(300)
+def h2b():
+    l = L()
+    screenshot(l.win, "31-home-house")
+    state["ha_posts"] = []
+    l.press()
+    check("Ⓐ turns the light off at once", not l.device_tiles[1].has_css_class("on"))
+
+
+@step(300)
+def h3():
+    l = L()
+    check("...and asks Home Assistant to", ("services/light/toggle", {"entity_id": "light.sala"}) in state["ha_posts"])
+    l.device_tiles[1].grab_focus()
+    l.device_tiles[1].update(HA_STATES and l.device_tiles[1].device | {"on": True, "brightness": 80})
+    l.other_button("y")
+    check("Ⓨ on a dimmable light opens its brightness", len(l.overlays) == 1 and l.brightness_value.get_label() == "80%")
+    state["ha_posts"] = []
+    l.press()   # focus starts on +
+    check("+ raises it by 10 %", l.brightness_value.get_label() == "90%")
+
+
+@step(300)
+def h3b():
+    l = L()
+    screenshot(l.win, "32-brightness")
+    l.back()
+    l.device_tiles[0].grab_focus()
+    l.other_button("y")
+    check("Ⓨ on an on/off light does nothing", not l.overlays)
+
+
+@step(500)
+def h4():
+    l = L()
+    check("the brightness went to Home Assistant",
+          ("services/light/turn_on", {"entity_id": "light.sala", "brightness_pct": 90}) in state["ha_posts"])
+    l.move(0, -1)
+    l.move(0, -1)
+    check("back up to the apps: not dimmed, scrolled back to the top",
+          l.win.get_focus() in l.tiles and not l.grid.has_css_class("dimmed")
+          and l.scroller.get_vadjustment().get_value() == 0)
+    opened = []
+    real = l.open_app
+    l.open_app = lambda tile: opened.append(tile.app["id"])
+    l.recent_cards[1].grab_focus()
+    l.press()
+    l.open_app = real
+    check("a Recently added card opens the Jellyfin app", opened == ["org.jellyfin.JellyfinDesktop"])
+    l.open_settings(focus="jellyfin")
+    check("Settings has a Jellyfin row", l.settings_fields["jellyfin"].value.get_label() == "jf:8096")
+    l.press()
+    f = l.jf_fields
+    check("it opens the Jellyfin menu", list(f) == ["enabled", "url", "key", "user", "test"]
+          and f["key"].value.get_label() == l.t("jf_key_set") and f["user"].value.get_label() == l.t("jf_user_auto"))
+
+
+
+@step(300)
+def h4b():
+    l = L()
+    screenshot(l.win, "33-settings-jellyfin")
+    l.jf_fields["test"].grab_focus()
+    l.press()
+
+
+@step(500)
+def h5():
+    l = L()
+    check("the test says where it connected", l.t("jf_test_ok", server="servidor", version="10.11.0", count=3)
+          in label_texts(l.overlays[-1]["backdrop"]))
+    while l.overlays:
+        l.pop_overlay()
+    l.open_home_assistant(focus="home")
+    check("Home Assistant → Lights on the home screen: all lights", l.ha_fields["home"].value.get_label() == l.t("ha_home_all"))
+    l.press()
+
+
+@step(500)
+def h6():
+    l = L()
+    f = l.ha_home_fields
+    check("the list has every light and switch, the lights ticked",
+          [b.entity for b in f["items"]] == ["light.abajur", "light.sala", "switch.som"]
+          and [b.value.get_label() for b in f["items"]] == ["✓", "✓", ""])
+
+
+@step(300)
+def h6b():
+    l = L()
+    f = l.ha_home_fields
+    screenshot(l.win, "34-home-lights-choice")
+    f["items"][2].grab_focus()
+    l.press()
+    check("ticking the switch saves a choice", l.cfg["home_assistant"]["devices"] == ["light.abajur", "light.sala", "switch.som"]
+          and l.ha_fields["home"].value.get_label() == l.t("ha_home_some", n=3))
+    f["items"][0].grab_focus()
+    l.press()
+    check("unticking a light keeps the others", l.cfg["home_assistant"]["devices"] == ["light.sala", "switch.som"])
+
+
+@step(700)
+def h7():
+    l = L()
+    check("the house follows the choice, in its order",
+          [t.device["entity"] for t in l.device_tiles] == ["light.sala", "switch.som"])
+    l.ha_home_fields["show"].grab_focus()
+    l.press()
+    check("'Show under the apps' off is saved", l.cfg["home_assistant"]["home_screen"] is False)
+    while l.overlays:
+        l.pop_overlay()
+    l.cfg["jellyfin"]["enabled"] = False
+    l.update_recent(force=True)
+
+
+@step(500)
+def h8():
+    l = L()
+    check("both switched off: the rows go away and the apps are alone again",
+          not l.recent_section.get_visible() and not l.house_section.get_visible() and l.grid.get_vexpand()
+          and l.rows[1] == [] and l.house_rows == [])
+    l.cfg.pop("jellyfin", None)
+    l.cfg["home_assistant"].pop("devices", None)
+    l.cfg["home_assistant"].pop("home_screen", None)
+    l.cfg["home_assistant"].pop("token", None)
+    l.save_config()
     l.tiles[0].grab_focus()
 
 

@@ -30,11 +30,12 @@ A gamepad-driven home screen for a living-room PC running Ubuntu with GNOME on W
   - apps (with an on-screen keyboard), background color, weather location, °C/°F, and English or Brazilian Portuguese;
   - **Bluetooth gamepad pairing**;
   - shortcuts;
-  - Home Assistant.
-- **Home Assistant (optional):** the gamepad wakes the TV and switches it to the right input, a button turns the TV off, and while it's off the gamepad only wakes it. Cinema mode dims the lights while a video plays.
+  - Home Assistant and Jellyfin.
+- **Recently added (optional):** the newest films and series on your Jellyfin server, above the apps.
+- **Home Assistant (optional):** the gamepad wakes the TV and switches it to the right input, a button turns the TV off, and while it's off the gamepad only wakes it. Your lights and scenes sit under the apps, to turn on and off and dim from the couch. Cinema mode dims the lights while a video plays.
 - **Per-app resolution:** for example, 4K for movies in Jellyfin and 1440p at 60 Hz everywhere else, switching by itself.
 - **Updates from the couch:** the launcher and the Flatpak apps, from Settings.
-- **Small touches:** the mouse pointer hides while you use the gamepad, and Restart and Shut down are in the footer, with Cancel as the default.
+- **Small touches:** the mouse pointer hides while you use the gamepad, and Restart and Shut down (top right, next to the clock) ask first, with Cancel as the default.
 
 The default configuration has VacuumTube (YouTube's TV interface), Jellyfin Desktop, Moonlight and Steam, all as Flatpaks.
 

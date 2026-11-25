@@ -5,6 +5,7 @@ The launcher can work with [Home Assistant](https://www.home-assistant.io/) to c
 - **Wake the TV with the gamepad.** Plug in a gamepad, turn one on, or press any button. If the TV is off, Home Assistant turns it on and switches it to the HTPC's input.
 - **Turn the TV off from the launcher.** A "Turn off TV" button in the middle of the footer.
 - **Ignore the gamepad while the TV is off.** The launcher and the gamepad shortcuts do nothing while the screen is dark. The first press only wakes the TV, so you never open an app you can't see.
+- **Lights on the home screen.** Lights, switches and scenes under the apps: turn them on and off, and dim them, with the gamepad.
 - **Cinema mode.** The launcher tells Home Assistant when an app opens or closes and when a video plays, pauses or stops, so an automation can dim the lights.
 
 All of this is optional. Without Home Assistant the launcher works exactly as before.
@@ -20,6 +21,7 @@ All of this is optional. Without Home Assistant the launcher works exactly as be
   - [2. The launcher's settings](#2-the-launchers-settings)
   - [3. Optional: ignore the gamepad while the TV is off](#3-optional-ignore-the-gamepad-while-the-tv-is-off)
   - [4. Optional: cinema mode](#4-optional-cinema-mode)
+  - [5. Optional: lights on the home screen](#5-optional-lights-on-the-home-screen)
 - [Using it](#using-it)
 - [Settings reference](#settings-reference)
 - [Events](#events)
@@ -74,7 +76,7 @@ The automation runs in `queued` mode, so the events of the "Turn off TV" press a
 
 ### 2. The launcher's settings
 
-On the HTPC, open Settings (the gear in the footer) → **Home Assistant**:
+On the HTPC, open Settings (the gear at the top right) → **Home Assistant**:
 
 1. **Address:** type Home Assistant's address, such as `http://192.168.0.22:8123`.
    - The on-screen keyboard gets an extra `: / _` row here.
@@ -114,6 +116,16 @@ App and media events go to a **second webhook**. A Home Assistant webhook only t
 
 The events, with what they carry, are listed under [Events](#events). Adapt the automation to anything else: a soundbar's sound mode, blinds, or pausing a robot vacuum.
 
+### 5. Optional: lights on the home screen
+
+With the address and the [access token](#3-optional-ignore-the-gamepad-while-the-tv-is-off), the launcher shows a **Home** row under the apps: go down from the apps to reach it. No automation is needed; the launcher calls Home Assistant's API directly.
+
+- **What shows:** every light, grouped by room (Home Assistant's areas), plus up to 6 scenes.
+- **Choose:** Settings → Home Assistant → **Lights on the home screen** lists every light and switch (also fans and input booleans). Tick the ones you want; they show in the order you ticked them. **All lights** goes back to the default. **Show under the apps** turns the row off.
+- **Use it:** Ⓐ turns a light or switch on or off, or runs a scene. Ⓨ on a dimmable light sets its brightness.
+
+The token needs no extra permission, but rooms come from a template call: a token of a non-admin user still works, without the room names.
+
 ## Using it
 
 **Wake the TV:**
@@ -144,6 +156,9 @@ The `home_assistant` entry of `apps.json`:
 | `token` | A long-lived access token, used to read the TV's state. | Access token (shows only whether it is set) |
 | `tv_entity` | The TV's entity, such as `media_player.living_room_tv`. | TV |
 | `tv_name` | The TV's name as shown in Settings. Filled in when you pick the TV. | TV |
+| `home_screen` | `false` hides the lights under the apps. Defaults to `true`. | Lights on the home screen → Show under the apps |
+| `devices` | The lights and switches under the apps, in order (entity ids). Without it, every light, by room. | Lights on the home screen |
+| `scenes` | The scenes or scripts above them (entity ids). Without it, the first 6 scenes. | (apps.json only) |
 
 At the top level of `apps.json`, `tv_off_button` (`true`/`false`, default `false`) shows or hides the "Turn off TV" button. In Settings it's **"Turn off TV" button**.
 

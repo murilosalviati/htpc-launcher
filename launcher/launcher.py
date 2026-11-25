@@ -7,10 +7,12 @@ A full-screen home screen driven by a gamepad (or a keyboard):
   * in the middle, one tile per app in apps.json; if the app is already
     running, its tile brings the existing window back (resumes it) instead
     of starting a second copy;
-  * top bar: the weather on the left (if a location is set), the clock in the
-    middle, gamepad and network status on the right;
-  * in the footer, on the right: settings, restart and shut down (the last
-    two ask for confirmation). Settings (see settings.py) has the apps
+  * above the apps, what was added to Jellyfin lately; below them (scrolled
+    into view by going down), lights and switches from Home Assistant
+    (see home.py);
+  * top bar: the weather on the left (if a location is set); on the right
+    gamepad and network status, the clock, and settings, restart and shut
+    down (the last two ask for confirmation). Settings (see settings.py) has the apps
     (edit mode, see editor.py), the background, the weather location, the
     temperature unit and the language.
 
@@ -67,6 +69,7 @@ from htpc.backends.base import STICK_DEAD_ZONE, pick_mode  # noqa: E402
 from htpc.i18n import Translator  # noqa: E402
 from background import in_background  # noqa: E402
 from editor import EditorMixin  # noqa: E402
+from home import HOUSE_EVERY, DeviceTile, HomeMixin  # noqa: E402
 from settings import SettingsMixin  # noqa: E402
 
 CSS = HERE / "launcher.css"
@@ -89,6 +92,7 @@ EDGE = {
     "status_text": 20, "hint": 17, "footer_label": 17,  # pt
     "weather_icon": 72, "status_icon": 42, "footer_icon": 28,  # px
     "footer_height": 56, "footer_pad_x": 24, "footer_gap": 18,  # px
+    "top_button": 60,                             # px, the round buttons at the top right
     "pad_top": 44, "pad_side": 72, "pad_bottom": 40,  # px, around the screen
 }
 EDGE_MIN_SCALE, EDGE_MAX_SCALE = 0.6, 3.0
@@ -342,8 +346,9 @@ class AddTile(Gtk.Button):
 # ---------------------------------------------------------------------------
 # The launcher window
 
-class Launcher(EditorMixin, SettingsMixin):
+class Launcher(HomeMixin, EditorMixin, SettingsMixin):
     gicon = staticmethod(gicon)  # the editor turns backend icons into GTK icons with it
+    svg_icon = staticmethod(svg_icon)
 
     def __init__(self, gtk_app):
         self.gtk_app = gtk_app
@@ -402,6 +407,7 @@ class Launcher(EditorMixin, SettingsMixin):
         self.win.add_controller(keys)
 
         self.win.connect("notify::is-active", self._active_changed)
+        self.win.connect("notify::focus-widget", self._focus_moved)
 
         self.navigator = Navigator(backend.gamepads(), self.win.is_active, self.move, self.press,
                                    self.back, self.other_button, blocked=home_assistant.input_blocked)
@@ -418,8 +424,11 @@ class Launcher(EditorMixin, SettingsMixin):
         GLib.timeout_add_seconds(1, lambda: self.opening and self._check_opening() or True)
         GLib.timeout_add_seconds(3, self._every_3s)
         GLib.timeout_add(500, self._check_screen_size)
+        GLib.timeout_add_seconds(HOUSE_EVERY, self._home_tick)
         self.refresh_top_bar()
         self.update_weather()
+        self.update_recent(force=True)
+        self.update_house()
 
         self.win.set_cursor(Gdk.Cursor.new_from_name("none", None))
         self.win.fullscreen()
@@ -431,15 +440,18 @@ class Launcher(EditorMixin, SettingsMixin):
         """(Re)build everything on screen in the current language. Called again
         when the language changes; the timers keep working on the new widgets."""
         self.footer_images = []
+        recent, house = getattr(self, "recent_items", []), getattr(self, "house_data", None)
         root = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         root.add_css_class("root")
         root.append(self._top_bar())
-        self.grid = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=44,
-                            halign=Gtk.Align.CENTER, valign=Gtk.Align.CENTER, vexpand=True)
-        root.append(self.grid)
+        root.append(self._home_body())
         root.append(self._footer())
         self.overlay.set_child(root)
         self.build_grid()
+        if recent:
+            self._show_recent(recent)
+        if house:
+            self._show_house(house)
 
     # --- sizes that follow the screen -----------------------------------------------
 
@@ -469,6 +481,7 @@ class Launcher(EditorMixin, SettingsMixin):
             button.footer-button {{ min-height: {e['footer_height']:.0f}px;
                                     padding: 4px {e['footer_pad_x']:.0f}px; }}
             .footer {{ border-spacing: {e['footer_gap']:.0f}px; }}
+            button.top-button {{ min-width: {e['top_button']:.0f}px; min-height: {e['top_button']:.0f}px; }}
         """
         if hasattr(self.edge_provider, "load_from_string"):  # GTK 4.12+
             self.edge_provider.load_from_string(css)
@@ -505,8 +518,10 @@ class Launcher(EditorMixin, SettingsMixin):
 
     @property
     def rows(self):
-        footer = [self.btn_tv] if self.btn_tv.get_visible() else []
-        return self.tile_rows + [footer + [self.btn_settings, self.btn_restart, self.btn_power]]
+        """Top to bottom: settings / restart / shut down, recently added, the apps,
+        the house, and "Turn off TV" when it is shown."""
+        footer = [[self.btn_tv]] if self.btn_tv.get_visible() else []
+        return ([self.top_buttons, self.recent_row] + self.tile_rows + self.house_rows + footer)
 
     def apply_theme(self, theme_id):
         """Switch the background color right away (does not save it)."""
@@ -627,20 +642,34 @@ class Launcher(EditorMixin, SettingsMixin):
         net.append(self.net_text)
         net.append(self.net_icon)
 
+        # Right: status, the clock, then settings / restart / shut down.
+        clock.set_valign(Gtk.Align.CENTER)
+        self.time_label.set_xalign(1)
+        self.date_label.set_xalign(1)
+        self.btn_settings = self._top_button("settings.svg", self.t("settings"), self.settings_button)
+        self.btn_restart = self._top_button("restart.svg", self.t("restart"), lambda: self.confirm_power("restart"))
+        self.btn_power = self._top_button("power.svg", self.t("power_off"), lambda: self.confirm_power("power_off"))
+        self.top_buttons = [self.btn_settings, self.btn_restart, self.btn_power]
+        buttons = Gtk.Box(spacing=12, valign=Gtk.Align.CENTER)
+        buttons.add_css_class("top-buttons")
+        for b in self.top_buttons:
+            buttons.append(b)
+        net.set_valign(Gtk.Align.CENTER)
+        right = Gtk.Box(spacing=32, valign=Gtk.Align.START)
+        right.append(net)
+        right.append(clock)
+        right.append(buttons)
+
         bar.set_start_widget(self.weather_box)
-        bar.set_center_widget(clock)
-        bar.set_end_widget(net)
+        bar.set_end_widget(right)
         return bar
 
     # --- footer ----------------------------------------------------------------
 
     def _footer(self):
-        """Hints on the left, "Turn off TV" in the middle (when Home Assistant is
-        set up), settings / restart / shut down on the right."""
+        """Hints on the left, "Turn off TV" in the middle (when Home Assistant is set up)."""
         bar = Gtk.CenterBox()
         bar.add_css_class("footer-bar")
-        buttons = Gtk.Box(spacing=14, valign=Gtk.Align.CENTER)
-        buttons.add_css_class("footer")
 
         self.hint = Gtk.Label(label=self.hint_text(), xalign=0, valign=Gtk.Align.CENTER)
         self.hint.add_css_class("hint")
@@ -650,16 +679,17 @@ class Launcher(EditorMixin, SettingsMixin):
         self.btn_tv.set_valign(Gtk.Align.CENTER)
         self.btn_tv.set_visible(self.tv_button_enabled())
         bar.set_center_widget(self.btn_tv)
-
-        self.btn_settings = self._footer_button("settings.svg", self.t("settings"), self.settings_button)
-        self.btn_restart = self._footer_button("restart.svg", self.t("restart"),
-                                               lambda: self.confirm_power("restart"))
-        self.btn_power = self._footer_button("power.svg", self.t("power_off"),
-                                             lambda: self.confirm_power("power_off"))
-        for b in (self.btn_settings, self.btn_restart, self.btn_power):
-            buttons.append(b)
-        bar.set_end_widget(buttons)
         return bar
+
+    def _top_button(self, icon, text, action):
+        """A round icon button for the top right. Its label is only shown when it
+        says something the icon can't (the gear reads "Done" in edit mode)."""
+        b = self._footer_button(icon, text, action)
+        b.remove_css_class("footer-button")
+        b.add_css_class("top-button")
+        b.label.set_visible(False)
+        b.update_property([Gtk.AccessibleProperty.LABEL], [text])
+        return b
 
     def turn_tv_off(self):
         """Asks Home Assistant to turn the TV off (the "tv_off" webhook event).
@@ -825,6 +855,7 @@ class Launcher(EditorMixin, SettingsMixin):
             self.restore_display()
             self._update_gamepads()
             self._update_network()
+            self._home_tick()
 
     def _every_3s(self):
         if self.win.is_active() and not self.overlays:
@@ -1060,6 +1091,10 @@ class Launcher(EditorMixin, SettingsMixin):
         hook = {"x": "delete", "y": "space"}[name]
         if self.overlays and self.overlays[-1].get(hook):
             self.overlays[-1][hook]()
+        elif not self.overlays and name == "y":
+            focused = self.win.get_focus()
+            if isinstance(focused, DeviceTile) and focused.device.get("dimmable") and focused.device["available"]:
+                self.open_brightness(focused)
 
     def _on_key(self, _ctl, keyval, _code, _mods):
         top = self.overlays[-1] if self.overlays else {}
