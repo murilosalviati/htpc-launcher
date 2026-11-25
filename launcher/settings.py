@@ -262,7 +262,10 @@ class SettingsMixin:
         threading.Thread(target=work, daemon=True).start()
 
     def open_pairing(self):
+        done_busy = self._busy(self.t("pairing_checking"))
+
         def started(result):
+            done_busy()
             if result is False:
                 self._message(self.t("pairing_no_adapter"), self.t("pairing_no_adapter_text"))
             elif isinstance(result, Exception):

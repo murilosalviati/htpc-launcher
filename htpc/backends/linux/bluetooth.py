@@ -9,6 +9,7 @@ with the NoInputNoOutput capability, which is what they expect.
 """
 
 import logging
+import os
 import threading
 
 from ..base import BluetoothDevice, Bluetooth
@@ -44,8 +45,11 @@ def _plain(props):
 
 
 class BluezBluetooth(Bluetooth):
-    def __init__(self, bus="SYSTEM"):
+    def __init__(self, bus="SYSTEM", sysfs="/sys/class/bluetooth"):
         self.bus = bus
+        # Adapters the kernel knows about. Checked first: without one, BlueZ is not
+        # running and asking it over D-Bus waits for it to start (and time out).
+        self.sysfs = sysfs
         self._conn = None
         self._lock = threading.RLock()
 
@@ -96,6 +100,12 @@ class BluezBluetooth(Bluetooth):
         return None, None
 
     def available(self):
+        if self.sysfs is not None:
+            try:
+                if not any(name.startswith("hci") for name in os.listdir(self.sysfs)):
+                    return False
+            except OSError:
+                return False
         try:
             return self._adapter()[0] is not None
         except Exception as e:  # noqa: BLE001 - no BlueZ, no system bus

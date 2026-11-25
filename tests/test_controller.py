@@ -433,8 +433,14 @@ check("the volume level shows on GNOME's indicator, with the right icon",
 
 # 9a1c. Bluetooth pairing through BlueZ (a fake org.bluez on the session bus)
 from htpc.backends.linux import bluetooth as lbt  # noqa: E402
-bt = lbt.BluezBluetooth(bus="SESSION")
+bt = lbt.BluezBluetooth(bus="SESSION", sysfs=None)
 check("bluetooth: the adapter is found", bt.available())
+_nohci = pathlib.Path(tempfile.mkdtemp())
+check("bluetooth: no adapter in the kernel: not available at once, without asking BlueZ",
+      not lbt.BluezBluetooth(bus="SESSION", sysfs=str(_nohci)).available()
+      and not lbt.BluezBluetooth(bus="SESSION", sysfs="/nonexistent").available())
+(_nohci / "hci0").mkdir()
+check("bluetooth: an adapter in the kernel: BlueZ is asked", lbt.BluezBluetooth(bus="SESSION", sysfs=str(_nohci)).available())
 bt.start_search()
 check("bluetooth: searching powers the adapter on and starts discovery",
       fakes.bluez["adapter"] == {"Powered": True, "Discovering": True})

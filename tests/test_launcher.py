@@ -1114,7 +1114,7 @@ def bt2():
     fakes.bluez["devices"].clear()
     fakes.bluez["fail_pair"].clear()
     fakes.bluez["adapter"].update(Powered=False, Discovering=False)
-    l.bluetooth = BluezBluetooth(bus="SESSION")
+    l.bluetooth = BluezBluetooth(bus="SESSION", sysfs=None)
     l.PAIRING_REFRESH_MS = 200
     l.shortcut_fields["pairing"].grab_focus()
     l.press()
