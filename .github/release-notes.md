@@ -5,25 +5,18 @@ HTPC Launcher: a gamepad-driven TV home screen for Ubuntu with GNOME on Wayland.
 
 ![Launcher home screen](https://raw.githubusercontent.com/murilosalviati/htpc-launcher/main/docs/preview.png)
 
-## What's new in 0.1.0-beta.8
+## What's new in 0.1.0-beta.9
 
-**A new home screen.** Without Jellyfin, Steam and Home Assistant set up, it looks as before: the apps alone in the middle.
+### Bluetooth Xbox controllers work
+- **Pairing** no longer fails with "Authentication Failed": the launcher answers the controller's pairing request itself, and tries once more if the first attempt is refused.
+- **Once paired**, newer Xbox controllers (Bluetooth LE) were ignored, taken for Steam Input's virtual gamepads. They control the launcher and the shortcuts now.
+- A refused pairing says what to do, and long messages no longer run off the screen.
 
-### A row that follows the app in focus
-- **Jellyfin:** tabs **Explore**, **Series** and **Films**. Explore shows what's new and popular on [TMDB](https://www.themoviedb.org/) **and is in your library**, matched by the TMDB id Jellyfin keeps. Old favourites that trend without anything new are left out.
-- **Steam:** **Games**, last played first, including games streamed from another computer with Remote Play. An installed game starts right away; a streamed one opens its Steam page, where Stream is.
-- **RB / LB** turn the page, five cards at a time.
-- Set up in **Settings → Jellyfin**: address, API key, user, and a free TMDB key.
+### Home screen
+- **Explore** leaves out shows that never stop (SNL, SpongeBob...): only series that premiered in the last 8 years count as new, and kids', news, soap and talk shows don't.
+- **Lights by room** follow the order you chose, and lights can have **names of your own** (`names` in `apps.json`), such as a dashboard's short names.
 
-### Your lights below the apps (Home Assistant)
-- Go down from the apps: lights, switches and scenes. **Ⓐ** turns one on or off.
-- **Hold Ⓐ** on a light for brightness, white temperature and colour.
-- **Separate by room**, and choose which lights show, in Settings → Home Assistant.
-
-### The rest of the screen
-- The clock at the top left, with the date and the weather on one line.
-- **One power button:** Turn off the TV, Restart, Shut down. Turning off the TV puts the launcher back on its start for next time.
-- No more button reminders at the bottom.
+The new home screen arrived in [0.1.0-beta.8](https://github.com/murilosalviati/htpc-launcher/releases/tag/v0.1.0-beta.8): films and series from Jellyfin, Steam games, your lights, the power menu.
 
 This product uses the TMDB API but is not endorsed or certified by TMDB.
 
@@ -31,7 +24,7 @@ The full list is in [CHANGELOG.md](https://github.com/murilosalviati/htpc-launch
 
 ## Install or update
 
-1. Download **htpc-launcher-0.1.0-beta.8.tar.gz** below and extract it: `tar xzf htpc-launcher-*.tar.gz`. `SHA256SUMS` lets you check it: `sha256sum -c SHA256SUMS`.
+1. Download **htpc-launcher-0.1.0-beta.9.tar.gz** below and extract it: `tar xzf htpc-launcher-*.tar.gz`. `SHA256SUMS` lets you check it: `sha256sum -c SHA256SUMS`.
 2. Run `./install.sh` inside the extracted folder. An existing `apps.json` is kept.
 3. **Log out and back in** if you are coming from beta.5 or older: GNOME only loads the extension's version 7 at login. On a first install, then run `gnome-extensions enable htpc-launcher@htpc`. The launcher starts by itself at login.
 

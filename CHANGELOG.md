@@ -2,14 +2,16 @@
 
 The project is in beta: every `0.x` version is a pre-release, and the configuration format or install steps may still change.
 
-## Unreleased
+## 0.1.0-beta.9
 
-- **Fixed: a Bluetooth LE gamepad (newer Xbox controllers) connected but did nothing.** The kernel handles them through uhid, under /devices/virtual, and the launcher took them for Steam Input's virtual pads and left them alone. Only uinput devices count as virtual now.
+Update by running `./install.sh` again, or from Settings → Updates. Your `apps.json` is kept.
 
-- **Fixed: an Xbox controller refused to pair over Bluetooth** (AuthenticationFailed). In a GNOME session GNOME's own agent answers the pairing, in a window the launcher hides. While pairing, the launcher now registers its own agent (no screen, no keys: it accepts), and tries once more if the first attempt is refused. A refusal now says what to do instead of showing BlueZ's error, and long messages wrap instead of running off the screen.
-
-- **Lights by room follow your order:** the rooms come in the order of your choice, not alphabetically.
+- **Bluetooth Xbox controllers work.**
+  - **Pairing:** it failed with "Authentication Failed". The controller asks for a confirmation, and nothing on the system answered it (BlueZ: "No agent available"). While pairing, the launcher now answers it itself, as a device without a screen or keys would, and tries once more if the first attempt is refused. Searching also makes the adapter pairable when it wasn't.
+  - **Using it:** once paired, a Bluetooth LE controller (newer Xbox) was taken for one of Steam Input's virtual gamepads and ignored, by the launcher and by the shortcuts. Only gamepads made by software count as virtual now.
+  - A refused pairing now says what to do instead of showing BlueZ's error, and long messages wrap instead of running off the screen.
 - **Explore leaves out shows that never stop:** a series counts as new for a new episode only if it premiered in the last 8 years (`series_max_years` in `tmdb`), and kids', news, soap and talk shows don't count (no more SNL or SpongeBob).
+- **Lights by room follow your order:** the rooms come in the order of your choice, not alphabetically.
 - **Names of your own** for lights and switches (`"names"` in the `home_assistant` entry), for example the short names of a Home Assistant dashboard.
 
 ## 0.1.0-beta.8
