@@ -38,6 +38,9 @@ jobs:
           if [ "$VERSION" != "$(tr -d '[:space:]' < VERSION)" ]; then
             echo "The VERSION file says $(cat VERSION), not $VERSION" >&2; exit 1
           fi
+          if ! grep -Fxq "__version__ = \"$VERSION\"" htpc/__init__.py; then
+            echo "htpc/__init__.py's __version__ is not $VERSION" >&2; exit 1
+          fi
 
       - name: Build the package and its checksum
         run: |
