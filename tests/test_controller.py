@@ -398,6 +398,38 @@ pa.set_output("bluez_output.AA_BB.1")
 check("audio: choosing one makes it the default and moves what is playing",
       pa_state["default"] == "bluez_output.AA_BB.1" and pa_state["moved"] == [("12", "bluez_output.AA_BB.1")]
       and pa.outputs()[0].name == "JBL Flip 5")
+from htpc.backends.linux.audio import PipeWireAudio  # noqa: E402
+pw_state = {"default": "alsa_output.hdmi", "set": []}
+
+
+def fake_pw(cmd):
+    if cmd == ["pw-dump"]:
+        return json.dumps([
+            {"id": 30, "type": "PipeWire:Interface:Metadata", "props": {"metadata.name": "default"},
+             "metadata": [{"subject": 0, "key": "default.audio.sink", "type": "Spa:String:JSON",
+                           "value": {"name": pw_state["default"]}}]},
+            {"id": 56, "type": "PipeWire:Interface:Node",
+             "info": {"props": {"media.class": "Audio/Sink", "node.name": "alsa_output.hdmi",
+                                "node.description": "TV (HDMI)", "device.api": "alsa"}}},
+            {"id": 77, "type": "PipeWire:Interface:Node",
+             "info": {"props": {"media.class": "Audio/Sink", "node.name": "bluez_output.X.1",
+                                "node.description": "JBL Flip 5", "device.api": "bluez5"}}},
+            {"id": 80, "type": "PipeWire:Interface:Node",
+             "info": {"props": {"media.class": "Audio/Source", "node.name": "mic"}}},
+        ])
+    if cmd[:2] == ["wpctl", "set-default"]:
+        pw_state["set"].append(cmd[2])
+        pw_state["default"] = {"56": "alsa_output.hdmi", "77": "bluez_output.X.1"}[cmd[2]]
+        return ""
+    raise AssertionError(cmd)
+
+
+pw = PipeWireAudio(run=fake_pw)
+check("audio without pactl: pw-dump lists the sinks (not the microphones), the default marked",
+      [(o.id, o.name, o.current, o.bluetooth) for o in pw.outputs()]
+      == [("56", "TV (HDMI)", True, False), ("77", "JBL Flip 5", False, True)])
+pw.set_output("77")
+check("audio without pactl: wpctl set-default chooses it", pw_state["set"] == ["77"] and pw.outputs()[0].name == "JBL Flip 5")
 check("bluetooth: keyboards and mice by icon, device class or name",
       lbt.device_kind({"Icon": "input-keyboard"}) == "keyboard" and lbt.device_kind({"Class": 0x002540}) == "keyboard"
       and lbt.device_kind({"Class": 0x002580}) == "mouse" and lbt.device_kind({"Name": "MX Mouse"}) == "mouse"

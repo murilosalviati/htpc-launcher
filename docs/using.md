@@ -93,7 +93,7 @@ Settings → **Audio** lists the sound outputs, with the one **In use** marked. 
 2. Pick it from the list.
 3. Once it is connected, it shows up as an output. Select it to send the sound there.
 
-It uses `pactl`, which works with PipeWire (Ubuntu's default) and PulseAudio.
+It uses PipeWire's own tools (`pw-dump` and `wpctl`, part of Ubuntu), or `pactl` when it is installed.
 
 ### Per-app resolution
 

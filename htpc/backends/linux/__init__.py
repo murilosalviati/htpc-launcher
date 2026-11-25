@@ -9,7 +9,7 @@
   system    systemd for restart/shut down, Flatpak and signals to force-close
   bluetooth BlueZ over the system D-Bus, to pair gamepads
   display   Mutter's DisplayConfig over D-Bus, for per-app resolutions
-  audio     pactl (PipeWire's PulseAudio side, or PulseAudio), for the output device
+  audio     pactl, or PipeWire's pw-dump and wpctl, for the output device
 
 Needs python3-jeepney and python3-evdev; the app catalog also needs python3-gi.
 """
@@ -53,5 +53,5 @@ class LinuxBackend(Backend):
         return MutterDisplay()
 
     def audio(self):
-        from .audio import PulseAudio
-        return PulseAudio()
+        from .audio import best_audio
+        return best_audio()

@@ -98,7 +98,7 @@ The Linux backend uses:
 - **jeepney** for D-Bus: the extension, MPRIS, NetworkManager and BlueZ;
 - **Gio** for `.desktop` files;
 - **systemd** for restart and shut down;
-- **wpctl or pactl** for the volume, and **pactl** for the output device;
+- **wpctl or pactl** for the volume, and **pactl** or PipeWire's **pw-dump + wpctl** for the output device;
 - **Mutter's DisplayConfig** (D-Bus) for resolutions. Modes are applied "temporary", so there's no confirmation prompt and nothing is saved;
 - **sysfs** for batteries.
 
