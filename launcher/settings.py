@@ -12,6 +12,8 @@
   * On-screen notices: turns the gamepad, battery and internet notices on or off;
   * Updates (a button at the bottom): the launcher, from GitHub releases, and
     the Flatpak apps;
+  * Audio: picks the output (TV, headphones, a Bluetooth speaker...) and pairs
+    Bluetooth headphones and speakers;
   * Gamepads: pairing over Bluetooth (or what to do without an adapter;
     paired gamepads can be forgotten from the same list) and the combos that bring the launcher back and close the
     app, recorded by holding the buttons (read by the controller service from
@@ -58,7 +60,8 @@ class SettingsMixin:
         box = self.dialog_box(self.t("settings"))
         box.add_css_class("editor")
         box.add_css_class("settings")
-        box.set_spacing(16)  # seven rows plus the buttons have to fit on a 1080p screen
+        box.set_spacing(10)  # nine rows plus the buttons fit a 1080p screen
+        box.add_css_class("settings-main")
         f = self.settings_fields = {
             "apps": self._field(self.t("settings_apps"), self._settings_apps, title_width=300),
             "background": self._field(self.t("background"), self.choose_background, title_width=300),
@@ -67,6 +70,7 @@ class SettingsMixin:
             "language": self._field(self.t("settings_language"), self._choose_language, title_width=300),
             "notifications": self._field(self.t("settings_notifications"), self._toggle_notifications,
                                          title_width=300),
+            "audio": self._field(self.t("settings_audio"), self.open_audio, title_width=300),
             "shortcuts": self._field(self.t("settings_shortcuts"), self.open_shortcuts, title_width=300),
             "home_assistant": self._field(self.t("settings_ha"), self.open_home_assistant, title_width=300),
         }
@@ -85,6 +89,13 @@ class SettingsMixin:
         self.refresh_settings()
         self.push_overlay(box, [[w] for w in f.values()] + [[close, updates_, quit_]], focus=f.get(focus))
 
+        def current_output(result):
+            if not isinstance(result, Exception):
+                self.audio_current = next((o.name for o in result if o.current), None)
+                self.refresh_settings()
+
+        self._bt(self.audio.outputs, current_output)
+
     def refresh_settings(self):
         f = getattr(self, "settings_fields", None)
         if not f:
@@ -97,6 +108,7 @@ class SettingsMixin:
         f["language"].value.set_label(self.t("language_name"))
         f["notifications"].value.set_label(self.t("on" if self.cfg.get("notifications", True) else "off"))
         f["home_assistant"].value.set_label(self._ha_summary())
+        f["audio"].value.set_label(getattr(self, "audio_current", None) or self.t("audio_value"))
         f["shortcuts"].value.set_label(shortcuts.combo_label(shortcuts.combos(self.cfg)["home"]))
 
     def _unit(self):
@@ -128,6 +140,79 @@ class SettingsMixin:
         self.cfg["notifications"] = not self.cfg.get("notifications", True)
         self.save_config()
         self.refresh_settings()
+
+    # --- audio output -----------------------------------------------------------------
+
+    AUDIO_ROWS = 5
+
+    def open_audio(self):
+        box = self.dialog_box(self.t("settings_audio"), self.t("audio_text"))
+        box.add_css_class("editor")
+        box.add_css_class("settings")
+        box.set_spacing(16)
+        listing = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=16)
+        waiting = Gtk.Label(label=self.t("updates_checking"))
+        waiting.add_css_class("dialog-text")
+        listing.append(waiting)
+        box.append(listing)
+        pair = self._field(self.t("audio_pair"), lambda: self.open_pairing("audio"), title_width=420)
+        box.append(pair)
+        close = self.dialog_button(self.t("close"), self.pop_overlay)
+        close_box = Gtk.Box(spacing=20, halign=Gtk.Align.CENTER)
+        close_box.add_css_class("editor-buttons")
+        close_box.append(close)
+        box.append(close_box)
+        rows = [[pair], [close]]
+        self.audio_menu = a = {"listing": listing, "rows": rows, "pair": pair, "close": close}
+        self.push_overlay(box, rows, focus=pair)
+        a["overlay"] = self.overlays[-1]
+        self.refresh_audio()
+
+    def refresh_audio(self):
+        a = getattr(self, "audio_menu", None)
+        if a is None:
+            return
+        self._bt(self.audio.outputs, lambda result: self._audio_listed(a, result))
+
+    def _audio_listed(self, a, result):
+        if self.audio_menu is not a:
+            return
+        listing = a["listing"]
+        child = listing.get_first_child()
+        while child is not None:
+            listing.remove(child)
+            child = listing.get_first_child()
+        if isinstance(result, Exception) or not result:
+            text = self.t("audio_none") if not isinstance(result, Exception) else \
+                self.t("audio_error", error=self._reason(result))
+            label = Gtk.Label(label=text)
+            label.add_css_class("dialog-text")
+            listing.append(label)
+            a["rows"][:] = [[a["pair"]], [a["close"]]]
+            return
+        rows, focus = [], None
+        for out in result[:self.AUDIO_ROWS]:
+            title = out.name + ("  ·  Bluetooth" if out.bluetooth else "")
+            b = self._field(title, lambda o=out: self._audio_chosen(o), title_width=520)
+            b.value.set_label(self.t("audio_current") if out.current else "")
+            b.audio_id = out.id
+            listing.append(b)
+            rows.append([b])
+            if out.current:
+                focus = b
+                self.audio_current = out.name
+        a["rows"][:] = rows + [[a["pair"]], [a["close"]]]
+        if self.overlays and self.overlays[-1] is a.get("overlay") and focus is not None:
+            focus.grab_focus()
+        self.refresh_settings()
+
+    def _audio_chosen(self, output):
+        def done(result):
+            if isinstance(result, Exception):
+                self._message(self.t("audio_error", error=self._reason(result)))
+            self.refresh_audio()
+
+        self._bt(lambda: self.audio.set_output(output.id), done)
 
     # --- updates -------------------------------------------------------------------------
 
@@ -248,7 +333,7 @@ class SettingsMixin:
     # --- pairing gamepads over Bluetooth -------------------------------------------------
 
     PAIRING_REFRESH_MS = 2000
-    PAIRING_ROWS = 6
+    PAIRING_ROWS = 5
 
     def _bt(self, job, done):
         """Run a Bluetooth call off the UI thread; done(result or exception) on the main loop."""
@@ -261,7 +346,8 @@ class SettingsMixin:
 
         threading.Thread(target=work, daemon=True).start()
 
-    def open_pairing(self):
+    def open_pairing(self, kind="gamepad"):
+        """kind: "gamepad" or "audio" (headphones, speakers): what the list shows."""
         done_busy = self._busy(self.t("pairing_checking"))
 
         def started(result):
@@ -271,7 +357,7 @@ class SettingsMixin:
             elif isinstance(result, Exception):
                 self._message(self.t("pairing_error", error=self._reason(result)))
             else:
-                self._show_pairing()
+                self._show_pairing(kind)
 
         def start():
             if not self.bluetooth.available():
@@ -281,8 +367,11 @@ class SettingsMixin:
 
         self._bt(start, started)
 
-    def _show_pairing(self):
-        box = self.dialog_box(self.t("pairing_title"), self.t("pairing_how"))
+    def _show_pairing(self, kind="gamepad"):
+        if kind == "audio":
+            box = self.dialog_box(self.t("pairing_audio_title"), self.t("pairing_audio_how"))
+        else:
+            box = self.dialog_box(self.t("pairing_title"), self.t("pairing_how"))
         box.add_css_class("editor")
         box.add_css_class("settings")
         box.set_spacing(16)
@@ -297,7 +386,7 @@ class SettingsMixin:
         close_box.append(close)
         box.append(close_box)
         rows = [[close]]
-        p = self.pairing = {"listing": listing, "rows": rows, "close": close, "shown": None,
+        p = self.pairing = {"kind": kind, "listing": listing, "rows": rows, "close": close, "shown": None,
                             "timer": 0, "busy": False, "box": box}
 
         def stop():
@@ -325,8 +414,12 @@ class SettingsMixin:
     def _pairing_list(self, p, result):
         if self.pairing is not p or isinstance(result, Exception):
             return
-        pads = [d for d in result if d.gamepad and (d.paired or d.has_name)][:self.PAIRING_ROWS]
-        shown = [(d.address, d.name, d.paired, d.connected) for d in pads]
+        if p.get("kind") == "audio":
+            wanted = (lambda d: d.audio)
+        else:   # gamepads, keyboards and mice
+            wanted = (lambda d: d.kind in ("gamepad", "keyboard", "mouse"))
+        pads = [d for d in result if wanted(d) and (d.paired or d.has_name)][:self.PAIRING_ROWS]
+        shown = [(d.address, d.name, d.paired, d.connected, d.kind) for d in pads]
         if shown == p["shown"]:
             return
         p["shown"] = shown
@@ -345,7 +438,8 @@ class SettingsMixin:
             else:
                 state = self.t("pairing_found")
                 action = (lambda d=d: self._pairing_pair(d))
-            b = self._field(d.name, action, title_width=380)
+            kind_label = self.t("bt_kind_" + d.kind) if d.kind in ("keyboard", "mouse") else ""
+            b = self._field(d.name + (f"  ·  {kind_label}" if kind_label else ""), action, title_width=380)
             b.value.set_label(state)
             b.bt_address = d.address
             listing.append(b)
@@ -379,6 +473,8 @@ class SettingsMixin:
                 self._message(self.t("pairing_failed", name=device.name, error=self._reason(result)))
             else:
                 self._message(self.t("pairing_done", name=device.name))
+                if getattr(self, "audio_menu", None) is not None:
+                    GLib.timeout_add(2500, lambda: (self.refresh_audio(), False)[1])
 
         self._bt(lambda: self.bluetooth.pair(device.address), done)
 

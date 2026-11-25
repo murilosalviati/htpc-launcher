@@ -63,7 +63,8 @@ Select **Settings** (the gear) in the footer.
 | **Unit** | °C or °F. |
 | **Language** | English or Brazilian Portuguese. It switches right away. |
 | **On-screen notices** | Turns the notices on or off. |
-| **Gamepads** | Pair a gamepad over Bluetooth, change the shortcuts, and see the volume shortcut. See [Gamepads](gamepads.md). |
+| **Audio** | Where the sound goes: the TV, a soundbar, Bluetooth headphones or a speaker. Also pairs Bluetooth headphones and speakers. See [Audio](#audio). |
+| **Gamepads** | Pair a gamepad, keyboard or mouse over Bluetooth, change the shortcuts, and see the volume shortcut. See [Gamepads](gamepads.md). |
 | **Home Assistant** | The address, the webhook, the TV, the "Turn off TV" button and a connection test. See the [Home Assistant guide](home-assistant.md). |
 
 At the bottom:
@@ -81,6 +82,18 @@ At the bottom:
 - **Remove an app:** the grid reflows.
 
 For the fields that aren't in edit mode, such as pause on Home, close commands and preferred windows, see [Configuration](configuration.md).
+
+### Audio
+
+Settings → **Audio** lists the sound outputs, with the one **In use** marked. Select another and all sound goes there, including whatever is already playing.
+
+**Pair Bluetooth headphones or a speaker:**
+
+1. Put the device in pairing mode, usually by holding its power or Bluetooth button until the light blinks.
+2. Pick it from the list.
+3. Once it is connected, it shows up as an output. Select it to send the sound there.
+
+It uses `pactl`, which works with PipeWire (Ubuntu's default) and PulseAudio.
 
 ### Per-app resolution
 

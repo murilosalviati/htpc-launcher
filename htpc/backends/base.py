@@ -215,6 +215,26 @@ class System(ABC):
 
 
 @dataclass
+class AudioOutput:
+    id: str                     # OS-specific
+    name: str                   # as shown to people ("TV (HDMI)", "JBL Flip 5")
+    current: bool = False       # where the sound goes now
+    bluetooth: bool = False
+
+
+class Audio:
+    """Where the sound goes. The default: can't tell or change it."""
+
+    def outputs(self):
+        """[AudioOutput], the current one marked."""
+        return []
+
+    def set_output(self, output_id):
+        """Send all sound to this output from now on (playing streams included)."""
+        raise RuntimeError("can't change the audio output here")
+
+
+@dataclass
 class DisplayMode:
     id: str                     # OS-specific
     width: int
@@ -274,6 +294,8 @@ class BluetoothDevice:
     paired: bool = False
     connected: bool = False
     gamepad: bool = False       # looks like a gamepad (icon, device class or name)
+    audio: bool = False         # headphones, a speaker, a soundbar...
+    kind: str = ""              # "gamepad", "keyboard", "mouse", "audio" or "" (anything else)
     path: str = ""              # OS-specific handle
     has_name: bool = True       # False while only the address is known
 
@@ -337,3 +359,7 @@ class Backend(ABC):
     def display(self):
         """A Display (by default: fixed)."""
         return Display()
+
+    def audio(self):
+        """An Audio (by default: fixed)."""
+        return Audio()

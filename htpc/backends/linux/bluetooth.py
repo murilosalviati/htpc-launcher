@@ -39,6 +39,42 @@ def is_gamepad(props):
     return any(w in name for w in GAMEPAD_WORDS)
 
 
+AUDIO_WORDS = ("headphone", "headset", "earbud", "buds", "speaker", "soundbar", "sound bar", "jbl",
+               "airpods", "bose", "sony wh", "sony wf", "boombox", "flip", "charge")
+
+
+def is_audio(props):
+    """From a Device1's properties: headphones, a speaker...?"""
+    if str(props.get("Icon") or "").startswith("audio-"):
+        return True
+    cls = props.get("Class") or 0
+    if (cls & 0x1F00) == 0x0400:      # major class: audio/video
+        return True
+    name = (props.get("Name") or props.get("Alias") or "").lower()
+    return any(w in name for w in AUDIO_WORDS)
+
+
+def device_kind(props):
+    """"gamepad", "keyboard", "mouse", "audio", or "" for anything else."""
+    if is_gamepad(props):
+        return "gamepad"
+    icon = str(props.get("Icon") or "")
+    cls = props.get("Class") or 0
+    peripheral = (cls & 0x1F00) == 0x0500
+    if icon == "input-keyboard" or (peripheral and cls & 0x40):
+        return "keyboard"
+    if icon in ("input-mouse", "input-tablet") or (peripheral and cls & 0x80):
+        return "mouse"
+    name = (props.get("Name") or props.get("Alias") or "").lower()
+    if "keyboard" in name or "teclado" in name:
+        return "keyboard"
+    if any(w in name for w in ("mouse", "trackpad", "touchpad")):
+        return "mouse"
+    if is_audio(props):
+        return "audio"
+    return ""
+
+
 def _plain(props):
     """D-Bus variants (signature, value) → plain values."""
     return {k: (v[1] if isinstance(v, tuple) and len(v) == 2 else v) for k, v in props.items()}
@@ -146,7 +182,8 @@ class BluezBluetooth(Bluetooth):
             found.append(BluetoothDevice(
                 address=p.get("Address", ""), name=p.get("Alias") or p.get("Name") or p.get("Address", ""),
                 paired=bool(p.get("Paired")), connected=bool(p.get("Connected")),
-                gamepad=is_gamepad(p), path=path, has_name=bool(p.get("Name"))))
+                gamepad=is_gamepad(p), audio=device_kind(p) == "audio", kind=device_kind(p), path=path,
+                has_name=bool(p.get("Name"))))
         found.sort(key=lambda d: (not d.connected, not d.paired, d.name.lower()))
         return found
 

@@ -106,6 +106,8 @@ IN_RANGE = {   # what discovery finds
     "BB:BB:BB:BB:BB:BB": {"Name": "JBL Speaker", "Alias": "JBL Speaker", "Icon": "audio-headset"},
     "CC:CC:CC:CC:CC:CC": {"Alias": "CC-CC-CC-CC-CC-CC"},                       # no name yet
     "DD:DD:DD:DD:DD:DD": {"Name": "Wireless Controller", "Alias": "Wireless Controller", "Class": 0x002508},
+    "EE:EE:EE:EE:EE:EE": {"Name": "Logitech K380", "Alias": "Logitech K380", "Class": 0x002540},
+    "FF:FF:FF:FF:FF:FF": {"Name": "MX Anywhere 3", "Alias": "MX Anywhere 3", "Icon": "input-mouse"},
 }
 
 

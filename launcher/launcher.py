@@ -294,6 +294,7 @@ class Launcher(EditorMixin, SettingsMixin):
         self.system = backend.system()
         self.bluetooth = backend.bluetooth()
         self.display = backend.display()
+        self.audio = backend.audio()
         self.display_app_until = 0.0     # an app's own resolution: don't go back to the default before this
         self.display_changed = True      # check once at start (a mode left over from before)
         self.app_icons_dir = paths.app_icons_dir()

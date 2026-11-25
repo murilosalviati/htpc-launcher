@@ -274,7 +274,7 @@ def e1():
     l.press()
     f = l.settings_fields
     check("the gear opens Settings with apps, background, location, temperature and language",
-          len(l.overlays) == 1 and list(f) == ["apps", "background", "location", "unit", "language", "notifications", "shortcuts", "home_assistant"])
+          len(l.overlays) == 1 and list(f) == ["apps", "background", "location", "unit", "language", "notifications", "audio", "shortcuts", "home_assistant"])
     check("Settings shows the current values",
           f["background"].value.get_label() == "Meia-noite" and f["unit"].value.get_label() == "°C"
           and f["language"].value.get_label() == "Português (Brasil)"
@@ -1090,6 +1090,75 @@ def disp3():
     l.tiles[0].grab_focus()
 
 
+# ---------------- audio output ----------------
+
+@step(300)
+def au1():
+    l = L()
+    from htpc.backends.linux.audio import PulseAudio
+    state = {"default": "alsa_output.hdmi"}
+    sinks = [{"name": "alsa_output.hdmi", "description": "TV (HDMI)", "properties": {}},
+             {"name": "bluez_output.X.1", "description": "JBL Flip 5", "properties": {"device.bus": "bluetooth"}}]
+
+    def run(cmd):
+        if cmd[1:] == ["-f", "json", "list", "sinks"]:
+            return json.dumps(sinks)
+        if cmd[1] == "get-default-sink":
+            return state["default"]
+        if cmd[1] == "set-default-sink":
+            state["default"] = cmd[2]
+        return ""
+    l.audio = PulseAudio(run=run)
+    l._audio_state = state
+    while l.overlays:
+        l.pop_overlay()
+    l.open_settings(focus="audio")
+    l.press()
+
+
+@step(500)
+def au2():
+    l = L()
+    a = l.audio_menu
+    names = label_texts(a["listing"])
+    check("Settings → Audio lists the outputs, the one in use marked and focused",
+          "TV (HDMI)" in names and "JBL Flip 5" in names and l.t("audio_current") in names
+          and l.win.get_focus() is a["rows"][0][0] and a["rows"][-2] == [a["pair"]])
+    check("Settings shows the output in use", l.settings_fields["audio"].value.get_label() == "TV (HDMI)")
+    screenshot(l.win, "20-audio")
+    a["rows"][1][0].grab_focus()
+    l.press()
+
+
+@step(500)
+def au3():
+    l = L()
+    a = l.audio_menu
+    check("choosing the speaker sends the sound there", l._audio_state["default"] == "bluez_output.X.1"
+          and a["rows"][0][0].audio_id == "bluez_output.X.1"
+          and a["rows"][0][0].value.get_label() == l.t("audio_current"))
+    from htpc.backends.linux.bluetooth import BluezBluetooth
+    fakes.bluez["devices"].clear()
+    fakes.bluez["fail_pair"].clear()
+    fakes.bluez["adapter"].update(Powered=False, Discovering=False)
+    l.bluetooth = BluezBluetooth(bus="SESSION", sysfs=None)
+    l.PAIRING_REFRESH_MS = 200
+    a["pair"].grab_focus()
+    l.press()
+
+
+@step(900)
+def au4():
+    l = L()
+    names = label_texts(l.overlays[-1]["backdrop"])
+    check("'Pair headphones or a speaker' lists audio devices, not gamepads",
+          l.t("pairing_audio_title") in names and "JBL Speaker" in names and "Xbox" not in names)
+    l.back()
+    while l.overlays:
+        l.pop_overlay()
+    l.tiles[0].grab_focus()
+
+
 # ---------------- pairing gamepads (fake BlueZ) ----------------
 
 @step(300)
@@ -1129,7 +1198,9 @@ def bt3():
           and "Wireless Controller" in names and "JBL" not in names and "CC-CC" not in names)
     screenshot(l.win, "17-pairing")
     rows = l.pairing["rows"]
-    check("the gamepads are navigable rows, Close last", len(rows) == 3 and rows[-1][0] is l.pairing["close"])
+    check("keyboards and mice are listed too, with their kind",
+          "Logitech K380  ·  " + l.t("bt_kind_keyboard") in names and "MX Anywhere 3  ·  " + l.t("bt_kind_mouse") in names)
+    check("the devices are navigable rows, Close last", len(rows) == 5 and rows[-1][0] is l.pairing["close"])
     target = next(r[0] for r in rows if getattr(r[0], "bt_address", "") == "AA:AA:AA:AA:AA:AA")
     target.grab_focus()
     l.press()

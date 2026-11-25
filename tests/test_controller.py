@@ -364,6 +364,49 @@ check("updates: Flatpaks with updates, user and system, by name",
       up.flatpak_updates(fake_flatpak) == [("org.jellyfin.JellyfinDesktop", "Jellyfin"),
                                           ("com.valvesoftware.Steam", "Steam")])
 
+# 9a1h. audio output through pactl (a fake one)
+from htpc.backends.linux.audio import PulseAudio  # noqa: E402
+from htpc.backends.linux import bluetooth as lbt  # noqa: E402
+pa_state = {"default": "alsa_output.hdmi", "moved": []}
+pa_sinks = [
+    {"name": "alsa_output.hdmi", "description": "TV (HDMI)", "properties": {"device.bus": "pci"}},
+    {"name": "bluez_output.AA_BB.1", "description": "JBL Flip 5", "properties": {"device.bus": "bluetooth"}},
+]
+
+
+def fake_pactl(cmd):
+    if cmd[1:] == ["-f", "json", "list", "sinks"]:
+        return json.dumps(pa_sinks)
+    if cmd[1] == "get-default-sink":
+        return pa_state["default"] + "\n"
+    if cmd[1] == "set-default-sink":
+        pa_state["default"] = cmd[2]
+        return ""
+    if cmd[1:] == ["list", "short", "sink-inputs"]:
+        return "12\t0\t34\tPipeWire\tfloat32le 2ch 48000Hz\n"
+    if cmd[1] == "move-sink-input":
+        pa_state["moved"].append((cmd[2], cmd[3]))
+        return ""
+    raise AssertionError(cmd)
+
+
+pa = PulseAudio(run=fake_pactl)
+outs = pa.outputs()
+check("audio: the outputs, the current one first and marked, Bluetooth ones flagged",
+      [(o.name, o.current, o.bluetooth) for o in outs] == [("TV (HDMI)", True, False), ("JBL Flip 5", False, True)])
+pa.set_output("bluez_output.AA_BB.1")
+check("audio: choosing one makes it the default and moves what is playing",
+      pa_state["default"] == "bluez_output.AA_BB.1" and pa_state["moved"] == [("12", "bluez_output.AA_BB.1")]
+      and pa.outputs()[0].name == "JBL Flip 5")
+check("bluetooth: keyboards and mice by icon, device class or name",
+      lbt.device_kind({"Icon": "input-keyboard"}) == "keyboard" and lbt.device_kind({"Class": 0x002540}) == "keyboard"
+      and lbt.device_kind({"Class": 0x002580}) == "mouse" and lbt.device_kind({"Name": "MX Mouse"}) == "mouse"
+      and lbt.device_kind({"Class": 0x002508}) == "gamepad" and lbt.device_kind({"Name": "JBL Flip"}) == "audio"
+      and lbt.device_kind({"Name": "Fridge"}) == "")
+check("bluetooth: speakers and headphones are told apart from gamepads",
+      lbt.is_audio({"Icon": "audio-headphones"}) and lbt.is_audio({"Class": 0x240414})
+      and lbt.is_audio({"Name": "JBL Flip 5"}) and not lbt.is_audio({"Name": "Xbox Wireless Controller"}))
+
 # 9a1d. volume: Start + Select + Up / Down, repeating while held
 vol = []
 vclock = [0.0]

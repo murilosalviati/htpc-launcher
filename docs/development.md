@@ -90,6 +90,7 @@ A new extension version is only loaded after logging out and back in. The Python
 | `System` | Starting and force-closing programs, restart and shut down, the connection type and connectivity, and the volume. |
 | `Bluetooth` | Searching, pairing, trusting and forgetting devices. The default is "no Bluetooth". |
 | `Display` | The screen's modes, the default mode, and switching modes for per-app resolutions. The default can't change modes. |
+| `Audio` | The sound outputs and switching between them. |
 
 The Linux backend uses:
 
@@ -97,7 +98,7 @@ The Linux backend uses:
 - **jeepney** for D-Bus: the extension, MPRIS, NetworkManager and BlueZ;
 - **Gio** for `.desktop` files;
 - **systemd** for restart and shut down;
-- **wpctl or pactl** for the volume;
+- **wpctl or pactl** for the volume, and **pactl** for the output device;
 - **Mutter's DisplayConfig** (D-Bus) for resolutions. Modes are applied "temporary", so there's no confirmation prompt and nothing is saved;
 - **sysfs** for batteries.
 

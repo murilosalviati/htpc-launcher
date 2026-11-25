@@ -4,6 +4,8 @@ The project is in beta: every `0.x` version is a pre-release, and the configurat
 
 ## Unreleased
 
+- **Settings → Audio:** pick where the sound goes (the TV, a soundbar, Bluetooth headphones or a speaker); what is playing moves along. It also pairs Bluetooth headphones and speakers. Uses `pactl`.
+- **Bluetooth pairing for keyboards and mice** too, next to gamepads (Settings → Gamepads → Pair a gamepad, keyboard or mouse), each marked with its kind.
 - **Fixed: "Pair a gamepad" seemed to do nothing without a Bluetooth adapter.** Asking BlueZ, which isn't running without an adapter, waited about 8 seconds for it to start. The launcher now checks the kernel's adapters first and says at once that there is none, with "Checking Bluetooth…" on screen meanwhile.
 - **The gamepad is never locked out by a wrong TV state.** If Home Assistant keeps saying the TV is off after 3 wake presses within a minute (it lost the TV, for example after the router gave the TV a new IP address), the gamepad stops being ignored for 10 minutes, or until Home Assistant sees the TV on again.
 - **Per-app resolution.** In edit mode → Resolution, pick one of the screen's modes for an app (for example 4K for Jellyfin). The screen switches when the app opens or comes back, and returns to the default (GNOME's saved mode) in the launcher. The switch is never saved as GNOME's setting, so there is no "keep these settings?" prompt.

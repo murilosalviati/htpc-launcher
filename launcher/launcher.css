@@ -289,6 +289,13 @@ button.field:focus {
 .dialog.settings button.field {
   min-height: 64px;
 }
+.dialog.settings-main {
+  padding-top: 28px;
+  padding-bottom: 28px;
+}
+.dialog.settings-main button.field {
+  min-height: 58px;
+}
 .dialog.settings .editor-buttons {
   margin-top: 14px;
 }

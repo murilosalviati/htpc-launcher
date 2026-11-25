@@ -60,13 +60,13 @@ Rules for a new combo:
 
 Changes apply right away, in the launcher and in the background service. The footer hints always show the current combos. They are saved as `shortcuts` in `apps.json`, as described in [Configuration](configuration.md#top-level-settings).
 
-## Pairing over Bluetooth
+## Pairing over Bluetooth (gamepads, keyboards, mice)
 
 ![Pairing a gamepad](pairing.png)
 
 You need a Bluetooth adapter, either built in or a USB one. Ubuntu supports most of them out of the box. The TP-Link UB500, for example, works without any setup.
 
-1. Open **Settings → Gamepads → Pair a gamepad**. The launcher turns Bluetooth on and starts searching.
+1. Open **Settings → Gamepads → Pair a gamepad, keyboard or mouse**. The launcher turns Bluetooth on and starts searching.
 2. **Put the gamepad in pairing mode:**
 
    | Gamepad | How |
@@ -75,8 +75,11 @@ You need a Bluetooth adapter, either built in or a USB one. Ubuntu supports most
    | PlayStation (DualShock 4, DualSense) | Hold Share (or Create) and PS until the light bar flashes. |
    | Switch Pro Controller | Hold the small sync button on top. |
    | 8BitDo | Pick a mode with Start + a mode button (see its manual), then hold its pair button. |
+   | Keyboards and mice | Usually hold the Bluetooth or connect button until the light blinks. |
 
-3. It appears in the list as **Ready to pair**. Only gamepads are listed: headphones, speakers and nameless devices are left out.
+3. It appears in the list as **Ready to pair**. Keyboards and mice are marked as such.
+   - Headphones and speakers are left out of this list. Pair them from Settings → **Audio**, as described in [Using the launcher → Audio](using.md#audio).
+   - Nameless devices are left out too.
 4. Select it with **Ⓐ**. The launcher pairs, trusts and connects it, and it shows **Connected**.
 
 The gamepad is **trusted**, so after that you just turn it on and it reconnects by itself.
@@ -88,6 +91,8 @@ The gamepad is **trusted**, so after that you just turn it on and it reconnects 
 - a **USB cable**;
 - the gamepad's **own receiver**: plug it in, press the button on the receiver, then the gamepad's pair button.
 
+> Keyboards that ask you to type a code to pair can't be paired from the launcher yet. Pair those once from GNOME's Settings → Bluetooth.
+>
 > Pairing goes through BlueZ, Linux's Bluetooth service, the same way GNOME's own Bluetooth settings do. If a gamepad won't pair from the launcher, try once from GNOME's Settings → Bluetooth with a mouse. Some gamepads, like newer Xbox ones over Bluetooth LE, may need an update from their maker first.
 
 ## Batteries
