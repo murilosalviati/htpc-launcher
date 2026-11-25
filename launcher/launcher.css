@@ -86,28 +86,37 @@ button.tile {
   outline: none;
   transition: all 150ms ease-out;
 }
-/* Selected: lifted, with a glow behind the border that breathes slowly. */
+/* Selected: lifted, with a glow behind the border that breathes a few times and
+   then rests. An endless animation made GTK redraw the whole screen every frame
+   (blurred shadows, at 4K) for as long as the launcher sat idle. It starts and
+   ends on the resting look, so it stops without a jump. */
 @keyframes tile-glow {
-  from {
+  /* (GTK does not accept "0%, 100%" in one block: two identical blocks instead) */
+  0% {
     box-shadow: 0 18px 50px rgba(0, 0, 0, 0.55),
-                0 0 0 6px rgba(124, 183, 255, 0.20),
-                0 0 36px 6px rgba(124, 183, 255, 0.30);
+                0 0 0 8px rgba(124, 183, 255, 0.26),
+                0 0 56px 12px rgba(124, 183, 255, 0.45);
   }
-  to {
+  50% {
     box-shadow: 0 18px 50px rgba(0, 0, 0, 0.55),
                 0 0 0 9px rgba(124, 183, 255, 0.30),
                 0 0 72px 16px rgba(124, 183, 255, 0.55);
+  }
+  100% {
+    box-shadow: 0 18px 50px rgba(0, 0, 0, 0.55),
+                0 0 0 8px rgba(124, 183, 255, 0.26),
+                0 0 56px 12px rgba(124, 183, 255, 0.45);
   }
 }
 button.tile:focus {
   background: rgba(255, 255, 255, 0.15);
   border-color: #7cb7ff;
   transform: scale(1.08);
-  /* also the look when animations are turned off */
+  /* the resting look (also when animations are turned off) */
   box-shadow: 0 18px 50px rgba(0, 0, 0, 0.55),
               0 0 0 8px rgba(124, 183, 255, 0.26),
               0 0 56px 12px rgba(124, 183, 255, 0.45);
-  animation: tile-glow 1.6s ease-in-out infinite alternate;
+  animation: tile-glow 3.2s ease-in-out 3;
 }
 
 /* Pushed: sinks in and springs back, like a physical button, with a flash of glow. */
@@ -153,6 +162,12 @@ button.tile.opening {
 }
 button.tile.opening .tile-status {
   animation: status-blink 0.8s ease-in-out infinite alternate;
+}
+/* Behind an app (the window is not active) nothing on it needs to move. */
+button.tile:backdrop,
+button.tile.opening:backdrop,
+button.tile.opening:backdrop .tile-status {
+  animation: none;
 }
 
 .tile-name {

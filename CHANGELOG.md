@@ -22,6 +22,7 @@ The project is in beta: every `0.x` version is a pre-release, and the configurat
 - **Less work in the background.**
   - The launcher stops reading the gamepads (it did so 60 times a second, all the time) and skips its network and gamepad checks while an app is in front. What was pressed inside the app is thrown away when the launcher comes back, so it doesn't act on it.
   - A stick only sends an event when it crosses the dead zone, instead of hundreds a second while it moves, and Steam Input's virtual gamepads are no longer opened at all.
+  - The selected tile's glow breathes three times and then rests, instead of forever: the endless animation made GTK redraw the whole screen every frame while the launcher sat idle, keeping the GPU busy. Nothing on the launcher animates while an app is in front.
   - The service reads apps.json again only when it changes, and writes the TV-gate file only while the TV is off or when that changes (it was every 3 seconds, all day).
 
 - **Settings → Audio:** pick where the sound goes (the TV, a soundbar, Bluetooth headphones or a speaker); what is playing moves along. It also pairs Bluetooth headphones and speakers. Uses PipeWire's `pw-dump` and `wpctl`, or `pactl` when installed.

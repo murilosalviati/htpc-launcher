@@ -962,6 +962,22 @@ def vol1():
     l.tiles[0].grab_focus()
 
 
+# ---------------- the stylesheet ----------------
+
+@step(100)
+def css1():
+    errors = []
+    provider = Gtk.CssProvider()
+    provider.connect("parsing-error", lambda _p, section, error: errors.append(
+        f"line {section.get_start_location().lines + 1}: {error.message}"))
+    provider.load_from_path(os.path.join(ROOT, "launcher", "launcher.css"))
+    check("launcher.css has no syntax GTK rejects (it would silently drop the rule)", errors == [])
+    css = open(os.path.join(ROOT, "launcher", "launcher.css")).read()
+    check("the selected tile's glow is not an endless animation (it kept the GPU busy while idle)",
+          "tile-glow" in css and "tile-glow 3.2s ease-in-out 3;" in css
+          and "tile-glow 1.6s ease-in-out infinite" not in css)
+
+
 # ---------------- the launcher stops reading the gamepads behind an app ----------------
 
 @step(300)
