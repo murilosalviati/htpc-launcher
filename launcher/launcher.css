@@ -103,6 +103,31 @@ button.top-button:focus {
   font-size: 14pt;
   color: #7d8aa3;
 }
+button.tab {
+  min-height: 52px;
+  padding: 0 26px;
+  border-radius: 999px;
+  background: transparent;
+  border: 3px solid transparent;
+  box-shadow: none;
+  color: #7d8aa3;
+  outline: none;
+  font-size: 19pt;
+  font-weight: 800;
+}
+button.tab.selected {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.09);
+}
+button.tab:focus {
+  border-color: #7cb7ff;
+  color: #ffffff;
+}
+.media-empty {
+  font-size: 15pt;
+  color: #7d8aa3;
+  margin: 10px 14px;
+}
 .recent-row {
   padding: 14px 14px 18px 14px;   /* room for the focus ring */
 }

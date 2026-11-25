@@ -116,13 +116,16 @@ class Navigator:
     BROKEN = GLib.IOCondition.HUP | GLib.IOCondition.ERR | GLib.IOCondition.NVAL
     DIRECTIONS = {"left": (-1, 0), "right": (1, 0), "up": (0, -1), "down": (0, 1)}
 
-    def __init__(self, gamepads, active, move, press, back, other_button, blocked=lambda: False):
+    def __init__(self, gamepads, active, move, press, back, other_button, blocked=lambda: False,
+                 shoulder=lambda step: None):
         self.gamepads = gamepads
         self.blocked = blocked  # True while the TV is off: input is ignored (it only wakes the TV)
         self.capture = None     # set while Settings records a shortcut: gets every button event
         self.held = {}          # device -> buttons held (Start + Select + ↑/↓ is the volume)
         self.active, self.move, self.press, self.back = active, move, press, back
         self.other_button = other_button  # called with "x" or "y"
+        self.shoulder = shoulder          # called with -1 (LB) or 1 (RB) when one is tapped alone
+        self.tapping = None               # (device, "l1"/"r1") pressed with nothing else so far
         self.stick = {}         # (device, axis) -> -1 / 0 / 1
         self.direction = None   # (dx, dy) being held
         self.repeat = 0
@@ -199,8 +202,17 @@ class Navigator:
         if ev.kind == "button":
             held = self.held.setdefault(ev.device, set())
             (held.add if ev.value else held.discard)(ev.name)
-            if ev.value and {"start", "select"} <= held:
-                return   # a combo in progress (volume, close): the controller service handles it
+            # LB / RB turn the page when tapped alone, on release: pressed with other
+            # buttons they are a shortcut (Home + LB + RB...), and must not turn it.
+            if ev.value:
+                self.tapping = (ev.device, ev.name) if ev.name in ("l1", "r1") and held == {ev.name} else None
+            elif self.tapping == (ev.device, ev.name):
+                self.tapping = None
+                if self.active() and not self.blocked():
+                    self.shoulder(-1 if ev.name == "l1" else 1)
+                return
+            if ev.value and ({"start", "select"} <= held or "guide" in held):
+                return   # a combo in progress (volume, close, home): the controller service handles it
         elif ev.kind == "disconnected":
             self.held.pop(ev.device, None)
         if home_assistant.is_press(ev, self.DEAD_ZONE) and self.blocked():
@@ -410,7 +422,8 @@ class Launcher(HomeMixin, EditorMixin, SettingsMixin):
         self.win.connect("notify::focus-widget", self._focus_moved)
 
         self.navigator = Navigator(backend.gamepads(), self.win.is_active, self.move, self.press,
-                                   self.back, self.other_button, blocked=home_assistant.input_blocked)
+                                   self.back, self.other_button, blocked=home_assistant.input_blocked,
+                                   shoulder=self.page_media)
         self.gamepads = self.navigator.gamepads
 
         GLib.timeout_add_seconds(1, self._update_clock)
@@ -427,7 +440,7 @@ class Launcher(HomeMixin, EditorMixin, SettingsMixin):
         GLib.timeout_add_seconds(HOUSE_EVERY, self._home_tick)
         self.refresh_top_bar()
         self.update_weather()
-        self.update_recent(force=True)
+        self.update_media(force=True)
         self.update_house()
 
         self.win.set_cursor(Gdk.Cursor.new_from_name("none", None))
@@ -518,8 +531,9 @@ class Launcher(HomeMixin, EditorMixin, SettingsMixin):
 
     @property
     def rows(self):
-        """Top to bottom: settings and the power menu, recently added, the apps, the house."""
-        return [self.top_buttons, self.recent_row] + self.tile_rows + self.house_rows
+        """Top to bottom: settings and the power menu, the media tabs and their row,
+        the apps, the house."""
+        return [self.top_buttons, self.tab_row, self.recent_row] + self.tile_rows + self.house_rows
 
     def apply_theme(self, theme_id):
         """Switch the background color right away (does not save it)."""
@@ -1155,6 +1169,8 @@ class Launcher(HomeMixin, EditorMixin, SettingsMixin):
             self.press()
         elif keyval == Gdk.KEY_Escape:
             self.back()
+        elif keyval in (Gdk.KEY_Page_Down, Gdk.KEY_Page_Up):
+            self.page_media(1 if keyval == Gdk.KEY_Page_Down else -1)
         else:
             return False
         return True

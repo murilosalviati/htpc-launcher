@@ -2,9 +2,12 @@
 # Copyright (C) 2026 Murilo Salviati
 """The home screen's rows around the apps (mixed into the Launcher class).
 
-  * "Recently added" (above the apps): the newest films and series on the
-    Jellyfin server, set up in Settings → Jellyfin. Selecting one opens the
-    Jellyfin app.
+  * Tabs above the apps (moving onto one shows its row):
+      - Explore: what is popular this week on TMDB that is in your Jellyfin
+        library (without a TMDB key: what was added lately);
+      - Series and Films: what was added lately to Jellyfin;
+      - Games: the Steam games played most recently.
+    A film or series opens the Jellyfin app; a game starts through Steam.
   * "Home" (below the apps, scrolled into view by going down): lights,
     switches and scenes from Home Assistant, set up in Settings → Home
     Assistant. Ⓐ turns one on or off; Ⓨ on a dimmable light sets its brightness.
@@ -18,10 +21,12 @@ import time
 
 from gi.repository import Gdk, GLib, Gtk, Pango
 
-from htpc import home_assistant, jellyfin
+from htpc import home_assistant, jellyfin, steam, tmdb
 from background import in_background
 
-RECENT_EVERY = 10 * 60     # seconds between "recently added" updates
+TABS = ("explore", "series", "movies", "games")
+PAGE_SIZE = 5              # cards a page: one wide and four posters; RB / LB turn the page
+TAB_EVERY = {"explore": 60 * 60, "series": 10 * 60, "movies": 10 * 60, "games": 60}   # seconds
 HOUSE_EVERY = 5            # seconds between light/switch state updates
 HOUSE_COLUMNS = 6
 HOUSE_SETTLE_MS = 700      # after a press: ask Home Assistant again this much later
@@ -133,12 +138,29 @@ class DeviceTile(Gtk.Button):
                 self.remove_css_class(css)
 
 
+class TabButton(Gtk.Button):
+    """One of Explore / Series / Films / Games. Moving onto it shows its row."""
+
+    def __init__(self, name, label):
+        super().__init__(label=label)
+        self.tab = name
+        self.add_css_class("tab")
+        self.set_focus_on_click(False)
+
+
 class HomeMixin:
     # --- building ---------------------------------------------------------------------
 
     def _home_body(self):
-        """The scrolling middle of the screen: recently added, the apps, the house."""
-        self.recent_items, self.recent_cards, self.recent_fetched = [], [], 0.0
+        """The scrolling middle of the screen: the media tabs, the apps, the house."""
+        self.media = getattr(self, "media", {tab: [] for tab in TABS})
+        self.media_fetched = getattr(self, "media_fetched", {tab: 0.0 for tab in TABS})
+        self.media_tab = getattr(self, "media_tab", TABS[0])
+        self.media_context = getattr(self, "media_context", None)   # "jellyfin", "steam" or None
+        self.context_tab = getattr(self, "context_tab", {})          # the last tab used per app
+        self.media_page = getattr(self, "media_page", {tab: 0 for tab in TABS})
+        self.media_shown = None
+        self.recent_cards = []
         self.textures = getattr(self, "textures", {})
         self.house_data = None
         self.device_tiles, self.scene_buttons = [], []
@@ -151,13 +173,27 @@ class HomeMixin:
         self.content.set_margin_bottom(48)   # the last row of the house clears the footer
 
         self.recent_section = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=18)
-        self.recent_section.append(self._section_title(self.t("recent_title"), self.t("recent_source")))
+        tabs_line = Gtk.Box(spacing=12)
+        tabs_line.set_size_request(-1, 58)   # the same height with or without tabs: nothing jumps
+        self.tab_buttons = {tab: TabButton(tab, self.t("tab_" + tab)) for tab in TABS}
+        for b in self.tab_buttons.values():
+            tabs_line.append(b)
+        self.media_note = Gtk.Label(xalign=0, ellipsize=Pango.EllipsizeMode.END)
+        self.media_note.add_css_class("section-note")
+        self.media_note.set_margin_start(18)
+        tabs_line.append(self.media_note)
+        self.recent_section.append(tabs_line)
         recent_scroll = Gtk.ScrolledWindow()
         recent_scroll.set_policy(Gtk.PolicyType.EXTERNAL, Gtk.PolicyType.NEVER)
         self.recent_box = Gtk.Box(spacing=28)
         self.recent_box.add_css_class("recent-row")
+        self.recent_box.set_size_request(-1, WIDE[1] + 32)
         recent_scroll.set_child(self.recent_box)
         self.recent_section.append(recent_scroll)
+        self.media_empty = Gtk.Label(xalign=0)
+        self.media_empty.add_css_class("media-empty")
+        self.media_empty.set_visible(False)
+        tabs_line.append(self.media_empty)
         self.recent_section.set_visible(False)
 
         self.grid = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=44,
@@ -199,6 +235,12 @@ class HomeMixin:
         self.grid.set_valign(Gtk.Align.CENTER if alone else Gtk.Align.START)
 
     @property
+    def tab_row(self):
+        if not self.recent_section.get_visible():
+            return []
+        return [b for b in self.tab_buttons.values() if b.get_visible()]
+
+    @property
     def recent_row(self):
         return list(self.recent_cards) if self.recent_section.get_visible() else []
 
@@ -211,27 +253,130 @@ class HomeMixin:
         rows += [tiles[i:i + HOUSE_COLUMNS] for i in range(0, len(tiles), HOUSE_COLUMNS)]
         return rows
 
-    # --- recently added (Jellyfin) ---------------------------------------------------------
+    # --- the media tabs: Explore, Series, Films (Jellyfin) and Games (Steam) ------------------
 
-    def update_recent(self, force=False):
-        if not jellyfin.ready(self.cfg):
-            self._show_recent([])
-            return False
-        if not force and time.monotonic() - self.recent_fetched < RECENT_EVERY:
-            return False
-        self.recent_fetched = time.monotonic()
-        cfg, get = dict(self.cfg), getattr(self, "jellyfin_get", None)
-        in_background(lambda: jellyfin.latest(cfg, get), self._recent_arrived)
+    def steam_home(self):
+        return getattr(self, "steam_home_dir", None)
+
+    def context_tabs(self, context):
+        """The tabs of the app in focus: Jellyfin's films and series, or Steam's games."""
+        if context == "jellyfin" and jellyfin.ready(self.cfg):
+            return ["explore", "series", "movies"]
+        if context == "steam" and steam.available(self.steam_home()):
+            return ["games"]
+        return []
+
+    def media_ready(self):
+        """Is there anything the row above the apps could show (for some app)?"""
+        return bool(self.context_tabs("jellyfin") or self.context_tabs("steam"))
+
+    def available_tabs(self):
+        return self.context_tabs(self.media_context)
+
+    @staticmethod
+    def context_of(app):
+        app_id = (app or {}).get("id", "").lower()
+        return "jellyfin" if "jellyfin" in app_id else "steam" if "steam" in app_id else None
+
+    def set_context(self, context):
+        """The app in focus changed: show its row (nothing for apps without one)."""
+        if context == self.media_context:
+            return
+        self.media_context = context
+        tabs = self.available_tabs()
+        if tabs and self.media_tab not in tabs:
+            self.media_tab = self.context_tab.get(context) if self.context_tab.get(context) in tabs else tabs[0]
+        self.update_media()
+
+    def update_media(self, force=False, tab=None):
+        """Fetch rows when they are due (at start: every row there is), then show
+        the one of the app in focus."""
+        self.recent_section.set_visible(self.media_ready())
+        everything = self.context_tabs("jellyfin") + self.context_tabs("steam")
+        tabs = self.available_tabs()
+        for b in self.tab_buttons.values():
+            b.set_visible(b.tab in tabs)
+        if tabs and self.media_tab not in tabs:
+            self.media_tab = tabs[0]
+        for name in ([tab] if tab else everything if force else tabs[:1] and [self.media_tab]):
+            if name in everything and (force or time.monotonic() - self.media_fetched[name] >= TAB_EVERY[name]):
+                self._fetch_tab(name)
+        self._show_media()
         return False
 
-    def _recent_arrived(self, result):
+    update_recent = update_media   # its first name, when it was one row
+
+    def _fetch_tab(self, name):
+        self.media_fetched[name] = time.monotonic()
+        cfg = dict(self.cfg)
+        jf_get, tmdb_get = getattr(self, "jellyfin_get", None), getattr(self, "tmdb_get", None)
+        if name == "explore" and tmdb.ready(cfg):
+            job = lambda: jellyfin.explore(cfg, tmdb.ranking(cfg, tmdb_get), jf_get)   # noqa: E731
+        elif name == "explore":
+            job = lambda: jellyfin.latest(cfg, jf_get)   # noqa: E731 - without TMDB: what's new
+        elif name == "series":
+            job = lambda: jellyfin.latest(cfg, jf_get, types="Episode,Series")   # noqa: E731
+        elif name == "movies":
+            job = lambda: jellyfin.latest(cfg, jf_get, types="Movie")   # noqa: E731
+        else:
+            home = self.steam_home()
+            job = lambda: steam.recent_games(home)   # noqa: E731
+        in_background(job, lambda result: self._tab_arrived(name, result))
+
+    def _tab_arrived(self, name, result):
         if isinstance(result, Exception):
-            log("recently added not updated:", result)
-            self.recent_fetched = time.monotonic() - RECENT_EVERY + 60   # try again in a minute
+            log(f"{name} not updated:", result)
+            self.media_fetched[name] = time.monotonic() - TAB_EVERY[name] + 60   # try again in a minute
             return
-        self._show_recent(result)
+        self.media[name] = result
+        if name == self.media_tab:
+            self._show_media()
+
+    def select_tab(self, name):
+        if name == self.media_tab:
+            return
+        self.media_tab = name
+        if self.media_context:
+            self.context_tab[self.media_context] = name
+        for b in self.tab_buttons.values():
+            (b.add_css_class if b.tab == name else b.remove_css_class)("selected")
+        self.update_media(tab=name)   # shows what is cached, and fetches if it is old
+
+    def _media_note(self):
+        if self.media_tab == "explore":
+            note = self.t("explore_note" if tmdb.ready(self.cfg) else "explore_note_no_tmdb")
+        else:
+            note = self.t(f"{self.media_tab}_note")
+        pages = self._pages()
+        if pages > 1:
+            note += "    " + self.t("media_pages", page=self.media_page[self.media_tab] + 1, pages=pages)
+        return note
+
+    def _pages(self):
+        items = self.media.get(self.media_tab, [])
+        return max(1, -(-len(items) // PAGE_SIZE))
+
+    def page_media(self, step):
+        """RB / LB: the next or previous few cards of the row in view."""
+        if not self.available_tabs() or self.overlays:
+            return
+        page = max(0, min(self._pages() - 1, self.media_page[self.media_tab] + step))
+        if page == self.media_page[self.media_tab]:
+            return
+        focused = self.win.get_focus()
+        index = self.recent_cards.index(focused) if focused in self.recent_cards else None
+        self.media_page[self.media_tab] = page
+        self._show_media()
+        if index is not None and self.recent_cards:
+            self.recent_cards[min(index, len(self.recent_cards) - 1)].grab_focus()
 
     def _media_detail(self, item):
+        if item["kind"] == "game":
+            days = max(0, int((time.time() - item["last_played"]) // 86400))
+            when = self.t("played_today") if days == 0 else self.t("played_yesterday") if days == 1 \
+                else self.t("played_days", n=days)
+            hours = round(item.get("minutes", 0) / 60)
+            return f"{when} · {self.t('played_hours', n=hours)}" if hours else when
         if item["kind"] == "movie":
             parts = [str(item["year"])] if item.get("year") else []
             if item.get("minutes"):
@@ -240,33 +385,61 @@ class HomeMixin:
             return " · ".join(parts)
         if item["kind"] == "series":
             n = item.get("new_count") or 0
-            return self.t("media_new_episodes", n=n) if n > 1 else (self.t("media_new_episode") if n else "")
+            if n:
+                return self.t("media_new_episodes", n=n) if n > 1 else self.t("media_new_episode")
+            return str(item["year"]) if item.get("year") else ""
         if item.get("season") is not None and item.get("episode") is not None:
             text = self.t("media_episode", season=item["season"], episode=item["episode"])
             return f"{text} · {item['episode_name']}" if item.get("episode_name") else text
         return item.get("episode_name") or ""
 
-    def _show_recent(self, items):
-        if [i["id"] for i in items] == [i["id"] for i in self.recent_items] and self.recent_cards:
-            return
-        focused = self.win.get_focus()
-        had_focus = focused in self.recent_cards
-        self.recent_items = items
-        _clear(self.recent_box)
-        self.recent_cards = []
-        for n, item in enumerate(items):
-            wide = n == 0
-            label = self.t("media_kind_" + ("movie" if item["kind"] == "movie" else "series"))
-            card = MediaCard(item, wide, label, self._media_detail(item), self.open_media)
-            url = (item.get("backdrop") or item.get("poster")) if wide else (item.get("poster") or item.get("backdrop"))
-            if url:
-                self._load_picture(card, url)
-            self.recent_box.append(card)
-            self.recent_cards.append(card)
-        self.recent_section.set_visible(bool(items))
+    def _media_label(self, item):
+        if item["kind"] == "game":
+            return self.t("media_kind_game")
+        kind = "movie" if item["kind"] == "movie" else "series"
+        return self.t(("media_kind_hot_" if self.media_tab == "explore" and tmdb.ready(self.cfg)
+                       else "media_kind_") + kind)
+
+    def _show_media(self):
+        tabs = self.available_tabs()
+        self.recent_section.set_visible(self.media_ready())
+        for b in self.tab_buttons.values():
+            b.set_visible(b.tab in tabs)
+            (b.add_css_class if b.tab == self.media_tab else b.remove_css_class)("selected")
+        all_items = self.media.get(self.media_tab, []) if tabs else []
+        pages = max(1, -(-len(all_items) // PAGE_SIZE))
+        page = self.media_page[self.media_tab] = min(self.media_page.get(self.media_tab, 0), pages - 1)
+        items = all_items[page * PAGE_SIZE:(page + 1) * PAGE_SIZE]
+        self.media_note.set_label(self._media_note() if tabs else "")
+        shown = (self.media_tab if tabs else None, page, tuple(i["id"] for i in items))
+        if shown != self.media_shown:
+            focused = self.win.get_focus()
+            had_focus = focused in self.recent_cards
+            self.media_shown = shown
+            _clear(self.recent_box)
+            self.recent_cards = []
+            for n, item in enumerate(items):
+                wide = n == 0
+                card = MediaCard(item, wide, self._media_label(item), self._media_detail(item), self.open_media)
+                url = (item.get("backdrop") or item.get("poster")) if wide else (item.get("poster") or item.get("backdrop"))
+                if url:
+                    self._load_picture(card, url)
+                self.recent_box.append(card)
+                self.recent_cards.append(card)
+            if had_focus:
+                (self.recent_cards[0] if self.recent_cards else self.tab_buttons[self.media_tab]).grab_focus()
+        fetched = self.media_fetched.get(self.media_tab, 0) > 0
+        self.media_empty.set_label(self.t(f"{self.media_tab}_empty") if tabs and fetched and not all_items else "")
+        self.media_empty.set_visible(bool(self.media_empty.get_label()))
         self._relayout()
-        if had_focus:
-            (self.recent_cards[0] if self.recent_cards else self.tiles[0] if self.tiles else self.btn_settings).grab_focus()
+
+    @property
+    def recent_items(self):
+        return self.media.get(self.media_tab, [])
+
+    def _show_recent(self, items):
+        """Kept for build_ui: show the current tab again after a rebuild."""
+        self._show_media()
 
     def _load_picture(self, card, url):
         texture = self.textures.get(url)
@@ -274,6 +447,12 @@ class HomeMixin:
             card.set_texture(texture)
             return
         cfg, get = dict(self.cfg), getattr(self, "jellyfin_get", None)
+
+        def fetch():
+            if url.startswith("/"):   # Steam's own cache, on this computer
+                with open(url, "rb") as f:
+                    return f.read()
+            return jellyfin.image(cfg, url, get)
 
         def arrived(data):
             if isinstance(data, Exception):
@@ -287,10 +466,20 @@ class HomeMixin:
             self.textures[url] = texture
             card.set_texture(texture)
 
-        in_background(lambda: jellyfin.image(cfg, url, get), arrived)
+        in_background(fetch, arrived)
 
     def open_media(self, card):
-        """Jellyfin opens on its home screen, where the new items are on top."""
+        """A film or series opens the Jellyfin app (on its home screen); a game
+        starts through Steam."""
+        item = card.item
+        if item["kind"] == "game":
+            tile = next((t for t in self.tiles if "steam" in t.app.get("id", "").lower()), None)
+            command = steam.run_command(tile.app if tile else None, item["appid"])
+            log("starting", item["title"], command)
+            if self._spawn(command) and tile is not None:
+                self.opening[tile.app["id"]] = time.monotonic()
+                tile.show_status(self.t("status_opening"), running=True, opening=True)
+            return
         tile = next((t for t in self.tiles if "jellyfin" in t.app.get("id", "").lower()), None)
         if tile is None:
             self._message(self.t("jf_no_app"))
@@ -419,7 +608,7 @@ class HomeMixin:
 
     def _home_tick(self):
         if self.win.is_active():
-            self.update_recent()
+            self.update_media()
             if not self.overlays:
                 self.update_house()
         return True
@@ -430,6 +619,10 @@ class HomeMixin:
         focused = self.win.get_focus()
         if focused is None or self.overlays or not focused.is_ancestor(self.content):
             return
+        if isinstance(focused, TabButton):
+            self.select_tab(focused.tab)
+        elif hasattr(focused, "app") and focused.is_ancestor(self.grid):
+            self.set_context(self.context_of(focused.app))
         in_house = focused.is_ancestor(self.house_section)
         if in_house:
             self.grid.add_css_class("dimmed")

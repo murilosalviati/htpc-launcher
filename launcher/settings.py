@@ -38,7 +38,7 @@ import gi
 gi.require_version("Gtk", "4.0")
 from gi.repository import GLib, Gtk  # noqa: E402
 
-from htpc import __version__, home_assistant, jellyfin, shortcuts, updates, weather  # noqa: E402
+from htpc import __version__, home_assistant, jellyfin, shortcuts, tmdb, updates, weather  # noqa: E402
 from background import in_background  # noqa: E402
 
 
@@ -972,6 +972,7 @@ class SettingsMixin:
             "url": self._field(self.t("jf_url"), self._jf_edit_url, title_width=300),
             "key": self._field(self.t("jf_key"), self._jf_edit_key, title_width=300),
             "user": self._field(self.t("jf_user"), self._jf_choose_user, title_width=300),
+            "tmdb": self._field(self.t("jf_tmdb"), self._jf_edit_tmdb, title_width=300),
             "test": self._field(self.t("jf_test"), self._jf_test, title_width=300),
         }
         for w in f.values():
@@ -993,6 +994,7 @@ class SettingsMixin:
         f["url"].value.set_label(j.get("url") or "—")
         f["key"].value.set_label(self.t("jf_key_set" if j.get("api_key") else "jf_key_missing"))
         f["user"].value.set_label(j.get("user_name") or self.t("jf_user_auto"))
+        f["tmdb"].value.set_label(self.t("jf_key_set" if tmdb.ready(self.cfg) else "jf_key_missing"))
         f["test"].value.set_label(self.t("jf_test_value"))
 
     def _jf_toggle(self):
@@ -1015,6 +1017,20 @@ class SettingsMixin:
         self.keyboard(self.t("jf_key_title"), self._jf().get("api_key", ""),
                       lambda text: self._jf_set(api_key=text.replace(" ", "").lower() or None),
                       note=self.t("jf_key_note"), capitalize=False)
+
+    def _jf_edit_tmdb(self):
+        self.keyboard(self.t("jf_tmdb_title"), tmdb.settings(self.cfg).get("api_key", ""), self._jf_tmdb_typed,
+                      note=self.t("jf_tmdb_note"), capitalize=False)
+
+    def _jf_tmdb_typed(self, text):
+        key = text.replace(" ", "")
+        if key:
+            self.cfg["tmdb"] = {**tmdb.settings(self.cfg), "api_key": key}
+        else:
+            self.cfg.pop("tmdb", None)
+        self.save_config()
+        self.refresh_jellyfin()
+        self.update_media(force=True, tab="explore")
 
     def _jf_ready_or_say(self):
         if jellyfin.settings(self.cfg).get("url") and jellyfin.settings(self.cfg).get("api_key"):
@@ -1060,14 +1076,30 @@ class SettingsMixin:
             return
         cfg, get = dict(self.cfg), getattr(self, "jellyfin_get", None)
 
+        tmdb_get = getattr(self, "tmdb_get", None)
+
+        def job():
+            found = jellyfin.test(cfg, get)
+            if not tmdb.ready(cfg):
+                return found, None
+            try:
+                return found, tmdb.test(cfg, tmdb_get)
+            except Exception as e:  # noqa: BLE001 - Jellyfin worked; say what TMDB said
+                return found, e
+
         def done(result):
             if isinstance(result, Exception):
                 self._message(self.t("jf_failed", error=self._reason(result)))
-            else:
-                server, version, count = result
-                self._message(self.t("jf_test_ok", server=server, version=version, count=count))
+                return
+            (server, version, count), trending = result
+            text = self.t("jf_test_ok", server=server, version=version, count=count)
+            if isinstance(trending, Exception):
+                text += " TMDB: " + self._reason(trending)
+            elif trending is not None:
+                text += " " + self.t("jf_tmdb_ok", count=trending)
+            self._message(text)
 
-        self._ha_ask(lambda: jellyfin.test(cfg, get), done, title=self.t("jf_calling"))
+        self._ha_ask(job, done, title=self.t("jf_calling"))
 
     # --- language ---------------------------------------------------------------------
 

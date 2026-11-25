@@ -8,11 +8,11 @@
 
 The screen has up to three rows, top to bottom:
 
-1. **Recently added:** the newest films and series on your Jellyfin server, once it's set up in Settings → Jellyfin. See [Recently added](#recently-added).
+1. **The app's row:** follows the app in focus. With Jellyfin in focus: Explore, Series and Films; with Steam: the games played lately; other apps have none. See [The app's row](#the-apps-row).
 2. **The apps:** one tile per app.
 3. **Home:** lights, switches and scenes from Home Assistant, once its address and token are set. Go down from the apps to reach it. See [Home](#home).
 
-Without Jellyfin and Home Assistant, the apps sit alone in the middle of the screen.
+Without Jellyfin, Steam and Home Assistant, the apps sit alone in the middle of the screen.
 
 ### Tiles
 
@@ -45,15 +45,28 @@ Everything around the edges keeps the same share of the screen on 1080p, 1440p o
 
 **Ⓐ** opens or selects, **Ⓑ** goes back: it closes a menu or leaves edit mode. The screen shows no button reminders, except in edit mode; the shortcuts are listed in [Gamepads](gamepads.md) and in Settings → Gamepads.
 
-### Recently added
+### The app's row
 
-The newest films and series on your Jellyfin server, newest first. The first one is wide, with its backdrop; new episodes of a series are grouped under the series, with how many are new.
+Above the apps, a row of cards that follows the app in focus:
 
-- **Select one** to open the Jellyfin app, on its home screen, where the new items are at the top. Jellyfin must be one of your apps.
-- **Updates:** the list is fetched when the launcher starts, then every 10 minutes while it's in front.
-- **Setup:** Settings → **Jellyfin**: the address (such as `http://localhost:8096`), an API key (in Jellyfin: Dashboard → API Keys → +), and whose library to show. **Test** checks it. Typing the 32-character key with the gamepad is slow: you can also put it in `apps.json` (see [Configuration](configuration.md#jellyfin)).
+| App in focus | Tabs | What they show |
+|---|---|---|
+| **Jellyfin** | **Explore** | What is popular this week on [TMDB](https://www.themoviedb.org/) **and is in your library**, in TMDB's order. Without a TMDB key: what was added lately. |
+| | **Series**, **Films** | What was added lately to Jellyfin. New episodes are grouped under their series, with how many are new. |
+| **Steam** | **Games** | Your installed Steam games, the last played first, with when and how long you played. |
+| Any other app | none | The space stays empty, so nothing on screen jumps. |
 
-If Jellyfin can't be reached, the row stays as it was, or hidden, and is tried again a minute later.
+- **Tabs:** go up from the cards to reach them. Moving onto a tab shows it; the launcher remembers the last one per app.
+- **More:** **RB** shows the next five cards and **LB** goes back, with the app or a card in focus. The note next to the tabs says which page you're on. LB and RB only turn the page when tapped alone, so Home + LB + RB still brings the launcher back.
+- **Select a card:** a film or series opens the Jellyfin app (on its home screen). A game starts through Steam (`steam://rungameid/…`), using the same Steam shortcut as the tile.
+- **Updates:** at start, then while the launcher is in front: Explore every hour, Series and Films every 10 minutes, Games every minute (they're read from Steam's own files, without its API). If something can't be reached, the row keeps what it had and tries again a minute later.
+
+**Setup:**
+- **Jellyfin:** Settings → **Jellyfin**: the address (such as `http://localhost:8096`), an API key (in Jellyfin: Dashboard → API Keys → +), and whose library to show. **Test** checks it. Typing the 32-character key with the gamepad is slow: you can also put it in `apps.json` (see [Configuration](configuration.md#jellyfin)).
+- **TMDB (for Explore):** a free account at themoviedb.org → Settings → API. Type the short API key in Settings → Jellyfin → **Popular (TMDB)**, or put the key or the long Read Access Token in `apps.json`. Jellyfin matches each title by the TMDB id it stores, so nothing has to be renamed.
+- **Steam:** nothing to set up. The Flatpak Steam and a native one are both found, with every library folder.
+
+This product uses the TMDB API but is not endorsed or certified by TMDB.
 
 ### Home
 

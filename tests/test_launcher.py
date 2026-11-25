@@ -1326,14 +1326,28 @@ HA_STATES = [
 ]
 
 
+JF_LIBRARY = {"Items": [
+    {"Id": "lib1", "Type": "Movie", "Name": "Filme em Alta", "ProviderIds": {"Tmdb": "77"}, "ImageTags": {"Primary": "p"},
+     "BackdropImageTags": ["b"], "ProductionYear": 2025},
+    {"Id": "lib2", "Type": "Series", "Name": "Série em Alta", "ProviderIds": {"Tmdb": "88"}, "ImageTags": {"Primary": "p"}},
+    {"Id": "lib3", "Type": "Movie", "Name": "Fora da lista", "ProviderIds": {"Tmdb": "5"}},
+]}
+
+
 def jf_get(url, key):
     import urllib.parse as up
     state.setdefault("jf_calls", []).append(url)
-    path = up.urlsplit(url).path
+    parts = up.urlsplit(url)
+    path, query = parts.path, dict(up.parse_qsl(parts.query))
     if path == "/Users":
         return json.dumps([{"Id": "u1", "Name": "mu", "Policy": {"IsAdministrator": True}}]).encode()
     if path.endswith("/Items/Latest"):
-        return json.dumps(JF_LATEST).encode()
+        types = query.get("IncludeItemTypes", "")
+        items = [i for i in JF_LATEST if types != "Movie" or i["Type"] == "Movie"]
+        items = [i for i in items if types != "Episode,Series" or i["Type"] != "Movie"]
+        return json.dumps(items).encode()
+    if path.endswith("/Items"):
+        return json.dumps(JF_LIBRARY).encode()
     if path == "/System/Info":
         return json.dumps({"ServerName": "servidor", "Version": "10.11.0"}).encode()
     return png((200, 120, 60))
@@ -1364,6 +1378,8 @@ def h1():
     ha.pop("devices", None)
     ha.pop("home_screen", None)
     l.cfg["home_assistant"] = ha
+    l.tiles[1].grab_focus()
+    l.tiles[0].grab_focus()   # Jellyfin in focus: its row shows
     l.update_recent(force=True)
     l.update_house()
 
@@ -1379,9 +1395,12 @@ def h2():
           l.house_section.get_visible() and [t.device["entity"] for t in l.device_tiles] == ["light.abajur", "light.sala"]
           and [b.scene["entity"] for b in l.scene_buttons] == ["scene.cinema"]
           and l.device_tiles[1].state.get_label() == l.t("dev_brightness", pct=80) and l.device_tiles[1].has_css_class("on"))
-    check("rows: top buttons, recently added, apps, scenes, lights",
-          l.rows[0] == l.top_buttons and l.rows[1] == l.recent_cards and l.rows[2] == l.tiles
-          and l.rows[3] == l.scene_buttons and l.rows[4] == l.device_tiles)
+    check("rows: top buttons, the tabs, their row, apps, scenes, lights",
+          l.rows[0] == l.top_buttons and l.rows[1] == l.tab_row and l.rows[2] == l.recent_cards
+          and l.rows[3] == l.tiles and l.rows[4] == l.scene_buttons and l.rows[5] == l.device_tiles)
+    check("without a TMDB key and without Steam: Explore, Series and Films; Explore shows what's new",
+          [b.tab for b in l.tab_row] == ["explore", "series", "movies"] and l.media_tab == "explore"
+          and l.media_note.get_label() == l.t("explore_note_no_tmdb"))
     check("with other rows, the apps sit at the top of their space", not l.grid.get_vexpand())
     l.tiles[0].grab_focus()
     l.move(0, -1)
@@ -1450,7 +1469,7 @@ def h4():
     check("Settings has a Jellyfin row", l.settings_fields["jellyfin"].value.get_label() == "jf:8096")
     l.press()
     f = l.jf_fields
-    check("it opens the Jellyfin menu", list(f) == ["enabled", "url", "key", "user", "test"]
+    check("it opens the Jellyfin menu", list(f) == ["enabled", "url", "key", "user", "tmdb", "test"]
           and f["key"].value.get_label() == l.t("jf_key_set") and f["user"].value.get_label() == l.t("jf_user_auto"))
 
 
@@ -1522,6 +1541,146 @@ def h8():
     l.cfg["home_assistant"].pop("devices", None)
     l.cfg["home_assistant"].pop("home_screen", None)
     l.cfg["home_assistant"].pop("token", None)
+    l.save_config()
+    l.tiles[0].grab_focus()
+
+
+# ---------------- media tabs: Explore (TMDB × Jellyfin), Series, Films, Games (Steam) ----------------
+
+def tmdb_get(url, headers):
+    import urllib.parse as up
+    path = up.urlsplit(url).path
+    if path == "/3/trending/movie/week":
+        return {"results": [{"id": 1}, {"id": 77}]}
+    if path == "/3/trending/tv/week":
+        return {"results": [{"id": 88}]}
+    if path == "/3/trending/all/week":
+        return {"results": [{"id": 1}] * 20}
+    return {"results": []}
+
+
+def fake_steam(home):
+    import time as _time
+    root = pathlib.Path(home) / ".var/app/com.valvesoftware.Steam/.local/share/Steam"
+    (root / "steamapps").mkdir(parents=True, exist_ok=True)
+    (root / "userdata/1/config").mkdir(parents=True, exist_ok=True)
+    now = int(_time.time())
+    (root / "userdata/1/config/localconfig.vdf").write_text(
+        '"UserLocalConfigStore" { "Software" { "Valve" { "Steam" { "apps" { '
+        f'"620" {{ "LastPlayed" "{now - 3600}" "Playtime" "300" }} '
+        f'"440" {{ "LastPlayed" "{now - 3 * 86400}" }} }} }} }} }} }}')
+    for appid, name in (("620", "Portal 2"), ("440", "Team Fortress 2")):
+        (root / f"steamapps/appmanifest_{appid}.acf").write_text(f'"AppState" {{ "appid" "{appid}" "name" "{name}" }}')
+    cache = root / "appcache/librarycache/620"
+    cache.mkdir(parents=True, exist_ok=True)
+    (cache / "library_600x900.jpg").write_bytes(png((60, 120, 200)))
+
+
+@step(300)
+def m1():
+    l = L()
+    while l.overlays:
+        l.pop_overlay()
+    steam_home = tempfile.mkdtemp()
+    fake_steam(steam_home)
+    l.steam_home_dir = steam_home
+    l.jellyfin_get, l.tmdb_get = jf_get, tmdb_get
+    l.cfg["jellyfin"] = {"url": "http://jf:8096", "api_key": "k"}
+    l.cfg["tmdb"] = {"api_key": "a" * 32}
+    l.media_tab = "explore"
+    l.update_media(force=True)
+
+
+@step(900)
+def m2():
+    l = L()
+    check("Jellyfin in focus: Explore, Series and Films (no Games)",
+          l.media_context == "jellyfin" and [b.tab for b in l.tab_row] == ["explore", "series", "movies"])
+    check("Explore: TMDB's popular titles that are in the library, in TMDB's order",
+          [c.item["title"] for c in l.recent_cards] == ["Série em Alta", "Filme em Alta"]
+          and l.media_note.get_label() == l.t("explore_note")
+          and l.recent_cards[0].get_child().get_last_child().get_first_child().get_label() == l.t("media_kind_hot_series"))
+    l.move(0, -1)
+    l.move(0, -1)
+    check("up from Jellyfin reaches the tabs", l.win.get_focus() in l.tab_row)
+    l.tab_buttons["explore"].grab_focus()
+    l.move(1, 0)
+    check("moving onto Series shows the series", l.media_tab == "series"
+          and [c.item["title"] for c in l.recent_cards] == ["Série Dois", "Série Três"])
+    l.move(1, 0)
+    l.move(1, 0)
+    check("Films shows the films, and is the last tab", l.win.get_focus() is l.tab_buttons["movies"]
+          and [c.item["title"] for c in l.recent_cards] == ["Filme Um"])
+    moonlight = next(t for t in l.tiles if "moonlight" in t.app["id"].lower())
+    moonlight.grab_focus()
+    check("an app without a row: no tabs and no cards, the space stays",
+          l.media_context is None and l.tab_row == [] and l.recent_cards == [] and l.recent_section.get_visible())
+    steam_tile = next(t for t in l.tiles if "steam" in t.app["id"].lower())
+    steam_tile.grab_focus()
+    check("Steam in focus: only Games, the installed games, last played first",
+          [b.tab for b in l.tab_row] == ["games"] and l.media_note.get_label() == l.t("games_note")
+          and [c.item["title"] for c in l.recent_cards] == ["Portal 2", "Team Fortress 2"])
+
+
+@step(500)
+def m3():
+    l = L()
+    screenshot(l.win, "35-games-with-steam-in-focus")
+    check("the game's cover comes from Steam's own cache", l.recent_cards[0].picture.get_paintable() is not None)
+    spawned = []
+    real = l._spawn
+    l._spawn = lambda command: spawned.append(command) or True
+    l.move(0, -1)
+    check("up from Steam reaches its games", l.win.get_focus() in l.recent_cards)
+    l.recent_cards[0].grab_focus()
+    l.press()
+    l._spawn = real
+    steam_app = next(t.app for t in l.tiles if "steam" in t.app["id"].lower())
+    check("a game starts through the same Steam shortcut", spawned and spawned[0][-1] == "steam://rungameid/620"
+          and spawned[0][0] == steam_app["launch"][0])
+    # Pages: twelve films, five a page
+    from htpc.backends.base import GamepadEvent as E
+    nav = l.navigator
+    nav.active = lambda: True
+    l.tiles[0].grab_focus()
+    l.select_tab("movies")
+    l.media["movies"] = [{"id": f"f{n}", "kind": "movie", "title": f"Filme {n}"} for n in range(12)]
+    l.media_page["movies"] = 0
+    l._show_media()
+    check("five cards a page, and the note says which page", [c.item["title"] for c in l.recent_cards]
+          == [f"Filme {n}" for n in range(5)] and l.media_note.get_label().endswith(l.t("media_pages", page=1, pages=3)))
+    nav.handle(E("pad", "button", "r1", 1)); nav.handle(E("pad", "button", "r1", 0))
+    check("RB: the next five, with Jellyfin still in focus", [c.item["title"] for c in l.recent_cards]
+          == [f"Filme {n}" for n in range(5, 10)] and l.win.get_focus() is l.tiles[0])
+    nav.handle(E("pad", "button", "r1", 1)); nav.handle(E("pad", "button", "r1", 0))
+    nav.handle(E("pad", "button", "r1", 1)); nav.handle(E("pad", "button", "r1", 0))
+    check("RB on the last page stays there", [c.item["title"] for c in l.recent_cards] == ["Filme 10", "Filme 11"])
+    nav.handle(E("pad", "button", "l1", 1)); nav.handle(E("pad", "button", "l1", 0))
+    check("LB goes back", l.recent_cards[0].item["title"] == "Filme 5")
+    nav.handle(E("pad", "button", "guide", 1)); nav.handle(E("pad", "button", "l1", 1))
+    nav.handle(E("pad", "button", "r1", 1))
+    for b in ("r1", "l1", "guide"):
+        nav.handle(E("pad", "button", b, 0))
+    check("Home + LB + RB (back to the launcher) does not turn the page", l.recent_cards[0].item["title"] == "Filme 5")
+    nav.handle(E("pad", "button", "l1", 1)); nav.handle(E("pad", "button", "r1", 1))
+    nav.handle(E("pad", "button", "l1", 0)); nav.handle(E("pad", "button", "r1", 0))
+    check("nor do LB and RB together", l.recent_cards[0].item["title"] == "Filme 5")
+    l.recent_cards[2].grab_focus()
+    l.page_media(-1)
+    check("turning the page with a card in focus keeps the focus in the row", l.win.get_focus() is l.recent_cards[2]
+          and l.recent_cards[0].item["title"] == "Filme 0")
+    l.tiles[0].grab_focus()
+
+
+@step(300)
+def m4():
+    l = L()
+    screenshot(l.win, "36-films-page-1")
+    l.cfg.pop("jellyfin", None)
+    l.cfg.pop("tmdb", None)
+    l.steam_home_dir = tempfile.mkdtemp()
+    l.update_media(force=True)
+    check("nothing set up: no tabs", not l.recent_section.get_visible() and l.tab_row == [])
     l.save_config()
     l.tiles[0].grab_focus()
 

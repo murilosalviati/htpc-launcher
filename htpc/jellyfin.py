@@ -22,7 +22,7 @@ import urllib.request
 from . import __version__
 
 TIMEOUT = 6
-LATEST_LIMIT = 16
+LATEST_LIMIT = 25
 VIDEO_TYPES = "Movie,Episode,Series"
 POSTER_HEIGHT = 540      # px asked of Jellyfin for posters (2:3)
 BACKDROP_WIDTH = 1280    # px asked for the wide card's picture (16:9)
@@ -138,20 +138,60 @@ def _item(cfg, raw):
     }
 
 
-def latest(cfg, get=None, limit=LATEST_LIMIT):
-    """The newest films and series in the user's libraries, newest first."""
-    uid = user_id(cfg, get)
-    query = {"Limit": limit, "IncludeItemTypes": VIDEO_TYPES, "GroupItems": "true",
-             "Fields": "ProductionYear,RunTimeTicks,ChildCount,ParentId",
-             "EnableImageTypes": "Primary,Backdrop,Thumb", "ImageTypeLimit": 1}
+def _user_route(cfg, uid, path, query, get):
+    """/Users/{uid}{path}, or on newer servers {path}?userId= (the old route is gone there)."""
     try:
-        raw = _json(cfg, f"/Users/{urllib.parse.quote(uid)}/Items/Latest", query, get)
-    except urllib.error.HTTPError as e:   # newer servers: the route without the user in the path
+        return _json(cfg, f"/Users/{urllib.parse.quote(uid)}{path}", query, get)
+    except urllib.error.HTTPError as e:
         if e.code != 404:
             raise
-        raw = _json(cfg, "/Items/Latest", {**query, "userId": uid}, get)
+        return _json(cfg, path, {**query, "userId": uid}, get)
+
+
+def latest(cfg, get=None, limit=LATEST_LIMIT, types=VIDEO_TYPES):
+    """The newest films and series in the user's libraries, newest first.
+    types: "Movie" for films only, "Episode,Series" for series only."""
+    uid = user_id(cfg, get)
+    query = {"Limit": limit, "IncludeItemTypes": types, "GroupItems": "true",
+             "Fields": "ProductionYear,RunTimeTicks,ChildCount,ParentId",
+             "EnableImageTypes": "Primary,Backdrop,Thumb", "ImageTypeLimit": 1}
+    raw = _user_route(cfg, uid, "/Items/Latest", query, get)
     items = [_item(cfg, r) for r in raw or []]
     return [i for i in items if i]
+
+
+def library(cfg, get=None):
+    """{("movie" | "tv", tmdb id): raw item} for every film and series the user
+    can see, from the TMDB ids Jellyfin keeps for them."""
+    uid = user_id(cfg, get)
+    query = {"Recursive": "true", "IncludeItemTypes": "Movie,Series",
+             "Fields": "ProviderIds,ProductionYear,RunTimeTicks,ChildCount",
+             "EnableImageTypes": "Primary,Backdrop,Thumb", "ImageTypeLimit": 1,
+             "EnableTotalRecordCount": "false", "EnableUserData": "false"}
+    raw = _user_route(cfg, uid, "/Items", query, get)
+    index = {}
+    for item in (raw or {}).get("Items", []):
+        ids = {k.lower(): v for k, v in (item.get("ProviderIds") or {}).items()}
+        if ids.get("tmdb"):
+            index.setdefault(("movie" if item.get("Type") == "Movie" else "tv", str(ids["tmdb"])), item)
+    return index
+
+
+def explore(cfg, ranking, get=None, limit=LATEST_LIMIT):
+    """What is popular (ranking: [(kind, tmdb id)] best first, from tmdb.py)
+    and is in the library, in that order."""
+    index = library(cfg, get)
+    found = []
+    for key in ranking:
+        raw = index.get(key)
+        if raw is not None:
+            item = _item(cfg, raw)
+            if item:
+                item["new_count"] = None   # "Explore" is not about what's new
+                found.append(item)
+            if len(found) >= limit:
+                break
+    return found
 
 
 def image(cfg, url, get=None):
