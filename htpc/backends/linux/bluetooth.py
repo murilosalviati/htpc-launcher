@@ -10,9 +10,9 @@ with the NoInputNoOutput capability, which is what they expect.
 
 import logging
 import os
-import threading
 
 from ..base import BluetoothDevice, Bluetooth
+from .dbus import DBusAddress, DBusClient
 
 log = logging.getLogger("htpc")
 
@@ -82,32 +82,17 @@ def _plain(props):
 
 class BluezBluetooth(Bluetooth):
     def __init__(self, bus="SYSTEM", sysfs="/sys/class/bluetooth"):
-        self.bus = bus
         # Adapters the kernel knows about. Checked first: without one, BlueZ is not
         # running and asking it over D-Bus waits for it to start (and time out).
         self.sysfs = sysfs
-        self._conn = None
-        self._lock = threading.RLock()
+        # Discovery stays on while this connection is open; close() ends it.
+        self.dbus = DBusClient(bus)
 
     # --- D-Bus plumbing -----------------------------------------------------------------
 
-    def _connection(self):
-        from jeepney.io.blocking import open_dbus_connection
-        if self._conn is None:
-            self._conn = open_dbus_connection(bus=self.bus)
-        return self._conn
-
     def _call(self, path, interface, method, signature=None, body=(), timeout=CALL_TIMEOUT):
-        from jeepney import DBusAddress, new_method_call
-        from jeepney.wrappers import unwrap_msg
-        with self._lock:
-            try:
-                msg = new_method_call(DBusAddress(path, bus_name=BLUEZ, interface=interface),
-                                      method, signature, body)
-                return unwrap_msg(self._connection().send_and_get_reply(msg, timeout=timeout))
-            except (ConnectionError, OSError):
-                self.close()
-                raise
+        return self.dbus.call(DBusAddress(path, bus_name=BLUEZ, interface=interface),
+                              method, signature, body, timeout)
 
     def _set(self, path, interface, name, signature, value):
         self._call(path, "org.freedesktop.DBus.Properties", "Set", "ssv",
@@ -117,13 +102,7 @@ class BluezBluetooth(Bluetooth):
         return self._call("/", "org.freedesktop.DBus.ObjectManager", "GetManagedObjects")[0]
 
     def close(self):
-        with self._lock:
-            if self._conn is not None:
-                try:
-                    self._conn.close()
-                except Exception:  # noqa: BLE001
-                    pass
-            self._conn = None
+        self.dbus.reset()
 
     # --- Bluetooth ----------------------------------------------------------------------
 

@@ -10,15 +10,16 @@ back to.
 
 import logging
 import os
-import threading
 import xml.etree.ElementTree as ET
 
 from ..base import Display, DisplayMode
+from .dbus import DBusAddress, DBusClient
 
 log = logging.getLogger("htpc")
 
 BUS = "org.gnome.Mutter.DisplayConfig"
 PATH = "/org/gnome/Mutter/DisplayConfig"
+MUTTER = DBusAddress(PATH, bus_name=BUS, interface=BUS)
 TEMPORARY = 1
 
 
@@ -49,24 +50,11 @@ def saved_modes(path=None):
 
 class MutterDisplay(Display):
     def __init__(self, bus="SESSION", monitors_xml=None):
-        self.bus = bus
         self.monitors_xml = monitors_xml
-        self._conn = None
-        self._lock = threading.Lock()
+        self.dbus = DBusClient(bus)
 
     def _call(self, method, signature=None, body=()):
-        from jeepney import DBusAddress, new_method_call
-        from jeepney.io.blocking import open_dbus_connection
-        from jeepney.wrappers import unwrap_msg
-        with self._lock:
-            try:
-                if self._conn is None:
-                    self._conn = open_dbus_connection(bus=self.bus)
-                msg = new_method_call(DBusAddress(PATH, bus_name=BUS, interface=BUS), method, signature, body)
-                return unwrap_msg(self._conn.send_and_get_reply(msg, timeout=5))
-            except (ConnectionError, OSError):
-                self._conn = None
-                raise
+        return self.dbus.call(MUTTER, method, signature, body, timeout=5)
 
     def _state(self):
         serial, monitors, logical, _props = self._call("GetCurrentState")

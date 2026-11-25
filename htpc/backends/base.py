@@ -154,6 +154,12 @@ class Gamepads(ABC):
         """Wait up to `timeout` seconds and return a list of GamepadEvent.
         Also picks up gamepads that were plugged in or removed."""
 
+    def fds(self):
+        """File descriptors a main loop can wait on instead of calling poll()
+        regularly: when one is readable, call poll(0). None (the default) when the
+        backend can't offer that; then poll() must be called regularly."""
+        return None
+
     def flush(self):
         """Throw away the input that piled up while nobody called poll() (the
         launcher stops reading while an app is in front), so it is not acted on later."""

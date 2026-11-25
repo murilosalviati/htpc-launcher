@@ -21,7 +21,6 @@ media) comes from the backend for the running OS (htpc.backends).
 import logging
 import os
 import sys
-import time
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -34,6 +33,7 @@ from htpc.backends import get_backend  # noqa: E402
 from htpc.home_assistant import AppEvents, HomeAssistant, TvGate  # noqa: E402
 from htpc.notifications import Notifier  # noqa: E402
 from htpc.shortcuts import GamepadShortcuts, Shortcuts  # noqa: E402
+from htpc.timing import Throttle  # noqa: E402
 
 log = logging.getLogger("htpc-controller")
 
@@ -53,7 +53,9 @@ def run(backend, poll_timeout=2.0):
     tv = TvGate(home_assistant.settings, home_assistant.wake)
     tv.start()
     events = AppEvents(backend.window_control(), backend.media(), home_assistant.settings)
-    last_slow = None
+    # The rest reads D-Bus and sysfs: at most every SLOW_EVERY seconds, not on
+    # every batch of events.
+    slow = Throttle(SLOW_EVERY)
     while True:
         for event in gamepads.poll(handler.timeout(poll_timeout)):
             try:
@@ -70,12 +72,8 @@ def run(backend, poll_timeout=2.0):
             handler.tick()   # holding a volume combo keeps changing it
         except Exception as e:  # noqa: BLE001
             log.warning("repeat: %s", e)
-        # The rest reads D-Bus and sysfs: at most every SLOW_EVERY seconds, not on
-        # every batch of events (a moving stick sends hundreds a second).
-        now = time.monotonic()
-        if last_slow is not None and now - last_slow < SLOW_EVERY:
+        if not slow.ready():
             continue
-        last_slow = now
         for job in (notifier.tick, home_assistant.tick, events.tick):
             try:
                 job()

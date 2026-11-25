@@ -991,14 +991,18 @@ def bg1():
     real_flush = nav.gamepads.flush
     nav.gamepads.flush = lambda: flushed.append(True)
     nav.listen(True)
-    running = bool(nav.timer)
+    reading = lambda: bool(nav.timer) or bool(nav.watches)   # a timer, or fds GLib waits on
+    running = nav.listening and reading()
     nav.held["pad"] = "a"
     nav.listen(False)
-    stopped = nav.timer == 0
+    stopped = not nav.listening and not reading()
     nav.listen(True)
     check("behind an app the launcher stops reading the gamepads; back in front it drops what was "
           "pressed meanwhile and reads again",
-          running and stopped and nav.timer != 0 and flushed and nav.held == {})
+          running and stopped and nav.listening and reading() and flushed and nav.held == {})
+    fds = nav.gamepads.fds()
+    check("with inotify the launcher waits on the gamepads' fds instead of polling every 16 ms",
+          fds is None or (not nav.timer and set(nav.watches) == set(fds)))
     nav.gamepads.flush = real_flush
 
 

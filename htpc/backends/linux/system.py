@@ -11,9 +11,11 @@ import select
 import shutil
 import signal
 import subprocess
+import threading
 import time
 
 from ..base import System
+from .dbus import DBusAddress, DBusClient
 
 log = logging.getLogger("htpc")
 
@@ -174,27 +176,82 @@ class LinuxSystem(System):
     def connectivity(self):
         return self.CONNECTIVITY.get(self._nm_property("Connectivity"))
 
-    def _nm_primary_type(self):
-        return self._nm_property("PrimaryConnectionType")
-
     def _nm_property(self, name):
-        try:
-            from jeepney import DBusAddress, Properties
-            from jeepney.io.blocking import open_dbus_connection
-            from jeepney.wrappers import unwrap_msg
-            if getattr(self, "_nm", None) is None:
-                self._nm = open_dbus_connection(bus="SYSTEM")
-            addr = DBusAddress("/org/freedesktop/NetworkManager",
-                               bus_name="org.freedesktop.NetworkManager",
-                               interface="org.freedesktop.NetworkManager")
-            reply = self._nm.send_and_get_reply(Properties(addr).get(name), timeout=1)
-            return unwrap_msg(reply)[0][1]
-        except Exception as e:  # no NetworkManager, no system bus...
-            if getattr(self, "_nm", None) is not None:
-                try:
-                    self._nm.close()
-                except Exception:
-                    pass
-            self._nm = None
+        watch = NetworkWatch.shared()
+        if watch.live:
+            return watch.values.get(name)
+        try:   # the watch is not running (yet): ask
+            return _nm_client().get(NM, name, timeout=1)
+        except Exception as e:  # noqa: BLE001 - no NetworkManager, no system bus...
             log.debug("NetworkManager not reachable: %s", e)
             return None
+
+
+# --- NetworkManager ----------------------------------------------------------------------
+
+NM = DBusAddress("/org/freedesktop/NetworkManager", bus_name="org.freedesktop.NetworkManager",
+                 interface="org.freedesktop.NetworkManager")
+_nm = None
+
+
+def _nm_client():
+    global _nm
+    if _nm is None:
+        _nm = DBusClient("SYSTEM")
+    return _nm
+
+
+class NetworkWatch:
+    """NetworkManager's connectivity and connection type, kept up to date by its
+    PropertiesChanged signal, in a thread of its own: one per process, started on
+    first use. Asking only when something changed, instead of every few seconds.
+    While it is not running (no NetworkManager yet, a lost bus), `live` is False
+    and LinuxSystem asks directly; it tries again every RETRY seconds."""
+
+    PROPERTIES = ("Connectivity", "PrimaryConnectionType")
+    RETRY = 30.0
+    _shared = None
+    _shared_lock = threading.Lock()
+
+    @classmethod
+    def shared(cls):
+        with cls._shared_lock:
+            if cls._shared is None:
+                cls._shared = cls()
+                threading.Thread(target=cls._shared.run, daemon=True, name="network-watch").start()
+            return cls._shared
+
+    def __init__(self):
+        self.values = {}
+        self.live = False
+
+    def run(self):
+        while True:
+            try:
+                self._watch()
+            except Exception as e:  # noqa: BLE001 - no NetworkManager, bus gone...
+                log.debug("network watch: %s", e)
+            self.live = False
+            time.sleep(self.RETRY)
+
+    def _watch(self):
+        from jeepney import MatchRule, Properties
+        from jeepney.bus_messages import message_bus
+        from jeepney.io.blocking import open_dbus_connection
+        from jeepney.wrappers import unwrap_msg
+        rule = MatchRule(type="signal", sender=NM.bus_name, path=NM.object_path,
+                         interface="org.freedesktop.DBus.Properties", member="PropertiesChanged")
+        rule.add_arg_condition(0, NM.interface)
+        with open_dbus_connection(bus="SYSTEM") as conn:
+            unwrap_msg(conn.send_and_get_reply(message_bus.AddMatch(rule), timeout=2))
+            # Listening first, then reading: a change in between is not lost.
+            with conn.filter(rule, bufsize=32) as queue:
+                for name in self.PROPERTIES:
+                    self.values[name] = unwrap_msg(
+                        conn.send_and_get_reply(Properties(NM).get(name), timeout=2))[0][1]
+                self.live = True
+                while True:
+                    _interface, changed, _invalidated = conn.recv_until_filtered(queue).body
+                    for name in self.PROPERTIES:
+                        if name in changed:
+                            self.values[name] = changed[name][1]

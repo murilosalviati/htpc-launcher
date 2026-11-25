@@ -28,7 +28,6 @@ Keyboard: arrows move, Enter selects, Esc goes back.
 
 import os
 import sys
-import threading
 import time
 from pathlib import Path
 
@@ -59,6 +58,7 @@ from htpc import config, home_assistant, paths, shortcuts, themes, weather  # no
 from htpc.backends import get_backend  # noqa: E402
 from htpc.backends.base import STICK_DEAD_ZONE, pick_mode  # noqa: E402
 from htpc.i18n import Translator  # noqa: E402
+from background import in_background  # noqa: E402
 from editor import EditorMixin  # noqa: E402
 from settings import SettingsMixin  # noqa: E402
 
@@ -101,7 +101,8 @@ class Navigator:
     DEAD_ZONE = STICK_DEAD_ZONE  # how far the stick must go to count as a press
     REPEAT_AFTER = 0.40   # holding a direction repeats after this...
     REPEAT_EVERY = 0.14   # ...at this pace
-    POLL_MS = 16          # how often to read the gamepads (about 60 times a second)
+    POLL_MS = 16          # without file descriptors to wait on: read about 60 times a second
+    BROKEN = GLib.IOCondition.HUP | GLib.IOCondition.ERR | GLib.IOCondition.NVAL
     DIRECTIONS = {"left": (-1, 0), "right": (1, 0), "up": (0, -1), "down": (0, 1)}
 
     def __init__(self, gamepads, active, move, press, back, other_button, blocked=lambda: False):
@@ -114,34 +115,71 @@ class Navigator:
         self.stick = {}         # (device, axis) -> -1 / 0 / 1
         self.direction = None   # (dx, dy) being held
         self.repeat = 0
-        self.timer = 0
+        self.listening = False
+        self.watches = {}       # fd -> GLib source: the gamepads and /dev/input, while listening
+        self.timer = 0          # the polling timer instead, when the backend has no fds
         if not gamepads.available():
             log("gamepads not available (is python3-evdev installed?): keyboard only")
             return
         self.listen(True)
 
     def listen(self, on):
-        """Read the gamepads (about 60 times a second) only while the launcher is in
-        front. Behind an app there is nothing for it to do (the controller service
-        has the shortcuts), and polling would wake it up all through a film or game."""
-        if not self.gamepads.available() or bool(on) == bool(self.timer):
+        """Read the gamepads only while the launcher is in front. Behind an app there
+        is nothing for it to do (the controller service has the shortcuts)."""
+        on = bool(on)
+        if not self.gamepads.available() or on == self.listening:
             return
+        self.listening = on
         if not on:
-            GLib.source_remove(self.timer)
-            self.timer = 0
+            self._unwatch()
             self._hold(None)
             return
         # What was pressed inside the app (A in Jellyfin...) must not act here now.
         self.gamepads.flush()
         self.held.clear()
         self.stick.clear()
-        self.timer = GLib.timeout_add(self.POLL_MS, self._poll)
         self._poll()   # also picks up gamepads plugged in meanwhile, for the top bar
 
     def _poll(self):
         for ev in self.gamepads.poll(0):
             self.handle(ev)
+        self._watch()
         return True
+
+    def _watch(self):
+        """Have GLib wake us when a gamepad has input or one is plugged in: nothing
+        runs while nobody touches the gamepad. Without file descriptors from the
+        backend, read it about 60 times a second instead."""
+        if not self.listening:
+            return
+        fds = self.gamepads.fds()
+        if fds is None:
+            if not self.timer:
+                self.timer = GLib.timeout_add(self.POLL_MS, self._poll)
+            return
+        wanted = set(fds)
+        for fd in [fd for fd in self.watches if fd not in wanted]:
+            GLib.source_remove(self.watches.pop(fd))   # a gamepad that went away
+        for fd in wanted - self.watches.keys():
+            self.watches[fd] = GLib.unix_fd_add_full(
+                GLib.PRIORITY_DEFAULT, fd, GLib.IOCondition.IN | self.BROKEN, self._readable)
+
+    def _readable(self, fd, condition):
+        self._poll()
+        if condition & self.BROKEN and fd in self.watches:
+            # Still there after reading it: stop watching it rather than wake up
+            # again and again (the next rescan drops a gamepad that is gone).
+            del self.watches[fd]
+            return False
+        return True
+
+    def _unwatch(self):
+        if self.timer:
+            GLib.source_remove(self.timer)
+            self.timer = 0
+        for source in self.watches.values():
+            GLib.source_remove(source)
+        self.watches.clear()
 
     def handle(self, ev):
         if self.capture is not None and ev.kind in ("button", "disconnected"):
@@ -708,7 +746,7 @@ class Launcher(EditorMixin, SettingsMixin):
         self.battery_box.set_visible(bool(batteries))
 
     def _update_gamepads(self):
-        """The gamepad list is kept up to date by the Navigator's polling (every 2 s)."""
+        """The gamepad list is kept up to date by the Navigator (it reads the gamepads)."""
         self._update_batteries()
         n = len(self.gamepads.connected())
         if n != self.gamepad_count:
@@ -733,15 +771,9 @@ class Launcher(EditorMixin, SettingsMixin):
             return False
         unit = self.cfg.get("temperature_unit", "celsius")
         fetch = self.weather_fetch
-
-        def work():
-            try:
-                result = weather.current(place["latitude"], place["longitude"], unit, fetch)
-            except Exception as e:  # noqa: BLE001 - any failure just means "try later"
-                result = e
-            GLib.idle_add(self._weather_arrived, place, unit, result)
-
-        threading.Thread(target=work, daemon=True).start()
+        # Any failure just means "try later" (_weather_arrived gets the exception).
+        in_background(lambda: weather.current(place["latitude"], place["longitude"], unit, fetch),
+                      lambda result: self._weather_arrived(place, unit, result))
         return False
 
     def _weather_arrived(self, place, unit, result):

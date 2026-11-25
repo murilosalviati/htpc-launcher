@@ -10,37 +10,28 @@ session bus (org.htpc.Launcher at /org/htpc/Launcher).
 import json
 import logging
 
-from jeepney import DBusAddress, new_method_call
-from jeepney.io.blocking import open_dbus_connection
-from jeepney.wrappers import DBusErrorResponse, unwrap_msg
-
 from ..base import Window, WindowControl
+from .dbus import DBusAddress, DBusClient, DBusErrorResponse
 
 log = logging.getLogger("htpc")
 
 LAUNCHER_ID = "htpc-launcher"
+EXTENSION = DBusAddress("/org/htpc/Launcher", bus_name="org.htpc.Launcher", interface="org.htpc.Launcher")
 
 
 class ExtensionWindowControl(WindowControl):
     def __init__(self):
-        self.conn = None
-        self.addr = DBusAddress("/org/htpc/Launcher", bus_name="org.htpc.Launcher",
-                                interface="org.htpc.Launcher")
+        self.dbus = DBusClient("SESSION")
 
     def _call(self, method, signature=None, args=()):
         """The method's first return value, or None if the extension could not be reached."""
         try:
-            if self.conn is None:
-                self.conn = open_dbus_connection(bus="SESSION")
-            msg = new_method_call(self.addr, method, signature, args)
-            return unwrap_msg(self.conn.send_and_get_reply(msg, timeout=2))[0]
+            return self.dbus.call(EXTENSION, method, signature, args)[0]
         except DBusErrorResponse as e:
             log.warning("GNOME extension refused %s: %s", method, e)
-            return None
-        except Exception as e:  # bus gone, timeout...
+        except Exception as e:  # noqa: BLE001 - bus gone, timeout...
             log.warning("GNOME extension did not answer %s: %s", method, e)
-            self.conn = None
-            return None
+        return None
 
     def windows(self):
         data = self._call("ListWindows")

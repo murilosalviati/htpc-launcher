@@ -20,6 +20,7 @@ import threading
 import time
 
 from . import config
+from .timing import Throttle
 
 # Both combos can be changed in Settings → Gamepad shortcuts ("shortcuts" in apps.json).
 DEFAULT_COMBOS = {
@@ -115,7 +116,7 @@ class Shortcuts:
         self.system = backend.system()
         self.media = backend.media()
         self._windows = None
-        self.last_action = 0.0
+        self.action = Throttle(MIN_INTERVAL)   # Steam's virtual pad may repeat a combo
         self.first_press = 0.0
 
     @property
@@ -123,13 +124,6 @@ class Shortcuts:
         if self._windows is None:
             self._windows = self.backend.window_control()
         return self._windows
-
-    def _ready(self):
-        now = time.monotonic()
-        if now - self.last_action < MIN_INTERVAL:
-            return False
-        self.last_action = now
-        return True
 
     def settings(self):
         """apps.json, or the last one that could be read (a broken file must not
@@ -193,7 +187,7 @@ class Shortcuts:
             log.debug("volume indicator: %s", e)
 
     def guide(self):
-        if not self._ready():
+        if not self.action.ready():
             return
         # Asking GNOME and pausing players can take a moment (a stuck player waits
         # for its timeout): not on the thread that reads the gamepads.
@@ -221,7 +215,7 @@ class Shortcuts:
             log.error("guide failed: %s", e)
 
     def close(self):
-        if not self._ready():
+        if not self.action.ready():
             return
         cfg, window = self._context()
         if window is None or is_launcher(cfg, window):
@@ -280,12 +274,10 @@ class GamepadShortcuts:
         self.clock = clock
         self.held = {}  # device -> set of button names
         self.repeat = None  # (device, direction, combo, when) while a volume combo is held
-        self.pointer_hidden_at = -POINTER_EVERY
+        self.pointer = Throttle(POINTER_EVERY)
 
     def _hide_pointer(self):
-        now = time.monotonic()
-        if now - self.pointer_hidden_at >= POINTER_EVERY:
-            self.pointer_hidden_at = now
+        if self.pointer.ready():
             try:
                 self.shortcuts.windows.hide_pointer()
             except Exception as e:  # noqa: BLE001 - never let this stop the shortcuts

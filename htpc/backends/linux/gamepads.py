@@ -6,9 +6,11 @@ The devices are read without grabbing them, so the apps still get every button.
 A logged-in user can read gamepads without extra groups (udev's uaccess rule).
 """
 
+import ctypes
 import logging
 import os
 import select
+import struct
 import time
 
 from ..base import STICK_DEAD_ZONE, Battery, GamepadEvent, Gamepads
@@ -21,7 +23,8 @@ except ImportError:  # the launcher still works with a keyboard
 
 log = logging.getLogger("htpc")
 
-RESCAN_INTERVAL = 2.0
+RESCAN_INTERVAL = 2.0   # without inotify: how often to look for new gamepads
+INPUT_DIR = "/dev/input"
 POWER_SUPPLY = "/sys/class/power_supply"
 LEVELS = {"full": "full", "high": "high", "normal": "normal", "low": "low", "critical": "critical"}
 
@@ -32,6 +35,57 @@ def _read(path):
             return f.read().strip()
     except OSError:
         return ""
+
+
+class DirWatch:
+    """inotify on a folder: the entries that were created, removed or had their
+    permissions changed. Raises OSError where inotify can't be used."""
+
+    IN_ATTRIB, IN_CREATE, IN_DELETE, IN_Q_OVERFLOW = 0x4, 0x100, 0x200, 0x4000
+    IN_NONBLOCK, IN_CLOEXEC = 0o4000, 0o2000000
+    EVENT = struct.Struct("iIII")   # struct inotify_event, then `len` bytes of name
+
+    def __init__(self, path):
+        libc = ctypes.CDLL(None, use_errno=True)
+        fd = libc.inotify_init1(self.IN_NONBLOCK | self.IN_CLOEXEC)
+        if fd < 0:
+            raise OSError(ctypes.get_errno(), "inotify_init1 failed")
+        if libc.inotify_add_watch(fd, os.fsencode(path), self.IN_ATTRIB | self.IN_CREATE | self.IN_DELETE) < 0:
+            error = ctypes.get_errno()
+            os.close(fd)
+            raise OSError(error, f"can't watch {path}")
+        self.fd = fd
+
+    def changes(self):
+        """The names that changed since the last call, or None if the kernel had to
+        drop some (then anything may have changed)."""
+        names, overflow = set(), False
+        while True:
+            try:
+                data = os.read(self.fd, 64 * 1024)
+            except BlockingIOError:
+                break
+            if not data:
+                break
+            found, dropped = self.parse(data)
+            names |= found
+            overflow |= dropped
+        return None if overflow else names
+
+    @classmethod
+    def parse(cls, data):
+        """(set of names, overflowed) from a buffer of inotify events."""
+        names, overflow, offset = set(), False, 0
+        while offset + cls.EVENT.size <= len(data):
+            _wd, mask, _cookie, length = cls.EVENT.unpack_from(data, offset)
+            start = offset + cls.EVENT.size
+            name = data[start:start + length].split(b"\0", 1)[0]
+            offset = start + length
+            if mask & cls.IN_Q_OVERFLOW:
+                overflow = True
+            elif name:
+                names.add(os.fsdecode(name))
+        return names, overflow
 
 
 def device_batteries(root=POWER_SUPPLY):
@@ -115,7 +169,9 @@ class EvdevGamepads(Gamepads):
         self.hats = {}       # (path, hat axis) -> -1 / 0 / 1
         self.sticks = {}     # (path, stick axis) -> -1 / 0 / 1: which side of the dead zone
         self.ranges = {}     # (path, stick axis) -> (middle, half): absinfo never changes
-        self.next_scan = 0.0
+        self.next_scan = 0.0     # without inotify: when to look for new gamepads again
+        self.watch = None        # DirWatch on /dev/input; False when it can't be used
+        self.rescan_due = True   # with the watch: look once at start, then on changes
         self.virtual = {}    # path -> made by software (not counted in connected())
         self.sysfs = {}      # path -> the input device's real sysfs path
         self.xbox_codes = {} # path -> X/Y come swapped (Xbox-style driver)
@@ -254,23 +310,65 @@ class EvdevGamepads(Gamepads):
         self.hats.clear()
         self.sticks.clear()
 
+    # --- hotplug: inotify on /dev/input, or a look every RESCAN_INTERVAL without it ------
+
+    def _hotplug(self):
+        """The DirWatch on /dev/input, or None when inotify can't be used here."""
+        if self.watch is None:
+            try:
+                self.watch = DirWatch(INPUT_DIR)
+            except (OSError, AttributeError) as e:   # no inotify, no /dev/input...
+                log.info("can't watch %s (%s): looking for gamepads every %.0f s",
+                         INPUT_DIR, e, RESCAN_INTERVAL)
+                self.watch = False
+        return self.watch or None
+
+    def _input_changed(self, names, events):
+        """Entries of /dev/input appeared, went or changed permissions. One we could
+        not open may be readable now: udev grants access a moment after a gamepad
+        appears, so the first try can fail."""
+        if names is None:
+            self.ignored.clear()   # the kernel dropped events: anything may have changed
+        else:
+            self.ignored -= {f"{INPUT_DIR}/{n}" for n in names}   # as evdev.list_devices() names them
+        self._rescan(events)
+
+    def fds(self):
+        """File descriptors a main loop can wait on (when one is readable, call
+        poll(0)): the gamepads and the /dev/input watch. None without inotify: then
+        poll() must be called regularly to notice new gamepads."""
+        if evdev is None or self._hotplug() is None:
+            return None
+        return [self.watch.fd, *(dev.fd for dev in self.devs.values())]
+
     def poll(self, timeout):
         if evdev is None:
             time.sleep(timeout)
             return []
         events = []
-        if time.monotonic() >= self.next_scan:
-            self._rescan(events)
-            self.next_scan = time.monotonic() + RESCAN_INTERVAL
-        if not self.devs:
-            time.sleep(min(timeout, max(0.0, self.next_scan - time.monotonic())))
-            return events
+        watch = self._hotplug()
+        if watch is not None:
+            if self.rescan_due:   # the first look; after that, only when /dev/input changes
+                self.rescan_due = False
+                self._rescan(events)
+        else:
+            if time.monotonic() >= self.next_scan:
+                self._rescan(events)
+                self.next_scan = time.monotonic() + RESCAN_INTERVAL
+            timeout = min(timeout, max(0.0, self.next_scan - time.monotonic()))
         by_fd = {dev.fd: path for path, dev in self.devs.items()}
+        waiting = list(by_fd) + ([watch.fd] if watch is not None else [])
+        if not waiting:
+            time.sleep(timeout)
+            return events
         try:
-            ready, _, _ = select.select(list(by_fd), [], [], timeout)
+            ready, _, _ = select.select(waiting, [], [], timeout)
         except (OSError, ValueError):
             ready = list(by_fd)  # a closed fd: reading it will remove the device
         for fd in ready:
+            if watch is not None and fd == watch.fd:
+                self._input_changed(watch.changes(), events)
+                continue
             path = by_fd[fd]
             dev = self.devs.get(path)
             try:

@@ -37,6 +37,7 @@ gi.require_version("Gtk", "4.0")
 from gi.repository import GLib, Gtk  # noqa: E402
 
 from htpc import __version__, home_assistant, shortcuts, updates, weather  # noqa: E402
+from background import in_background  # noqa: E402
 
 
 def log(*args):
@@ -94,7 +95,7 @@ class SettingsMixin:
                 self.audio_current = next((o.name for o in result if o.current), None)
                 self.refresh_settings()
 
-        self._bt(self.audio.outputs, current_output)
+        self._background(self.audio.outputs, current_output)
 
     def refresh_settings(self):
         f = getattr(self, "settings_fields", None)
@@ -172,7 +173,7 @@ class SettingsMixin:
         a = getattr(self, "audio_menu", None)
         if a is None:
             return
-        self._bt(self.audio.outputs, lambda result: self._audio_listed(a, result))
+        self._background(self.audio.outputs, lambda result: self._audio_listed(a, result))
 
     def _audio_listed(self, a, result):
         if self.audio_menu is not a:
@@ -212,7 +213,7 @@ class SettingsMixin:
                 self._message(self.t("audio_error", error=self._reason(result)))
             self.refresh_audio()
 
-        self._bt(lambda: self.audio.set_output(output.id), done)
+        self._background(lambda: self.audio.set_output(output.id), done)
 
     # --- updates -------------------------------------------------------------------------
 
@@ -259,8 +260,8 @@ class SettingsMixin:
                 f["flatpak"].value.set_label(self.t("updates_apps", count=len(result)) if result
                                              else self.t("updates_none"))
 
-        self._bt(lambda: updates.latest_release(get), release_arrived)
-        self._bt(lambda: updates.flatpak_updates(run), flatpaks_arrived)
+        self._background(lambda: updates.latest_release(get), release_arrived)
+        self._background(lambda: updates.flatpak_updates(run), flatpaks_arrived)
 
     def _update_launcher(self):
         release = (getattr(self, "update_state", None) or {}).get("release")
@@ -281,28 +282,35 @@ class SettingsMixin:
                 self.pop_overlay()
         return close
 
-    def _start_task(self, name):
-        """True if the long task `name` may start now (it isn't running already)."""
+    def _background(self, job, done, task=None, busy=None):
+        """Run job() off the UI thread; done(result or exception) on the main loop.
+
+        task: a name; while a job with that name runs, another is refused (returns
+        False), so a second press can't start a second install.
+        busy: a text shown in a "please wait" box until the job is done."""
         running = self.__dict__.setdefault("tasks_running", set())
-        if name in running:
-            log(name, "is already running")
-            return False
-        running.add(name)
+        if task is not None:
+            if task in running:
+                if busy:
+                    log(task, "is already running")
+                return False
+            running.add(task)
+        close_busy = self._busy(busy) if busy else None
+
+        def finished(result):
+            running.discard(task)
+            if close_busy:
+                close_busy()
+            done(result)
+
+        in_background(job, finished)
         return True
 
-    def _end_task(self, name):
-        self.__dict__.setdefault("tasks_running", set()).discard(name)
-
     def _install_release(self, release):
-        if not self._start_task("install"):
-            return
-        done_busy = self._busy(self.t("updates_installing", version=release["version"]))
         fetch = getattr(self, "updates_fetch", None)
         run = getattr(self, "updates_run", None)
 
         def done(result):
-            self._end_task("install")
-            done_busy()
             if isinstance(result, Exception):
                 self._message(self.t("updates_install_failed"), self._reason(result))
                 return
@@ -311,7 +319,8 @@ class SettingsMixin:
                          (self.t("updates_restart_text") + " " + note).strip(),
                          self.t("updates_restart_now"), self.restart_launcher, danger=False)
 
-        self._bt(lambda: updates.install_release(release, fetch=fetch, run=run), done)
+        self._background(lambda: updates.install_release(release, fetch=fetch, run=run), done,
+                         task="install", busy=self.t("updates_installing", version=release["version"]))
 
     def restart_launcher(self):
         """Start a new launcher (the updated one) and quit this one."""
@@ -329,14 +338,9 @@ class SettingsMixin:
                      self._run_flatpak_update, danger=False)
 
     def _run_flatpak_update(self):
-        if not self._start_task("flatpak"):
-            return
-        done_busy = self._busy(self.t("updates_updating_apps"))
         run = getattr(self, "updates_run", None)
 
         def done(result):
-            self._end_task("flatpak")
-            done_busy()
             if isinstance(result, Exception):
                 self._message(self.t("updates_install_failed"), self._reason(result))
                 return
@@ -346,33 +350,20 @@ class SettingsMixin:
                 self.update_fields["flatpak"].value.set_label(self.t("updates_none"))
             self._message(self.t("updates_apps_done"))
 
-        self._bt(lambda: updates.flatpak_update(run), done)
+        self._background(lambda: updates.flatpak_update(run), done,
+                         task="flatpak", busy=self.t("updates_updating_apps"))
 
     # --- pairing gamepads over Bluetooth -------------------------------------------------
 
     PAIRING_REFRESH_MS = 2000
     PAIRING_ROWS = 5
 
-    def _bt(self, job, done):
-        """Run a Bluetooth call off the UI thread; done(result or exception) on the main loop."""
-        def work():
-            try:
-                result = job()
-            except Exception as e:  # noqa: BLE001 - shown to the user
-                result = e
-            GLib.idle_add(lambda: (done(result), False)[1])
-
-        threading.Thread(target=work, daemon=True).start()
-
     def open_pairing(self, kind="gamepad"):
         """kind: "gamepad" or "audio" (headphones, speakers): what the list shows."""
-        if getattr(self, "pairing", None) is not None or not self._start_task("bluetooth"):
+        if getattr(self, "pairing", None) is not None:
             return
-        done_busy = self._busy(self.t("pairing_checking"))
 
         def started(result):
-            self._end_task("bluetooth")
-            done_busy()
             if result is False:
                 self._message(self.t("pairing_no_adapter"), self.t("pairing_no_adapter_text"))
             elif isinstance(result, Exception):
@@ -386,7 +377,7 @@ class SettingsMixin:
             self.bluetooth.start_search()
             return True
 
-        self._bt(start, started)
+        self._background(start, started, task="bluetooth", busy=self.t("pairing_checking"))
 
     def _show_pairing(self, kind="gamepad"):
         if kind == "audio":
@@ -429,7 +420,9 @@ class SettingsMixin:
         if p is None:
             return False
         if not p["busy"]:
-            self._bt(self.bluetooth.devices, lambda result: self._pairing_list(p, result))
+            # task: a slow BlueZ must not pile up one listing thread every refresh
+            self._background(self.bluetooth.devices, lambda result: self._pairing_list(p, result),
+                             task="pairing-list")
         return True
 
     def _pairing_list(self, p, result):
@@ -497,7 +490,7 @@ class SettingsMixin:
                 if getattr(self, "audio_menu", None) is not None:
                     GLib.timeout_add(2500, lambda: (self.refresh_audio(), False)[1])
 
-        self._bt(lambda: self.bluetooth.pair(device.address), done)
+        self._background(lambda: self.bluetooth.pair(device.address), done)
 
     def _pairing_forget(self, device):
         def forget():
@@ -509,7 +502,7 @@ class SettingsMixin:
                 if isinstance(result, Exception):
                     self._message(self.t("pairing_error", error=self._reason(result)))
 
-            self._bt(lambda: self.bluetooth.forget(device.address), done)
+            self._background(lambda: self.bluetooth.forget(device.address), done)
 
         self.confirm(self.t("pairing_forget_title", name=device.name), self.t("pairing_forget_text"),
                      self.t("pairing_forget"), forget)
@@ -794,14 +787,7 @@ class SettingsMixin:
                 done(result)
             return False
 
-        def work():
-            try:
-                result = job()
-            except Exception as e:  # noqa: BLE001 - shown to the user
-                result = e
-            GLib.idle_add(arrived, result)
-
-        threading.Thread(target=work, daemon=True).start()
+        in_background(job, arrived)
 
     @staticmethod
     def _reason(error):
@@ -915,15 +901,8 @@ class SettingsMixin:
         box.append(cancel)
         self.push_overlay(box, [[cancel]], focus=cancel, cancel=give_up)
         language, fetch = self.cfg.get("language", "en"), self.weather_fetch
-
-        def work():
-            try:
-                result = weather.find_place(text, language, fetch)
-            except Exception as e:  # noqa: BLE001 - shown to the user below
-                result = e
-            GLib.idle_add(self._location_found, token, text, result)
-
-        threading.Thread(target=work, daemon=True).start()
+        in_background(lambda: weather.find_place(text, language, fetch),
+                      lambda result: self._location_found(token, text, result))
 
     def _location_found(self, token, text, result):
         if self.location_search is not token:

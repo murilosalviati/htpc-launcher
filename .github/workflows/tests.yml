@@ -19,7 +19,9 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends python3-gi gir1.2-gtk-4.0 python3-evdev \
-            python3-jeepney xvfb dbus dbus-x11 shellcheck
+            python3-jeepney python3-pytest xvfb dbus dbus-x11 shellcheck
+      - name: Unit tests (pytest)
+        run: python3 -m pytest
 
       - name: Shell scripts (shellcheck)
         run: shellcheck install.sh */install.sh gnome-extension/test.sh

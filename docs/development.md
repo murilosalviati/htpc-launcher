@@ -53,6 +53,7 @@ On Wayland, a regular program can't raise another app's window or find out which
 | `weather.py` | ViaCEP and Open-Meteo lookups. |
 | `i18n.py` | On-screen text in English and Brazilian Portuguese. |
 | `themes.py` | Background colors. |
+| `timing.py` | `Throttle`: "at most once every N seconds", with an injectable clock. |
 
 ## The GNOME extension's D-Bus API
 
@@ -95,8 +96,8 @@ A new extension version is only loaded after logging out and back in. The Python
 
 The Linux backend uses:
 
-- **evdev** for gamepads, with Xbox X/Y fixed and virtual pads ignored;
-- **jeepney** for D-Bus: the extension, MPRIS, NetworkManager and BlueZ;
+- **evdev** for gamepads, with Xbox X/Y fixed and virtual pads ignored. New gamepads are noticed through **inotify** on `/dev/input` (every 2 s without it), and the launcher has GLib wake it when a gamepad has input instead of polling;
+- **jeepney** for D-Bus: the extension, MPRIS, NetworkManager and BlueZ, all through `linux/dbus.py` (`DBusClient`: one connection per object, opened on first use, dropped and reopened when the bus breaks, kept on an error reply or a timeout). NetworkManager's state is followed through its PropertiesChanged signal, in a thread;
 - **Gio** for `.desktop` files;
 - **systemd** for restart and shut down;
 - **wpctl or pactl** for the volume, and **pactl** or PipeWire's **pw-dump + wpctl** for the output device;
@@ -111,6 +112,14 @@ The Linux backend uses:
 The launcher UI, Settings, the configuration and the shortcut rules then work unchanged. `htpc/backends/windows/__init__.py` describes how each piece would be done on Windows.
 
 ## Tests
+
+Unit tests, with pytest (`sudo apt install python3-pytest`). They need no D-Bus or screen, and a single one runs with `-k`:
+
+```bash
+python3 -m pytest
+```
+
+They live in `tests/unit/`: the config reads, the shortcut rules, the throttles, the D-Bus client, the gamepad reader and the Home Assistant limits. The end-to-end suites below start fake services and a real GTK window:
 
 ```bash
 dbus-run-session -- python3 tests/test_controller.py

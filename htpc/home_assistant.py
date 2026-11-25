@@ -42,6 +42,7 @@ from collections import Counter
 
 from . import __version__, config, paths
 from .backends.base import STICK_DEAD_ZONE
+from .timing import Throttle
 
 log = logging.getLogger("htpc-controller")
 
@@ -113,7 +114,7 @@ class HomeAssistant:
         self.clock = clock
         self.background = background
         self.pads = None
-        self.last_activity = -ACTIVITY_EVERY
+        self.activity = Throttle(ACTIVITY_EVERY, clock)
         self.last_sent_wall = 0.0   # wall clock, to compare with the tv-off marker
         self.marker = marker
 
@@ -135,16 +136,15 @@ class HomeAssistant:
         """Called for every gamepad event; only presses count."""
         if event.kind != "button" or not event.value:
             return
-        now = self.clock()
-        if now - self.last_activity < ACTIVITY_EVERY and not self._tv_turned_off_since_last_send():
+        if not self.activity.ready() and not self._tv_turned_off_since_last_send():
             return
-        self.last_activity = now
+        self.activity.touch()
         self.last_sent_wall = time.time()
         self._send("gamepad_activity", self._name(event.device))
 
     def wake(self, event):
         """A press while the TV is off: always sent, whatever the once-a-minute limit."""
-        self.last_activity = self.clock()
+        self.activity.touch()
         self.last_sent_wall = time.time()
         self._send("gamepad_activity", self._name(event.device))
 
@@ -152,7 +152,7 @@ class HomeAssistant:
         now = Counter(self.gamepads.connected())
         if self.pads is not None:
             for name in (now - self.pads).elements():
-                self.last_activity = self.clock()  # this already says "someone is here"
+                self.activity.touch()  # this already says "someone is here"
                 self.last_sent_wall = time.time()
                 self._send("gamepad_connected", name)
         self.pads = now
@@ -369,13 +369,11 @@ class AppEvents:
         self.background = background
         self.running = None     # names of the apps with windows (None: not looked yet)
         self.playback = None
-        self.last = None
+        self.every = Throttle(EVENTS_EVERY, clock)
 
     def tick(self):
-        now = self.clock()
-        if self.last is not None and now - self.last < EVENTS_EVERY:
+        if not self.every.ready():
             return
-        self.last = now
         cfg = self.settings()
         url = events_url(cfg)
         if url is None:
