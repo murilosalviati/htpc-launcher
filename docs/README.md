@@ -13,7 +13,7 @@ HTPC Launcher turns a PC running Ubuntu with GNOME into a TV box you use from th
 | **[Using the launcher](using.md)** | The home screen (Recently added, the apps, the lights), the top bar, the footer, notices, and every Settings menu. |
 | **[Gamepads](gamepads.md)** | Supported gamepads, the shortcuts, volume, changing the shortcuts, pairing over Bluetooth, batteries. |
 | **[Configuration](configuration.md)** | The `apps.json` reference: per-app fields and every top-level setting. |
-| **[Home Assistant](home-assistant.md)** | Waking the TV with the gamepad, the "Turn off TV" button, ignoring the gamepad while the TV is off. |
+| **[Home Assistant](home-assistant.md)** | Waking the TV with the gamepad, turning it off from the power menu, ignoring the gamepad while the TV is off. |
 | **[Troubleshooting](troubleshooting.md)** | Logs, common problems and their fixes, working over SSH. |
 | **[Development](development.md)** | How it's built: components, the GNOME extension's D-Bus API, backends, porting to another OS, tests, releases. |
 
@@ -23,7 +23,7 @@ What changed in each version is in the [CHANGELOG](../CHANGELOG.md).
 
 ![The home screen](preview.png)
 
-- **Home screen:** one tile per app, with the clock, the weather, gamepad and battery icons, and the network status.
+- **Home screen:** one tile per app (with Recently added from Jellyfin above and your lights below), the clock, the weather, gamepad and battery icons, and the network status.
 - **Shortcuts in any app:**
 
   | Shortcut | What it does |

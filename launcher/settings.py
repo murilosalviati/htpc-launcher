@@ -19,7 +19,7 @@
     app, recorded by holding the buttons (read by the controller service from
     the same apps.json);
   * Home Assistant: its own menu with the address and webhook id (typed on the
-    on-screen keyboard), on/off, the footer's "Turn off TV" button, which
+    on-screen keyboard), on/off, which
     lights and switches show on the home screen, and a connection test. The
     controller service reads the same apps.json entry;
   * Jellyfin: the address, API key and user for the "Recently added" row;
@@ -674,7 +674,6 @@ class SettingsMixin:
         else:
             self.cfg.pop("home_assistant", None)
         self.save_config()
-        self.btn_tv.set_visible(self.tv_button_enabled())
         self.refresh_home_assistant()
         self.refresh_settings()
 
@@ -700,7 +699,6 @@ class SettingsMixin:
             "token": self._field(self.t("ha_token"), lambda: self._message(self.t("ha_token"), self.t("ha_token_text")),
                                  title_width=300),
             "tv": self._field(self.t("ha_tv"), self._ha_choose_tv, title_width=300),
-            "tv_button": self._field(self.t("settings_tv_button"), self._toggle_tv_button, title_width=300),
             "home": self._field(self.t("ha_home"), self._ha_choose_home, title_width=300),
             "test": self._field(self.t("ha_test"), self._ha_test, title_width=300),
         }
@@ -728,10 +726,6 @@ class SettingsMixin:
             f["tv"].value.set_label(self.t("ha_tv_needs_token"))
         else:
             f["tv"].value.set_label(ha.get("tv_name") or ha.get("tv_entity") or self.t("ha_tv_none"))
-        if not home_assistant.webhook_url(self.cfg):
-            f["tv_button"].value.set_label(self.t("tv_button_needs_ha"))
-        else:
-            f["tv_button"].value.set_label(self.t("on" if self.cfg.get("tv_off_button", False) else "off"))
         f["test"].value.set_label(self.t("ha_test_value"))
         f["home"].value.set_label(self._ha_home_summary())
 
@@ -762,15 +756,6 @@ class SettingsMixin:
         self.keyboard(self.t("ha_events_title"), self._ha().get("events_webhook_id", ""),
                       lambda text: self._ha_set(events_webhook_id=text.replace(" ", "") or None),
                       note=self.t("ha_events_note"), capitalize=False, extra=":/_")
-
-    def _toggle_tv_button(self):
-        if not home_assistant.webhook_url(self.cfg):
-            self._message(self.t("tv_button_needs_ha_text"))
-            return
-        self.cfg["tv_off_button"] = not self.cfg.get("tv_off_button", False)
-        self.save_config()
-        self.btn_tv.set_visible(self.tv_button_enabled())
-        self.refresh_home_assistant()
 
     def _ha_ask(self, job, done, title=None):
         """Run job() in a thread behind a "Calling Home Assistant…" box (with Cancel),

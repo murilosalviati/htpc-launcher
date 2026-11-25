@@ -3,7 +3,7 @@
 The launcher can work with [Home Assistant](https://www.home-assistant.io/) to control the TV:
 
 - **Wake the TV with the gamepad.** Plug in a gamepad, turn one on, or press any button. If the TV is off, Home Assistant turns it on and switches it to the HTPC's input.
-- **Turn the TV off from the launcher.** A "Turn off TV" button in the middle of the footer.
+- **Turn the TV off from the launcher.** "Turn off the TV" in the power menu (the power button at the top right).
 - **Ignore the gamepad while the TV is off.** The launcher and the gamepad shortcuts do nothing while the screen is dark. The first press only wakes the TV, so you never open an app you can't see.
 - **Lights on the home screen.** Lights, switches and scenes under the apps: turn them on and off, and dim them, with the gamepad.
 - **Cinema mode.** The launcher tells Home Assistant when an app opens or closes and when a video plays, pauses or stops, so an automation can dim the lights.
@@ -86,7 +86,7 @@ On the HTPC, open Settings (the gear at the top right) → **Home Assistant**:
 
 From now on, the gamepad wakes the TV. Changes apply right away, with nothing to restart.
 
-To show the **"Turn off TV" button** in the footer, switch it on in the same menu.
+The power menu (top right) now offers **Turn off the TV**.
 
 ### 3. Optional: ignore the gamepad while the TV is off
 
@@ -132,7 +132,7 @@ The token needs no extra permission, but rooms come from a template call: a toke
 - Press any button or plug in a gamepad. The TV turns on and switches to the HTPC.
 - A connected gamepad sends button presses at most once a minute, so Home Assistant isn't flooded. The exception is right after "Turn off TV": then the next press is sent at once.
 
-**Turn the TV off:** select **Turn off TV** in the footer and press Ⓐ. Wait about 15 seconds before pressing a button to wake it again.
+**Turn the TV off:** open the power menu (top right) and press Ⓐ on **Turn off the TV**, which is already selected. The launcher goes back to its start for the next time. Wait about 15 seconds before pressing a button to wake the TV again.
 
 **TV off, with the token set:**
 - The launcher and the gamepad shortcuts (back to the launcher, close the app) ignore the gamepad.
@@ -160,7 +160,6 @@ The `home_assistant` entry of `apps.json`:
 | `devices` | The lights and switches under the apps, in order (entity ids). Without it, every light, by room. | Lights on the home screen |
 | `scenes` | The scenes or scripts above them (entity ids). Without it, the first 6 scenes. | (apps.json only) |
 
-At the top level of `apps.json`, `tv_off_button` (`true`/`false`, default `false`) shows or hides the "Turn off TV" button. In Settings it's **"Turn off TV" button**.
 
 ## Events
 
@@ -174,7 +173,7 @@ Each event is a `POST` to `<url>/api/webhook/<webhook_id>` with a JSON body:
 |---|---|---|
 | `gamepad_connected` | controller service | A gamepad shows up (plugged in, or turned on). |
 | `gamepad_activity` | controller service | A button is pressed: at most once a minute, right away after "Turn off TV", and on every wake press while the TV is off. |
-| `tv_off` | launcher | The "Turn off TV" button. |
+| `tv_off` | launcher | "Turn off the TV" in the power menu. |
 | `test` | launcher | Settings → Home Assistant → Test the connection. |
 
 On the **events webhook** (`events_webhook_id`), only if it is set, the controller service checks every 2 seconds and sends:

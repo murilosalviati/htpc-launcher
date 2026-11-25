@@ -384,6 +384,12 @@ button.dialog-button.danger:focus {
   border-color: #f87171;
 }
 
+/* the power menu */
+button.menu-option {
+  min-width: 560px;
+  padding: 0 30px;
+}
+
 /* ---------- edit mode ---------- */
 
 .hint.editing {
@@ -543,4 +549,9 @@ button.swatch:focus {
 .swatch-sample {
   border-radius: 14px;
   border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+/* room between the clock and the first row */
+.top-bar {
+  margin-bottom: 16px;
 }

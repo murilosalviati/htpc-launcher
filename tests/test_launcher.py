@@ -178,11 +178,11 @@ def s4():
     check("down from the apps stays there when nothing is below", l.win.get_focus() is l.tiles[-1])
     l.move(0, -1)
     check("up goes to the round buttons at the top right (closest one)",
-          l.win.get_focus() in (l.btn_settings, l.btn_restart, l.btn_power))
+          l.win.get_focus() in (l.btn_settings, l.btn_power))
     l.move(-1, 0)
     for _ in range(3):
         l.move(1, 0)
-    check("right along the top reaches Shut down", l.win.get_focus() is l.btn_power)
+    check("right along the top reaches the power button", l.win.get_focus() is l.btn_power)
 
 
 @step(400)
@@ -194,10 +194,12 @@ def s4b():
 def s5():
     l = L()
     l.press()
-    check("Shut down asks for confirmation", len(l.overlays) == 1)
-    check("default focus is Cancel", l.win.get_focus() is l.overlays[-1]["rows"][0][0])
+    check("the power button opens its menu: restart, shut down (no TV without Home Assistant)",
+          len(l.overlays) == 1 and [b.label.get_label() for b in l.power_options]
+          == [l.t("restart_computer"), l.t("power_off_computer")])
+    check("default focus is Cancel", l.win.get_focus() is l.overlays[-1]["rows"][-1][0])
     l.move(0, 1)
-    check("down inside the dialog stays in the dialog", l.win.get_focus() in l.overlays[-1]["rows"][0])
+    check("down inside the menu stays in the menu", l.win.get_focus() is l.overlays[-1]["rows"][-1][0])
 
 
 @step(400)
@@ -205,8 +207,8 @@ def s6():
     l = L()
     screenshot(l.win, "3-confirm-power-off")
     l.back()
-    check("B closes the confirmation", not l.overlays)
-    check("focus returns to Shut down", l.win.get_focus() is l.btn_power)
+    check("B closes the menu", not l.overlays)
+    check("focus returns to the power button", l.win.get_focus() is l.btn_power)
     l.move(0, 1)
     check("down goes back to the apps", l.win.get_focus() in l.tiles)
     l.move(0, 1)
@@ -272,7 +274,7 @@ def e1():
     l = L()
     l.tiles[0].grab_focus()
     l.move(0, -1)
-    check("up from the first app reaches the top buttons", l.win.get_focus() in (l.btn_settings, l.btn_restart, l.btn_power))
+    check("up from the first app reaches the top buttons", l.win.get_focus() in (l.btn_settings, l.btn_power))
     l.btn_settings.grab_focus()
     l.press()
     f = l.settings_fields
@@ -703,18 +705,16 @@ def tv1():
     l = L()
     while l.overlays:
         l.pop_overlay()
-    check("no Home Assistant set up: no 'Desligar TV' button", not l.btn_tv.get_visible()
-          and l.btn_tv not in l.rows[-1])
+    check("no Home Assistant set up: no 'turn off the TV' in the power menu", not l.tv_off_available())
     l.open_settings(focus="home_assistant")
     check("Settings has a Home Assistant row saying it is not set up",
           l.settings_fields["home_assistant"].value.get_label() == l.t("ha_not_set"))
     l.press()
     f = l.ha_fields
     check("it opens the Home Assistant menu", len(l.overlays) == 2
-          and list(f) == ["enabled", "url", "webhook", "events", "token", "tv", "tv_button", "home", "test"]
+          and list(f) == ["enabled", "url", "webhook", "events", "token", "tv", "home", "test"]
           and f["token"].value.get_label() == l.t("ha_token_missing")
-          and f["tv"].value.get_label() == l.t("ha_tv_needs_token")
-          and f["tv_button"].value.get_label() == l.t("tv_button_needs_ha"))
+          and f["tv"].value.get_label() == l.t("ha_tv_needs_token"))
     l.pop_overlay()
     ha_type(l, "url", "192.168.0.22:8123")
     check("an address without http:// is refused", "home_assistant" not in l.cfg
@@ -735,32 +735,33 @@ def tv1():
     check("the webhook id is saved: Home Assistant is set up",
           l.cfg["home_assistant"]["webhook_id"] == "htpc-gamepad_1"
           and l.settings_fields["home_assistant"].value.get_label() == l.t("ha_on_at", host="192.168.0.22:8123")
-          and l.ha_fields["tv_button"].value.get_label() == l.t("off") and not l.btn_tv.get_visible())
-    l.ha_fields["tv_button"].grab_focus()
-    l.press()  # A switches the footer button on
+          and l.tv_off_available())
 
 
 @step(500)
 def tv2():
     l = L()
     from htpc import home_assistant as hass
-    check("'Desligar TV' switched on in the Home Assistant menu: saved and shown",
-          l.cfg.get("tv_off_button") is True and l.ha_fields["tv_button"].value.get_label() == l.t("on")
-          and l.btn_tv.get_visible())
     screenshot(l.win, "14-settings-home-assistant")
     while l.overlays:
         l.pop_overlay()
-    l.btn_tv.grab_focus()
-    while GLib.MainContext.default().iteration(False):
-        pass
-    ok, r = l.btn_tv.compute_bounds(l.win)
-    middle = r.get_x() + r.get_width() / 2
-    check("'Desligar TV' in the middle of the footer",
-          abs(middle - l.win.get_width() / 2) < 4
-          and l.btn_tv.label.get_label() == l.t("tv_off") and l.rows[-1][0] is l.btn_tv)
-    screenshot(l.win, "15-tv-off-button")
+    l.btn_power.grab_focus()
+    l.press()
+    check("with Home Assistant, the power menu starts on 'turn off the TV'",
+          [b.label.get_label() for b in l.power_options]
+          == [l.t("tv_off"), l.t("restart_computer"), l.t("power_off_computer")]
+          and l.win.get_focus() is l.power_options[0])
+
+
+@step(400)
+def tv2b():
+    l = L()
+    from htpc import home_assistant as hass
+    screenshot(l.win, "15-power-menu")
     hass.http_post = lambda url, payload: None
     l.press()
+    check("turning off the TV closes the menu and goes back to the start (first app, top of the screen)",
+          not l.overlays and l.win.get_focus() is l.tiles[0] and l.scroller.get_vadjustment().get_value() == 0)
 
 
 @step(400)
@@ -797,15 +798,14 @@ def tv5():
     l.pop_overlay()
     l.ha_fields["enabled"].grab_focus()
     l.press()
-    check("switching Home Assistant off hides the button and keeps the address",
-          l.cfg["home_assistant"].get("enabled") is False and not l.btn_tv.get_visible()
-          and l.cfg["home_assistant"]["url"] == "http://192.168.0.22:8123"
-          and l.ha_fields["tv_button"].value.get_label() == l.t("tv_button_needs_ha"))
+    check("switching Home Assistant off takes the TV out of the power menu and keeps the address",
+          l.cfg["home_assistant"].get("enabled") is False and not l.tv_off_available()
+          and l.cfg["home_assistant"]["url"] == "http://192.168.0.22:8123")
     l.press()
-    check("and on again brings it back", "enabled" not in l.cfg["home_assistant"] and l.btn_tv.get_visible())
+    check("and on again brings it back", "enabled" not in l.cfg["home_assistant"] and l.tv_off_available())
     ha_type(l, "webhook", "")
     check("an empty webhook id leaves it not set up", "webhook_id" not in l.cfg["home_assistant"]
-          and not l.btn_tv.get_visible())
+          and not l.tv_off_available())
     ha_type(l, "url", "")
     check("and with both empty the entry is gone", "home_assistant" not in l.cfg)
     while l.overlays:

@@ -26,20 +26,24 @@ The apps row has one tile per app. Move between them with the d-pad or the left 
 
 ### The top bar
 
-- **Left:** the weather (an icon, the temperature and the place), once you set a location. At night the sun becomes a moon. It updates every 30 minutes.
+- **Left:** the clock and the date, then the weather (an icon, the temperature and the place), once you set a location. At night the sun becomes a moon. It updates every 30 minutes.
 - **Right**, from left to right:
   - **Gamepads:** an icon that lights up when a gamepad is connected (USB, Bluetooth or a wireless receiver). With more than one connected, it shows how many.
   - **Batteries:** one battery icon per wireless gamepad that reports its charge, from empty (red) to full, with a bolt while charging. A gamepad on a cable reports no charge, so no icon shows for it.
   - **Network:** a cable symbol on a wired connection, or Wi-Fi bars on Wi-Fi. Text appears only when the connection is limited or down.
-  - **The clock** and the date.
-  - **Settings, Restart and Shut down:** three round buttons. Go up from the top row to reach them. Restart and Shut down ask first, and Cancel is selected by default.
+  - **Settings** and **power:** two round buttons. Go up from the top row to reach them.
+
+The power button opens a menu:
+
+- **Turn off the TV**, when Home Assistant is set up. The TV turns off through Home Assistant, and the launcher goes back to its start (menus closed, the first app selected), ready for the next time. This option is selected when the menu opens.
+- **Restart the computer** and **Shut down the computer**.
+- **Cancel**, selected when there is no TV option. The menu is the confirmation: restart and shut down never start selected.
 
 Everything around the edges keeps the same share of the screen on 1080p, 1440p or 4K. The icons are vectors, so they stay sharp.
 
 ### The footer
 
-- **Left:** reminders of the buttons and the current shortcuts.
-- **Middle:** **Turn off TV**. It only shows when it's switched on in Settings → Home Assistant. See the [Home Assistant guide](home-assistant.md).
+Reminders of the buttons and the current shortcuts.
 
 **Ⓑ** goes back: it closes a menu or leaves edit mode.
 
@@ -95,7 +99,7 @@ Select **Settings** (the gear) at the top right.
 | **On-screen notices** | Turns the notices on or off. |
 | **Audio** | Where the sound goes: the TV, a soundbar, Bluetooth headphones or a speaker. Also pairs Bluetooth headphones and speakers. See [Audio](#audio). |
 | **Gamepads** | Pair a gamepad, keyboard or mouse over Bluetooth, change the shortcuts, and see the volume shortcut. See [Gamepads](gamepads.md). |
-| **Home Assistant** | The address, the webhook, the TV, the "Turn off TV" button, the lights on the home screen and a connection test. See the [Home Assistant guide](home-assistant.md). |
+| **Home Assistant** | The address, the webhook, the TV, the lights on the home screen and a connection test. See the [Home Assistant guide](home-assistant.md). |
 | **Jellyfin** | The address, API key and user for the Recently added row, and a test. See [Recently added](#recently-added). |
 
 At the bottom:

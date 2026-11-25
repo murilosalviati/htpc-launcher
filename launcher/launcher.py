@@ -511,17 +511,15 @@ class Launcher(HomeMixin, EditorMixin, SettingsMixin):
         return self.t("hint_normal", home=shortcuts.combo_label(current["home"]),
                       close=shortcuts.combo_label(current["close"]))
 
-    def tv_button_enabled(self):
-        """The footer's "Turn off TV" shows only when it is switched on in Settings
-        (and Home Assistant is set up, since that is what it calls)."""
-        return bool(self.cfg.get("tv_off_button", False) and home_assistant.webhook_url(self.cfg))
+    def tv_off_available(self):
+        """The power menu offers "Turn off the TV" when Home Assistant is set up
+        (its webhook is what turns the TV off)."""
+        return bool(home_assistant.webhook_url(self.cfg))
 
     @property
     def rows(self):
-        """Top to bottom: settings / restart / shut down, recently added, the apps,
-        the house, and "Turn off TV" when it is shown."""
-        footer = [[self.btn_tv]] if self.btn_tv.get_visible() else []
-        return ([self.top_buttons, self.recent_row] + self.tile_rows + self.house_rows + footer)
+        """Top to bottom: settings and the power menu, recently added, the apps, the house."""
+        return [self.top_buttons, self.recent_row] + self.tile_rows + self.house_rows
 
     def apply_theme(self, theme_id):
         """Switch the background color right away (does not save it)."""
@@ -642,14 +640,15 @@ class Launcher(HomeMixin, EditorMixin, SettingsMixin):
         net.append(self.net_text)
         net.append(self.net_icon)
 
-        # Right: status, the clock, then settings / restart / shut down.
-        clock.set_valign(Gtk.Align.CENTER)
-        self.time_label.set_xalign(1)
-        self.date_label.set_xalign(1)
+        # Left: the clock, then the weather. Right: status, settings and the power menu.
+        self.time_label.set_xalign(0)
+        self.date_label.set_xalign(0)
+        left = Gtk.Box(spacing=48, valign=Gtk.Align.START)
+        left.append(clock)
+        left.append(self.weather_box)
         self.btn_settings = self._top_button("settings.svg", self.t("settings"), self.settings_button)
-        self.btn_restart = self._top_button("restart.svg", self.t("restart"), lambda: self.confirm_power("restart"))
-        self.btn_power = self._top_button("power.svg", self.t("power_off"), lambda: self.confirm_power("power_off"))
-        self.top_buttons = [self.btn_settings, self.btn_restart, self.btn_power]
+        self.btn_power = self._top_button("power.svg", self.t("power_menu"), self.power_menu)
+        self.top_buttons = [self.btn_settings, self.btn_power]
         buttons = Gtk.Box(spacing=12, valign=Gtk.Align.CENTER)
         buttons.add_css_class("top-buttons")
         for b in self.top_buttons:
@@ -657,28 +656,21 @@ class Launcher(HomeMixin, EditorMixin, SettingsMixin):
         net.set_valign(Gtk.Align.CENTER)
         right = Gtk.Box(spacing=32, valign=Gtk.Align.START)
         right.append(net)
-        right.append(clock)
         right.append(buttons)
 
-        bar.set_start_widget(self.weather_box)
+        bar.set_start_widget(left)
         bar.set_end_widget(right)
         return bar
 
     # --- footer ----------------------------------------------------------------
 
     def _footer(self):
-        """Hints on the left, "Turn off TV" in the middle (when Home Assistant is set up)."""
+        """The button and shortcut hints."""
         bar = Gtk.CenterBox()
         bar.add_css_class("footer-bar")
-
         self.hint = Gtk.Label(label=self.hint_text(), xalign=0, valign=Gtk.Align.CENTER)
         self.hint.add_css_class("hint")
         bar.set_start_widget(self.hint)
-
-        self.btn_tv = self._footer_button("tv-off.svg", self.t("tv_off"), self.turn_tv_off)
-        self.btn_tv.set_valign(Gtk.Align.CENTER)
-        self.btn_tv.set_visible(self.tv_button_enabled())
-        bar.set_center_widget(self.btn_tv)
         return bar
 
     def _top_button(self, icon, text, action):
@@ -692,10 +684,21 @@ class Launcher(HomeMixin, EditorMixin, SettingsMixin):
         return b
 
     def turn_tv_off(self):
-        """Asks Home Assistant to turn the TV off (the "tv_off" webhook event).
-        Any gamepad button wakes it again through the same automation."""
+        """Asks Home Assistant to turn the TV off (the "tv_off" webhook event), and
+        puts the launcher back on its start: menus closed, the first app selected,
+        scrolled to the top. Any gamepad button wakes the TV again through the
+        same automation."""
         log("asking Home Assistant to turn the TV off")
         home_assistant.turn_tv_off(self.cfg)
+        self.go_home()
+
+    def go_home(self):
+        while self.overlays:
+            self.pop_overlay()
+        if self.editing:
+            self.toggle_edit_mode()
+        (self.tiles[0] if self.tiles else self.btn_settings).grab_focus()
+        self._scroll_to(0.0)
 
     def _footer_button(self, icon, text, action):
         b = Gtk.Button()
@@ -1027,14 +1030,47 @@ class Launcher(HomeMixin, EditorMixin, SettingsMixin):
         box.append(buttons)
         self.push_overlay(box, [[cancel, yes]], focus=cancel)
 
-    # --- restart / shut down ----------------------------------------------------------
+    # --- the power menu: TV off, restart, shut down ------------------------------------
 
-    def confirm_power(self, action):
-        title = self.t("confirm_restart") if action == "restart" else self.t("confirm_power_off")
-        label = self.t("restart") if action == "restart" else self.t("power_off")
-        self.confirm(title, self.t("power_warning"), label, lambda: self._run_power(action))
+    def _menu_option(self, icon, text, action, danger=False):
+        b = Gtk.Button()
+        b.add_css_class("dialog-button")
+        b.add_css_class("menu-option")
+        if danger:
+            b.add_css_class("danger")
+        b.set_focus_on_click(False)
+        box = Gtk.Box(spacing=20)
+        image = Gtk.Image.new_from_gicon(svg_icon(icon))
+        image.set_pixel_size(34)
+        b.label = Gtk.Label(label=text, xalign=0)
+        box.append(image)
+        box.append(b.label)
+        b.set_child(box)
+        b.connect("clicked", lambda _b: action())
+        return b
+
+    def power_menu(self):
+        """The power button: turn off the TV (with Home Assistant), restart or shut
+        down the computer. The menu itself is the confirmation: the selection
+        starts on the TV (or on Cancel), never on restart or shut down."""
+        box = self.dialog_box(self.t("power_menu"))
+        options = []
+        if self.tv_off_available():
+            options.append(self._menu_option("tv-off.svg", self.t("tv_off"), self.turn_tv_off))
+        options.append(self._menu_option("restart.svg", self.t("restart_computer"),
+                                         lambda: self._run_power("restart"), danger=True))
+        options.append(self._menu_option("power.svg", self.t("power_off_computer"),
+                                         lambda: self._run_power("power_off"), danger=True))
+        cancel = self.dialog_button(self.t("cancel"), self.pop_overlay)
+        for b in options:
+            box.append(b)
+        box.append(cancel)
+        self.power_options = options
+        self.push_overlay(box, [[b] for b in options] + [[cancel]],
+                          focus=options[0] if self.tv_off_available() else cancel)
 
     def _run_power(self, action):
+        self.pop_overlay()
         log("power:", action)
         if action == "restart":
             self.system.reboot()

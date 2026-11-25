@@ -75,7 +75,6 @@ Each entry in `apps` is one tile.
 | `shortcuts` | `{"home": [...], "close": [...]}`: only the combos you changed. Button names: `guide`, `start`, `select`, `l1`, `r1`, `a`, `b`, `x`, `y`. Invalid combos fall back to the defaults. | Home + LB + RB, Start + Select + LB + RB | Gamepads |
 | `home_assistant` | See the [Home Assistant settings reference](home-assistant.md#settings-reference). | none | Home Assistant |
 | `jellyfin` | See [Jellyfin](#jellyfin) below. | none | Jellyfin |
-| `tv_off_button` | `true`, `false` | `false` | Home Assistant → "Turn off TV" button |
 | `launcher.launch` | The command the service uses to start the launcher when it isn't running. `launcher/install.sh` fills it in. | | |
 
 ## Jellyfin

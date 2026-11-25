@@ -8,7 +8,8 @@ The project is in beta: every `0.x` version is a pre-release, and the configurat
 
 - **Recently added (Jellyfin)** above the apps: the newest films and series, the first one wide with its backdrop, new episodes grouped under their series. Selecting one opens the Jellyfin app. Set up in the new Settings → Jellyfin (address, API key, user, test). Fetched at start and every 10 minutes while the launcher is in front.
 - **Home (Home Assistant)** below the apps, reached by going down: lights and switches by room, and scenes. Ⓐ turns one on or off (shown at once), Ⓨ on a dimmable light opens its brightness (−/+ by 10%). Every light by default; choose in Settings → Home Assistant → Lights on the home screen. Needs the address and the token. States are read every 5 seconds while the launcher is in front.
-- **Settings, Restart and Shut down** moved to the top right, as round buttons next to the clock (the clock moved there too). The footer keeps the hints and "Turn off TV".
+- **The clock moved to the top left**, with the weather next to it.
+- **One power button** at the top right, next to Settings, replaces Restart, Shut down and the footer's "Turn off TV". It opens a menu: Turn off the TV (when Home Assistant is set up, and selected first), Restart the computer, Shut down the computer, Cancel. Turning off the TV also puts the launcher back on its start (menus closed, first app selected, scrolled up) for the next time. The menu is the confirmation; restart and shut down never start selected. The `tv_off_button` setting is gone.
 - Without Jellyfin and Home Assistant set up, the screen looks as before: the apps alone in the middle.
 
 ## 0.1.0-beta.7
