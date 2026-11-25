@@ -2,6 +2,10 @@
 
 The project is in beta: every `0.x` version is a pre-release, and the configuration format or install steps may still change.
 
+## 0.1.0-beta.7
+
+- **Fixed:** the beta.6 package still called itself beta.5 inside (`htpc.__version__`), so Settings → Updates kept offering beta.6 after it was installed. A unit test and the release workflow now check that the version matches the VERSION file.
+
 ## 0.1.0-beta.6
 
 Update by running `./install.sh` again, then **log out and back in once** so GNOME loads version 7 of the extension. Your `apps.json` is kept. New: Settings → Audio, Bluetooth keyboards and mice, per-app resolution, cinema mode, updates from Settings; robustness and security fixes from a code review; much less work in the background.
