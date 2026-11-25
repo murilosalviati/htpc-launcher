@@ -156,7 +156,7 @@ def s3():
     check("opening an app asks for full screen", "rocks.shy.VacuumTube" in fakes.state.get("fullscreen", []))
 
 
-@step(300)
+@step(700)   # well past the 260 ms press animation, even on a busy machine
 def s3b():
     """Opened, then closed with the gamepad shortcut while the launcher was behind it."""
     l = L()

@@ -215,6 +215,8 @@ class BluezBluetooth(Bluetooth):
             raise RuntimeError("no Bluetooth adapter")
         if not props.get("Powered"):
             self._set(path, ADAPTER, "Powered", "b", True)
+        if not props.get("Pairable", True):
+            self._set(path, ADAPTER, "Pairable", "b", True)   # some setups start with it off
         try:
             self._call(path, ADAPTER, "SetDiscoveryFilter", "a{sv}", ({"Transport": ("s", "auto")},))
         except Exception as e:  # noqa: BLE001 - older BlueZ: search without the filter
