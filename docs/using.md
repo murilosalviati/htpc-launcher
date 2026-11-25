@@ -41,11 +41,9 @@ The power button opens a menu:
 
 Everything around the edges keeps the same share of the screen on 1080p, 1440p or 4K. The icons are vectors, so they stay sharp.
 
-### The footer
+### Buttons
 
-Reminders of the buttons and the current shortcuts.
-
-**Ⓑ** goes back: it closes a menu or leaves edit mode.
+**Ⓐ** opens or selects, **Ⓑ** goes back: it closes a menu or leaves edit mode. The screen shows no button reminders, except in edit mode; the shortcuts are listed in [Gamepads](gamepads.md) and in Settings → Gamepads.
 
 ### Recently added
 

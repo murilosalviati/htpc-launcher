@@ -58,7 +58,7 @@ Rules for a new combo:
 
 **Restore the defaults** brings back Home + LB + RB and Start + Select + LB + RB. The volume shortcut is fixed.
 
-Changes apply right away, in the launcher and in the background service. The footer hints always show the current combos. They are saved as `shortcuts` in `apps.json`, as described in [Configuration](configuration.md#top-level-settings).
+Changes apply right away, in the launcher and in the background service. Settings → Gamepads always shows the current combos. They are saved as `shortcuts` in `apps.json`, as described in [Configuration](configuration.md#top-level-settings).
 
 ## Pairing over Bluetooth (gamepads, keyboards, mice)
 

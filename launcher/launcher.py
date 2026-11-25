@@ -665,11 +665,13 @@ class Launcher(HomeMixin, EditorMixin, SettingsMixin):
     # --- footer ----------------------------------------------------------------
 
     def _footer(self):
-        """The button and shortcut hints."""
+        """Only shown in edit mode, to say how it works. (The button and shortcut
+        hints it used to show all the time are gone: see docs/gamepads.md.)"""
         bar = Gtk.CenterBox()
         bar.add_css_class("footer-bar")
         self.hint = Gtk.Label(label=self.hint_text(), xalign=0, valign=Gtk.Align.CENTER)
         self.hint.add_css_class("hint")
+        self.hint.set_visible(self.editing)
         bar.set_start_widget(self.hint)
         return bar
 
