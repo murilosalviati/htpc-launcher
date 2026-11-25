@@ -428,7 +428,9 @@ class AppEvents:
 # that order) in the "home_assistant" entry, chosen in Settings → Home
 # Assistant → Devices; without it, every light. Scenes: "scenes", likewise;
 # without it, every scene. "home_screen": false hides the row;
-# "group_by_area": true shows them under their rooms' names.
+# "group_by_area": true shows them under their rooms' names (in the order the
+# rooms first come in "devices"); "names": {entity: name} shows names of your
+# own instead of Home Assistant's.
 
 DEVICE_DOMAINS = ("light", "switch", "fan", "input_boolean")
 SCENE_DOMAINS = ("scene", "script")
@@ -524,11 +526,18 @@ def house(cfg, get=None, post=None):
     else:
         ids = [e for e in states if _domain(e) == "light"]
     found = areas(cfg, ids, post)
+    names = ha.get("names") if isinstance(ha.get("names"), dict) else {}
     devices = [_device(states[e], found.get(e)) for e in ids]
+    for d in devices:   # a name of your own, like a dashboard card's
+        if names.get(d["entity"]):
+            d["name"] = str(names[d["entity"]])
     if not isinstance(chosen, list):   # no choice made: by room, then name
         devices.sort(key=lambda d: ((d["area"] or "￿").lower(), d["name"].lower()))
-    elif ha.get("group_by_area"):     # grouped: the rooms in order, the choice's order inside each
-        devices.sort(key=lambda d: (d["area"] or "￿").lower())
+    elif ha.get("group_by_area"):     # grouped: rooms in the order they first come in the choice
+        first = {}
+        for d in devices:
+            first.setdefault(d["area"], len(first))
+        devices.sort(key=lambda d: first[d["area"]] if d["area"] else len(first))
     scene_ids = ha.get("scenes")
     if isinstance(scene_ids, list):
         scene_ids = [e for e in scene_ids if e in states]

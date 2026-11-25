@@ -159,7 +159,8 @@ The `home_assistant` entry of `apps.json`:
 | `tv_name` | The TV's name as shown in Settings. Filled in when you pick the TV. | TV |
 | `home_screen` | `false` hides the lights under the apps. Defaults to `true`. | Lights on the home screen → Show under the apps |
 | `devices` | The lights and switches under the apps, in order (entity ids). Without it, every light, by room. | Lights on the home screen |
-| `group_by_area` | `true` shows each room's name over its lights. | Lights on the home screen → Separate by room |
+| `group_by_area` | `true` shows each room's name over its lights, the rooms in the order they first come in `devices`. | Lights on the home screen → Separate by room |
+| `names` | `{"light.x": "Desk"}`: names of your own, instead of Home Assistant's (like a dashboard card's). | (apps.json only) |
 | `scenes` | The scenes or scripts above them (entity ids). Without it, the first 6 scenes. | (apps.json only) |
 
 

@@ -103,7 +103,14 @@ def test_grouped_by_room_keeps_the_choice_order_inside_each():
                               "devices": ["switch.som", "light.quarto", "light.sala"]}}
     areas = {"switch.som": "Sala", "light.quarto": "Quarto", "light.sala": "Sala"}
     h = ha.house(cfg, get, Post(areas))
-    assert [d["entity"] for d in h["devices"]] == ["light.quarto", "switch.som", "light.sala"]
+    # the rooms in the order they first come in the choice (Sala first), not alphabetical
+    assert [d["entity"] for d in h["devices"]] == ["switch.som", "light.sala", "light.quarto"]
+
+
+def test_names_of_your_own():
+    cfg = {"home_assistant": {**CFG["home_assistant"], "names": {"light.sala": "Teto"}}}
+    names = {d["entity"]: d["name"] for d in ha.house(cfg, get, Post())["devices"]}
+    assert names["light.sala"] == "Teto" and names["light.quarto"] == "Abajur"
 
 
 def test_set_light():

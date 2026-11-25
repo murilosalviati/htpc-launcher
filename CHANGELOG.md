@@ -2,6 +2,11 @@
 
 The project is in beta: every `0.x` version is a pre-release, and the configuration format or install steps may still change.
 
+## Unreleased
+
+- **Lights by room follow your order:** the rooms come in the order of your choice, not alphabetically.
+- **Names of your own** for lights and switches (`"names"` in the `home_assistant` entry), for example the short names of a Home Assistant dashboard.
+
 ## 0.1.0-beta.8
 
 **A new home screen.** Update by running `./install.sh` again (or from Settings → Updates); your `apps.json` is kept. Without Jellyfin, Steam and Home Assistant set up, the screen looks as before: the apps alone in the middle.
