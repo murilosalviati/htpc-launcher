@@ -35,6 +35,14 @@ class Tmdb:
             return {"results": [{"id": 102}, {"id": 103}]}
         if parts.path == "/3/movie/now_playing":
             return {"results": [{"id": 10}, {"id": 14}]}
+        if parts.path == "/3/discover/tv":
+            q = dict(urllib.parse.parse_qsl(parts.query))
+            assert q["air_date.gte"] == "2026-10-11" and q["sort_by"] == "popularity.desc"
+            return {"results": [{"id": 104}, {"id": 100}]}
+        if parts.path == "/3/discover/movie":
+            q = dict(urllib.parse.parse_qsl(parts.query))
+            assert q["primary_release_date.gte"] <= "2025-06-03"
+            return {"results": [{"id": 15}]}
         if parts.path == "/3/trending/all/week":
             return {"results": [{}] * 20}
         raise AssertionError(url)
@@ -52,7 +60,8 @@ def test_short_key_goes_in_the_query_long_token_in_a_header():
 
 def test_ranking_keeps_whats_new():
     r = tmdb.ranking(SHORT, Tmdb(), today=TODAY)
-    assert r == [("movie", "10"), ("tv", "100"), ("tv", "102"), ("tv", "103"), ("movie", "14")]
+    assert r == [("movie", "10"), ("tv", "100"), ("tv", "102"), ("tv", "103"), ("movie", "14"),
+                 ("movie", "15"), ("tv", "104")]
 
 
 def test_the_window_can_be_widened():

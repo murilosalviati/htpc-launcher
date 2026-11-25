@@ -51,7 +51,7 @@ Above the apps, a row of cards that follows the app in focus:
 
 | App in focus | Tabs | What they show |
 |---|---|---|
-| **Jellyfin** | **Explore** | What is new and popular on [TMDB](https://www.themoviedb.org/) **and is in your library**: this week's trending films and series that came out in the last 18 months, series with new episodes this week, and films in cinemas. Old favourites that trend without anything new (a 90s sitcom) are left out. Without a TMDB key: what was added lately. |
+| **Jellyfin** | **Explore** | What is new and popular on [TMDB](https://www.themoviedb.org/) **and is in your library**: this week's trending films and series that came out in the last 18 months, series with new episodes this week, films in cinemas, then the most popular series with an episode in the last 45 days and recent films. Old favourites that trend without anything new (a 90s sitcom) are left out. Without a TMDB key: what was added lately. |
 | | **Series**, **Films** | What was added lately to Jellyfin. New episodes are grouped under their series, with how many are new. |
 | **Steam** | **Games** | Your Steam games, the last played first, with when and how long you played. Games streamed from another computer (Remote Play) count too. |
 | Any other app | none | The space stays empty, so nothing on screen jumps. |
