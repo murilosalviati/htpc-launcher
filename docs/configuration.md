@@ -104,7 +104,7 @@ For Explore, a `tmdb` entry with TMDB's short API key or its long API Read Acces
 "tmdb": {"api_key": "0123456789abcdef0123456789abcdef", "recent_days": 540}
 ```
 
-`recent_days` (optional, 540 by default) is how recently a trending title must have come out to count as new.
+`recent_days` (optional, 540 by default) is how recently a trending title must have come out to count as new. `series_max_years` (optional, 8 by default): a series with a new episode counts only if it premiered this recently, so shows that have run for decades (SNL, SpongeBob) stay out.
 
 Older versions used Portuguese field names (`nome`, `abrir`...). They are converted automatically the first time the launcher starts.
 

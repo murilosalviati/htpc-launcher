@@ -5,6 +5,7 @@ The project is in beta: every `0.x` version is a pre-release, and the configurat
 ## Unreleased
 
 - **Lights by room follow your order:** the rooms come in the order of your choice, not alphabetically.
+- **Explore leaves out shows that never stop:** a series counts as new for a new episode only if it premiered in the last 8 years (`series_max_years` in `tmdb`), and kids', news, soap and talk shows don't count (no more SNL or SpongeBob).
 - **Names of your own** for lights and switches (`"names"` in the `home_assistant` entry), for example the short names of a Home Assistant dashboard.
 
 ## 0.1.0-beta.8

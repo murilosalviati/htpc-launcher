@@ -30,7 +30,10 @@ TRENDING_PAGES = 3   # 20 titles a page, per kind
 AIRING_PAGES = 3     # series with episodes airing this week (new seasons of older series)
 NOW_PLAYING_PAGES = 2
 DISCOVER_PAGES = 5   # then the most popular recent ones beyond this week's trends, to match more of a library
-AIRED_DAYS = 45      # a series with an episode this recent counts as new
+AIRED_DAYS = 45      # a series with an episode this recent counts as new...
+SERIES_MAX_YEARS = 8 # ...if it premiered this recently: SNL or SpongeBob always have a new
+                     # episode, and they are not news ("series_max_years" in the tmdb entry)
+NOT_NEW_GENRES = {10762, 10763, 10766, 10767}   # TMDB's Kids, News, Soap and Talk series
 RECENT_DAYS = 540    # a trending title counts as new when it came out this recently
 
 
@@ -85,12 +88,20 @@ def ranking(cfg, get=None, today=None):
     sitcom that is trending without new episodes is left out."""
     today = today or datetime.date.today()
     since = today - datetime.timedelta(days=int(settings(cfg).get("recent_days", RECENT_DAYS)))
-    airing = _pages(cfg, "/tv/on_the_air", AIRING_PAGES, get)
-    airing_ids = {str(r["id"]) for r in airing}
+    oldest = today - datetime.timedelta(days=365 * int(settings(cfg).get("series_max_years", SERIES_MAX_YEARS)))
 
     def new(r, field):
         day = _date(r.get(field))
         return day is not None and since <= day <= today
+
+    def series_ok(r):
+        """A series with a new episode, that is not a decades-long show."""
+        day = _date(r.get("first_air_date"))
+        return (day is not None and day >= oldest
+                and not NOT_NEW_GENRES & set(r.get("genre_ids") or []))
+
+    airing = [r for r in _pages(cfg, "/tv/on_the_air", AIRING_PAGES, get) if series_ok(r)]
+    airing_ids = {str(r["id"]) for r in airing}
 
     movies = [("movie", str(r["id"])) for r in _pages(cfg, "/trending/movie/week", TRENDING_PAGES, get)
               if new(r, "release_date")]
@@ -102,8 +113,9 @@ def ranking(cfg, get=None, today=None):
     # Beyond this week: the most popular series with a recent episode and films
     # from the window, so more of a library finds a match.
     recently = (today - datetime.timedelta(days=AIRED_DAYS)).isoformat()
-    tv = _pages(cfg, "/discover/tv", DISCOVER_PAGES, get, {
+    tv = [r for r in _pages(cfg, "/discover/tv", DISCOVER_PAGES, get, {
         "sort_by": "popularity.desc", "air_date.gte": recently, "air_date.lte": today.isoformat()})
+          if series_ok(r)]
     films = _pages(cfg, "/discover/movie", DISCOVER_PAGES, get, {
         "sort_by": "popularity.desc", "primary_release_date.gte": since.isoformat(),
         "primary_release_date.lte": today.isoformat()})

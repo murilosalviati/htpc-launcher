@@ -32,13 +32,17 @@ class Tmdb:
                                 {"id": 101, "first_air_date": "1994-09-22"},   # Friends: old, no new episodes
                                 {"id": 102, "first_air_date": "2022-04-01"}]}  # old, but a new season airs
         if parts.path == "/3/tv/on_the_air":
-            return {"results": [{"id": 102}, {"id": 103}]}
+            return {"results": [{"id": 102, "first_air_date": "2022-04-01"},
+                                {"id": 103, "first_air_date": "2025-01-10"},
+                                {"id": 105, "first_air_date": "1975-10-11"},                 # SNL
+                                {"id": 106, "first_air_date": "2024-01-01", "genre_ids": [10767]}]}  # a talk show
         if parts.path == "/3/movie/now_playing":
             return {"results": [{"id": 10}, {"id": 14}]}
         if parts.path == "/3/discover/tv":
             q = dict(urllib.parse.parse_qsl(parts.query))
             assert q["air_date.gte"] == "2026-10-11" and q["sort_by"] == "popularity.desc"
-            return {"results": [{"id": 104}, {"id": 100}]}
+            return {"results": [{"id": 104, "first_air_date": "2023-05-05"}, {"id": 100, "first_air_date": "2026-09-01"},
+                                {"id": 107, "first_air_date": "1999-05-01", "genre_ids": [16, 10762]}]}  # SpongeBob
         if parts.path == "/3/discover/movie":
             q = dict(urllib.parse.parse_qsl(parts.query))
             assert q["primary_release_date.gte"] <= "2025-06-03"
@@ -62,6 +66,11 @@ def test_ranking_keeps_whats_new():
     r = tmdb.ranking(SHORT, Tmdb(), today=TODAY)
     assert r == [("movie", "10"), ("tv", "100"), ("tv", "102"), ("tv", "103"), ("movie", "14"),
                  ("movie", "15"), ("tv", "104")]
+
+
+def test_long_running_and_talk_shows_are_not_news():
+    r = tmdb.ranking(SHORT, Tmdb(), today=TODAY)
+    assert not {("tv", "105"), ("tv", "106"), ("tv", "107")} & set(r)
 
 
 def test_the_window_can_be_widened():
