@@ -38,3 +38,10 @@ def config_file():
 def app_icons_dir():
     """Icons chosen by the user, offered in the app editor."""
     return data_dir() / "app-icons"
+
+
+def cache_dir():
+    """Things fetched once and kept (Steam game names), safe to delete."""
+    if _windows():
+        return data_dir() / "cache"
+    return Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache")) / APP

@@ -7,7 +7,8 @@
         library (without a TMDB key: what was added lately);
       - Series and Films: what was added lately to Jellyfin;
       - Games: the Steam games played most recently.
-    A film or series opens the Jellyfin app; a game starts through Steam.
+    A film or series opens the Jellyfin app; a game starts through Steam (or,
+    when it is only streamed from another computer, opens its Steam page).
   * "Home" (below the apps, scrolled into view by going down): lights,
     switches and scenes from Home Assistant, set up in Settings → Home
     Assistant. Ⓐ turns one on or off; Ⓨ on a dimmable light sets its brightness.
@@ -319,8 +320,8 @@ class HomeMixin:
         elif name == "movies":
             job = lambda: jellyfin.latest(cfg, jf_get, types="Movie")   # noqa: E731
         else:
-            home = self.steam_home()
-            job = lambda: steam.recent_games(home)   # noqa: E731
+            home, names = self.steam_home(), getattr(self, "steam_names", None)
+            job = lambda: steam.recent_games(home, names=names)   # noqa: E731
         in_background(job, lambda result: self._tab_arrived(name, result))
 
     def _tab_arrived(self, name, result):
@@ -448,10 +449,11 @@ class HomeMixin:
             return
         cfg, get = dict(self.cfg), getattr(self, "jellyfin_get", None)
 
+        steam_get = getattr(self, "steam_image_get", None)
+
         def fetch():
-            if url.startswith("/"):   # Steam's own cache, on this computer
-                with open(url, "rb") as f:
-                    return f.read()
+            if card.item["kind"] == "game":   # Steam's own cache, or its image servers
+                return steam.image(url, steam_get)
             return jellyfin.image(cfg, url, get)
 
         def arrived(data):
@@ -474,7 +476,7 @@ class HomeMixin:
         item = card.item
         if item["kind"] == "game":
             tile = next((t for t in self.tiles if "steam" in t.app.get("id", "").lower()), None)
-            command = steam.run_command(tile.app if tile else None, item["appid"])
+            command = steam.run_command(tile.app if tile else None, item["appid"], item.get("installed", True))
             log("starting", item["title"], command)
             if self._spawn(command) and tile is not None:
                 self.opening[tile.app["id"]] = time.monotonic()

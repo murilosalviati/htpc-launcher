@@ -66,12 +66,27 @@ def test_vdf_nested_and_escaped():
     assert data == {"a": {"b": "1", "c": {"d": 'x "y"'}}}
 
 
-def test_recent_games_installed_only_newest_first_with_art(tmp_path):
+class Store:
+    def __init__(self, known):
+        self.known, self.asked = known, []
+
+    def __call__(self, appid):
+        self.asked.append(appid)
+        if appid == "boom":
+            raise OSError("offline")
+        return self.known.get(appid)
+
+
+def test_recent_games_newest_first_with_art(tmp_path):
     root = make_steam(tmp_path / "home", tmp_path / "pool")
-    games = steam.recent_games(tmp_path / "home")
-    # 1493710 is Proton (not a game); 999 was played but is not installed
-    assert [g["title"] for g in games] == ["Portal 2", 'Team "Fortress" 2']
-    portal, tf2 = games
+    store = Store({"999": ("Streamed Game", "game")})
+    names = steam.Names(tmp_path / "cache.json", store)
+    games = steam.recent_games(tmp_path / "home", names=names)
+    # 1493710 is Proton (not a game); 999 is not installed here: streamed, named by the store
+    assert [g["title"] for g in games] == ["Streamed Game", "Portal 2", 'Team "Fortress" 2']
+    streamed, portal, tf2 = games
+    assert not streamed["installed"] and portal["installed"] and store.asked == ["999"]
+    assert streamed["poster"] == steam.CDN.format(appid="999", name="library_600x900.jpg")
     assert portal["appid"] == "620" and portal["minutes"] == 125 and portal["last_played"] == 1700000300
     assert portal["poster"].endswith("620/abc123/library_600x900.jpg")
     assert portal["backdrop"] == str(root / "appcache/librarycache/620/library_hero.jpg")
@@ -87,3 +102,35 @@ def test_run_command_uses_the_same_steam():
     assert steam.run_command(flatpak, "620") == ["flatpak", "run", "com.valvesoftware.Steam", "steam://rungameid/620"]
     assert steam.run_command({"launch": ["steam", "-gamepadui"]}, "620") == ["steam", "steam://rungameid/620"]
     assert steam.run_command(None, "620") == ["steam", "steam://rungameid/620"]
+
+
+def test_names_are_kept_and_unknown_apps_too_but_not_failures(tmp_path):
+    store = Store({"1": ("One", "game"), "2": ("A DLC", "dlc")})
+    names = steam.Names(tmp_path / "c.json", store)
+    assert names.get("1") == ("One", "game") and names.get("3") is None and names.get("boom") is None
+    names.save()
+    again = steam.Names(tmp_path / "c.json", Store({}))
+    assert again.get("1") == ("One", "game") and again.get("3") is None
+    assert again.lookup.asked == []   # 1 and 3 came from the file; "boom" was not kept
+    assert again.get("boom") is None and again.lookup.asked == ["boom"]
+
+
+def test_a_dlc_or_tool_from_the_store_is_left_out(tmp_path):
+    make_steam(tmp_path / "home", tmp_path / "pool")
+    names = steam.Names(tmp_path / "c.json", Store({"999": ("Some Soundtrack", "music")}))
+    assert "Some Soundtrack" not in [g["title"] for g in steam.recent_games(tmp_path / "home", names=names)]
+
+
+def test_store_lookup_reads_appdetails():
+    import json as _json
+
+    def get(url):
+        assert "appids=620" in url
+        return _json.dumps({"620": {"success": True, "data": {"name": "Portal 2", "type": "game"}}}).encode()
+    assert steam.store_lookup("620", get) == ("Portal 2", "game")
+    assert steam.store_lookup("1", lambda url: b'{"1": {"success": false}}') is None
+
+
+def test_a_streamed_game_opens_its_page():
+    flatpak = {"launch": ["flatpak", "run", "com.valvesoftware.Steam"]}
+    assert steam.run_command(flatpak, "999", installed=False)[-1] == "steam://nav/games/details/999"

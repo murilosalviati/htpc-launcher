@@ -53,18 +53,18 @@ Above the apps, a row of cards that follows the app in focus:
 |---|---|---|
 | **Jellyfin** | **Explore** | What is popular this week on [TMDB](https://www.themoviedb.org/) **and is in your library**, in TMDB's order. Without a TMDB key: what was added lately. |
 | | **Series**, **Films** | What was added lately to Jellyfin. New episodes are grouped under their series, with how many are new. |
-| **Steam** | **Games** | Your installed Steam games, the last played first, with when and how long you played. |
+| **Steam** | **Games** | Your Steam games, the last played first, with when and how long you played. Games streamed from another computer (Remote Play) count too. |
 | Any other app | none | The space stays empty, so nothing on screen jumps. |
 
 - **Tabs:** go up from the cards to reach them. Moving onto a tab shows it; the launcher remembers the last one per app.
 - **More:** **RB** shows the next five cards and **LB** goes back, with the app or a card in focus. The note next to the tabs says which page you're on. LB and RB only turn the page when tapped alone, so Home + LB + RB still brings the launcher back.
-- **Select a card:** a film or series opens the Jellyfin app (on its home screen). A game starts through Steam (`steam://rungameid/…`), using the same Steam shortcut as the tile.
+- **Select a card:** a film or series opens the Jellyfin app (on its home screen). An installed game starts through Steam (`steam://rungameid/…`), using the same Steam shortcut as the tile. A game that isn't installed here opens its page in Steam, where **Stream** plays it from the computer that has it.
 - **Updates:** at start, then while the launcher is in front: Explore every hour, Series and Films every 10 minutes, Games every minute (they're read from Steam's own files, without its API). If something can't be reached, the row keeps what it had and tries again a minute later.
 
 **Setup:**
 - **Jellyfin:** Settings → **Jellyfin**: the address (such as `http://localhost:8096`), an API key (in Jellyfin: Dashboard → API Keys → +), and whose library to show. **Test** checks it. Typing the 32-character key with the gamepad is slow: you can also put it in `apps.json` (see [Configuration](configuration.md#jellyfin)).
 - **TMDB (for Explore):** a free account at themoviedb.org → Settings → API. Type the short API key in Settings → Jellyfin → **Popular (TMDB)**, or put the key or the long Read Access Token in `apps.json`. Jellyfin matches each title by the TMDB id it stores, so nothing has to be renamed.
-- **Steam:** nothing to set up. The Flatpak Steam and a native one are both found, with every library folder.
+- **Steam:** nothing to set up. The Flatpak Steam and a native one are both found, with every library folder. Names of games that aren't installed here come from the Steam store, once per game (kept in `~/.cache/htpc-launcher/steam-apps.json`), and their covers from Steam's cache or its image servers. Non-Steam games added on another computer don't show yet.
 
 This product uses the TMDB API but is not endorsed or certified by TMDB.
 

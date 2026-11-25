@@ -68,7 +68,11 @@ def screenshot(win, name):
     p = Gtk.WidgetPaintable.new(win)
     snap = Gtk.Snapshot()
     p.snapshot(snap, win.get_width(), win.get_height())
-    tex = win.get_native().get_renderer().render_texture(snap.to_node(), None)
+    node = snap.to_node()
+    if node is None:   # caught mid-layout (it happens under load): no picture this time
+        print(f"(screenshot {name} skipped: nothing drawn yet)", flush=True)
+        return
+    tex = win.get_native().get_renderer().render_texture(node, None)
     tex.save_to_png(f"{OUT}/{name}.png")
 
 
@@ -1568,7 +1572,8 @@ def fake_steam(home):
     (root / "userdata/1/config/localconfig.vdf").write_text(
         '"UserLocalConfigStore" { "Software" { "Valve" { "Steam" { "apps" { '
         f'"620" {{ "LastPlayed" "{now - 3600}" "Playtime" "300" }} '
-        f'"440" {{ "LastPlayed" "{now - 3 * 86400}" }} }} }} }} }} }}')
+        f'"440" {{ "LastPlayed" "{now - 3 * 86400}" }} '
+        f'"730" {{ "LastPlayed" "{now - 2 * 86400}" "Playtime" "90" }} }} }} }} }} }}')
     for appid, name in (("620", "Portal 2"), ("440", "Team Fortress 2")):
         (root / f"steamapps/appmanifest_{appid}.acf").write_text(f'"AppState" {{ "appid" "{appid}" "name" "{name}" }}')
     cache = root / "appcache/librarycache/620"
@@ -1584,6 +1589,10 @@ def m1():
     steam_home = tempfile.mkdtemp()
     fake_steam(steam_home)
     l.steam_home_dir = steam_home
+    from htpc import steam as _steam
+    l.steam_names = _steam.Names(pathlib.Path(steam_home) / "names.json",
+                                 lambda appid: ("Jogo Por Streaming", "game") if appid == "730" else None)
+    l.steam_image_get = lambda url: state.setdefault("steam_cdn", []).append(url) or png((200, 60, 60))
     l.jellyfin_get, l.tmdb_get = jf_get, tmdb_get
     l.cfg["jellyfin"] = {"url": "http://jf:8096", "api_key": "k"}
     l.cfg["tmdb"] = {"api_key": "a" * 32}
@@ -1617,9 +1626,9 @@ def m2():
           l.media_context is None and l.tab_row == [] and l.recent_cards == [] and l.recent_section.get_visible())
     steam_tile = next(t for t in l.tiles if "steam" in t.app["id"].lower())
     steam_tile.grab_focus()
-    check("Steam in focus: only Games, the installed games, last played first",
+    check("Steam in focus: only Games, last played first, streamed ones (named by the store) too",
           [b.tab for b in l.tab_row] == ["games"] and l.media_note.get_label() == l.t("games_note")
-          and [c.item["title"] for c in l.recent_cards] == ["Portal 2", "Team Fortress 2"])
+          and [c.item["title"] for c in l.recent_cards] == ["Portal 2", "Jogo Por Streaming", "Team Fortress 2"])
 
 
 @step(500)
@@ -1638,6 +1647,13 @@ def m3():
     steam_app = next(t.app for t in l.tiles if "steam" in t.app["id"].lower())
     check("a game starts through the same Steam shortcut", spawned and spawned[0][-1] == "steam://rungameid/620"
           and spawned[0][0] == steam_app["launch"][0])
+    check("a streamed game's cover comes from Steam's image servers",
+          any("/apps/730/" in u for u in state.get("steam_cdn", [])) and l.recent_cards[1].picture.get_paintable() is not None)
+    l.recent_cards[1].grab_focus()
+    l._spawn = lambda command: spawned.append(command) or True
+    l.press()
+    l._spawn = real
+    check("a streamed game opens its Steam page (where Stream is)", spawned[-1][-1] == "steam://nav/games/details/730")
     # Pages: twelve films, five a page
     from htpc.backends.base import GamepadEvent as E
     nav = l.navigator
