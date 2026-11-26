@@ -63,7 +63,7 @@ class SettingsMixin:
         box = self.dialog_box(self.t("settings"))
         box.add_css_class("editor")
         box.add_css_class("settings")
-        box.set_spacing(8)  # ten rows plus the buttons fit a 1080p screen
+        box.set_spacing(4)  # eleven rows plus the buttons fit a 1080p screen
         box.add_css_class("settings-main")
         f = self.settings_fields = {
             "apps": self._field(self.t("settings_apps"), self._settings_apps, title_width=300),
@@ -73,6 +73,7 @@ class SettingsMixin:
             "language": self._field(self.t("settings_language"), self._choose_language, title_width=300),
             "notifications": self._field(self.t("settings_notifications"), self._toggle_notifications,
                                          title_width=300),
+            "screensaver": self._field(self.t("settings_screensaver"), self._next_screensaver, title_width=300),
             "audio": self._field(self.t("settings_audio"), self.open_audio, title_width=300),
             "shortcuts": self._field(self.t("settings_shortcuts"), self.open_shortcuts, title_width=300),
             "home_assistant": self._field(self.t("settings_ha"), self.open_home_assistant, title_width=300),
@@ -111,10 +112,21 @@ class SettingsMixin:
         f["unit"].value.set_label(UNITS[self._unit()])
         f["language"].value.set_label(self.t("language_name"))
         f["notifications"].value.set_label(self.t("on" if self.cfg.get("notifications", True) else "off"))
+        minutes = self.saver_minutes()
+        f["screensaver"].value.set_label(self.t("saver_after", n=minutes) if minutes else self.t("off"))
         f["home_assistant"].value.set_label(self._ha_summary())
         f["jellyfin"].value.set_label(self._jf_summary())
         f["audio"].value.set_label(getattr(self, "audio_current", None) or self.t("audio_value"))
         f["shortcuts"].value.set_label(shortcuts.combo_label(shortcuts.combos(self.cfg)["home"]))
+
+    def _next_screensaver(self):
+        """Ⓐ goes through Off, 2, 5, 10 and 30 minutes."""
+        from screensaver import CHOICES
+        minutes = self.saver_minutes()
+        later = [m for m in CHOICES if m > minutes]
+        self.cfg["screensaver_minutes"] = later[0] if later else CHOICES[0]
+        self.save_config()
+        self.refresh_settings()
 
     def _unit(self):
         unit = self.cfg.get("temperature_unit", "celsius")
@@ -706,7 +718,7 @@ class SettingsMixin:
         box = self.dialog_box(self.t("settings_ha"))
         box.add_css_class("editor")
         box.add_css_class("settings")
-        box.set_spacing(16)
+        box.set_spacing(10)
         f = self.ha_fields = {
             "enabled": self._field(self.t("ha_enabled"), self._ha_toggle_enabled, title_width=300),
             "url": self._field(self.t("ha_url"), self._ha_edit_url, title_width=300),
@@ -716,6 +728,7 @@ class SettingsMixin:
                                  title_width=300),
             "tv": self._field(self.t("ha_tv"), self._ha_choose_tv, title_width=300),
             "source": self._field(self.t("quick_source"), self._ha_choose_source, title_width=300),
+            "volume": self._field(self.t("ha_volume"), self._ha_toggle_volume, title_width=300),
             "home": self._field(self.t("ha_home"), self._ha_choose_home, title_width=300),
             "test": self._field(self.t("ha_test"), self._ha_test, title_width=300),
         }
@@ -749,6 +762,32 @@ class SettingsMixin:
             f["source"].value.set_label(self.t("quick_source_needs_tv"))
         else:
             f["source"].value.set_label((ha.get("quick_source") or {}).get("source") or self.t("off"))
+        if not ha.get("token") or not ha.get("tv_entity"):
+            f["volume"].value.set_label(self.t("ha_volume_computer"))
+        else:
+            f["volume"].value.set_label(self.t("ha_volume_tv" if ha.get("volume") == "tv" else "ha_volume_computer"))
+
+    def _ha_toggle_volume(self):
+        """The volume shortcut changes the computer's volume or the TV's. The TV
+        is checked first: not every TV lets Home Assistant change its volume."""
+        ha = self._ha()
+        if ha.get("volume") == "tv":
+            self._ha_set(volume=None)
+            return
+        if not ha.get("token") or not ha.get("tv_entity"):
+            self._message(self.t("quick_source_needs_tv"))
+            return
+        cfg, get = dict(self.cfg), getattr(self, "ha_get", None)
+
+        def done(result):
+            if isinstance(result, Exception):
+                self._message(self.t("ha_test_failed", error=self._reason(result)))
+            elif not result:
+                self._message(self.t("ha_volume"), self.t("ha_volume_unsupported"))
+            else:
+                self._ha_set(volume="tv")
+
+        self._ha_ask(lambda: home_assistant.tv_volume_support(cfg, get), done)
 
     def _ha_toggle_enabled(self):
         self._ha_set(enabled=None if not self._ha().get("enabled", True) else False)

@@ -122,6 +122,10 @@ With the token and the TV set up, Settings → Home Assistant → **TV input but
 
 To come back, press any button on the HTPC's gamepads: while the TV shows the other input, the first press only brings it back, through the same wake automation (it selects `htpc_input`), like when the TV is off.
 
+### Optional: the TV's volume
+
+Settings → Home Assistant → **Volume shortcut** chooses what Start + Select + ↑ / ↓ changes: the computer's volume (the default) or **the TV's**, through Home Assistant (`media_player.volume_set`, or `volume_up` / `volume_down` for TVs that only take steps, like LG webOS). The launcher checks first that Home Assistant can change the TV's volume. With sound going to a soundbar over ARC, whether the TV passes the change on depends on the TV.
+
 ### 5. Optional: lights on the home screen
 
 With the address and the [access token](#3-optional-ignore-the-gamepad-while-the-tv-is-off), the launcher shows a **Home** row under the apps: go down from the apps to reach it. No automation is needed; the launcher calls Home Assistant's API directly.
@@ -167,7 +171,8 @@ The `home_assistant` entry of `apps.json`:
 | `devices` | The lights and switches under the apps, in order (entity ids). Without it, every light, by room. | Lights on the home screen |
 | `quick_source` | `{"source": "HDMI 2", "label": "Nintendo Switch"}`: a button at the top switches the TV to this input. | TV input button |
 | `htpc_source` | The HTPC's own input, remembered on the first switch. While the TV shows another input, the HTPC's gamepads only bring it back. It must match `htpc_input` in the wake automation. | (set by the launcher) |
-| `group_by_area` | `true` shows each room's name over its lights, the rooms in the order they first come in `devices`. | Lights on the home screen → Separate by room |
+| `group_by_area` | `true` shows the rooms side by side, each name over its lights, in the order they first come in `devices`. | Lights on the home screen → Separate by room |
+| `volume` | `"tv"`: the volume shortcut changes the TV's volume through Home Assistant. Otherwise the computer's. | Volume shortcut |
 | `names` | `{"light.x": "Desk"}`: names of your own, instead of Home Assistant's (like a dashboard card's). | (apps.json only) |
 | `scenes` | The scenes or scripts above them (entity ids). Without it, the first 6 scenes. | (apps.json only) |
 

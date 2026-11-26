@@ -176,7 +176,20 @@ def tmdb_get(url, key):
 
 
 def weather_fetch(url):
-    return {"current": {"temperature_2m": 24.6, "weather_code": 2, "is_day": 1}}
+    today = datetime.date.today()
+    hours = [f"{today}T{h:02d}:00" for h in range(24)] + [f"{today + datetime.timedelta(days=1)}T{h:02d}:00" for h in range(24)]
+    now = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M")
+    codes = [0, 1, 2, 2, 3, 61, 80, 2, 1, 0, 95, 3]
+    return {"current": {"time": now, "temperature_2m": 24.6, "weather_code": 2, "is_day": 1},
+            "hourly": {"time": hours, "temperature_2m": [18 + 8 * math.sin((h % 24 - 9) / 24 * 2 * math.pi) for h in range(48)],
+                       "weather_code": [codes[h % 12] for h in range(48)],
+                       "is_day": [1 if 6 <= h % 24 < 19 else 0 for h in range(48)],
+                       "precipitation_probability": [[0, 5, 10, 20, 40, 70][h % 6] for h in range(48)]},
+            "daily": {"time": [str(today + datetime.timedelta(days=d)) for d in range(6)],
+                      "weather_code": [2, 61, 95, 1, 0, 3], "temperature_2m_max": [28, 26, 24, 27, 30, 29],
+                      "temperature_2m_min": [18, 17, 16, 17, 19, 20],
+                      "sunrise": [f"{today}T05:12"] * 6, "sunset": [f"{today}T18:41"] * 6,
+                      "precipitation_probability_max": [10, 60, 85, 5, 0, 20]}}
 
 
 cfg = json.load(open(os.path.join(ROOT, "config", "apps.json")))

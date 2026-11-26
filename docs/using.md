@@ -52,7 +52,8 @@ Above the apps, a row of cards that follows the app in focus:
 
 | App in focus | Tabs | What they show |
 |---|---|---|
-| **Jellyfin** | **Explore** | What is new and popular on [TMDB](https://www.themoviedb.org/) **and is in your library**: this week's trending films and series that came out in the last 18 months, series with new episodes this week, films in cinemas, then the most popular series with an episode in the last 45 days and recent films. Old favourites that trend without anything new (a 90s sitcom) are left out. Without a TMDB key: what was added lately. |
+| **Jellyfin** | **Continue** | What you stopped in the middle of, the last watched first, with a progress bar and the time left. The tab only shows while something is half watched, and is checked again each time you come back to the launcher. |
+| | **Explore** | What is new and popular on [TMDB](https://www.themoviedb.org/) **and is in your library**: this week's trending films and series that came out in the last 18 months, series with new episodes this week, films in cinemas, then the most popular series with an episode in the last 45 days and recent films. Old favourites that trend without anything new (a 90s sitcom) are left out. Without a TMDB key: what was added lately. |
 | | **Series**, **Films** | What was added lately to Jellyfin. New episodes are grouped under their series, with how many are new. |
 | **Steam** | **Games** | Your Steam games, the last played first, with when and how long you played. Games streamed from another computer (Remote Play) count too. |
 | Any other app | none | The space stays empty, so nothing on screen jumps. |
@@ -75,12 +76,20 @@ Go down from the apps to reach your lights. The apps dim and the screen scrolls.
 
 - **Ⓐ** turns a light or switch on or off. The card changes at once; Home Assistant's own answer follows a moment later.
 - **Hold Ⓐ** (or press **Ⓨ**) on a light to open its panel, with what the light supports: brightness (**−** and **+**, by 10%), white temperature (2200 K to 6500 K, within the light's range) and colour (eight colours). The current ones are marked.
-- **By room:** Settings → Home Assistant → Lights on the home screen → **Separate by room** shows each room's name with its lights under it.
+- **By room:** Settings → Home Assistant → Lights on the home screen → **Separate by room** puts the rooms side by side, each name over its lights, in one row to move along.
 - **Scenes** sit in a row above the lights. Ⓐ runs one.
 - **Which ones:** every light, by room, until you choose. Choose in Settings → Home Assistant → **Lights on the home screen**, which also lists switches. Without a choice, the first 6 scenes show.
 - **Updates:** the states are read every 5 seconds while the launcher is in front.
 
 It needs Home Assistant's address and access token. See the [Home Assistant guide](home-assistant.md#5-optional-lights-on-the-home-screen).
+
+### Forecast
+
+Below the lights (go further down): the next 12 hours with the chance of rain, today and the next five days with their highs and lows, and the times of sunrise and sunset. It comes with the weather in the top bar, so it shows once a location is set (Settings → Location).
+
+### Screensaver
+
+After 5 minutes with nobody pressing anything while the launcher is in front, the screen shows the pictures of your films and series (Continue, Explore, Films, Series) one after the other, with a big clock, the date and the temperature. Any button brings the launcher back, and that press does nothing else. Settings → **Screensaver** chooses 2, 5, 10 or 30 minutes, or Off.
 
 ### No stray mouse pointer
 

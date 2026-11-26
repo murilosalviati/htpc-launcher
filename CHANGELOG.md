@@ -4,6 +4,12 @@ The project is in beta: every `0.x` version is a pre-release, and the configurat
 
 ## Unreleased
 
+- **Continue watching:** a Jellyfin tab with what you stopped in the middle of, with a progress bar and the time left. It only shows while something is half watched, and is checked again each time you come back to the launcher.
+- **Forecast under the lights:** the next 12 hours, the next days, sunrise and sunset, with the weather's location.
+- **Screensaver:** after 5 minutes without a press, your films' and series' pictures with a big clock. Any button brings the launcher back. Settings → Screensaver: 2, 5, 10, 30 minutes or Off.
+- **Lights by room, side by side:** the rooms sit next to each other in one row instead of one under the other.
+- **The volume shortcut can change the TV's volume** through Home Assistant (Settings → Home Assistant → Volume shortcut).
+
 - **PlayStation button names:** with only PlayStation controllers connected, the launcher names the face buttons ✕ ○ □ △ (edit-mode hint, lights, on-screen keyboard, dialogs) instead of Ⓐ Ⓑ Ⓧ Ⓨ.
 
 - **Reorder the apps in edit mode:** LB / RB (Page Up / Page Down on a keyboard) move the app in focus one place back or forward. The edit-mode hint says so.

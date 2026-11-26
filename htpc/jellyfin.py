@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Murilo Salviati
-"""What was added to Jellyfin lately, for the "Recently added" row.
+"""What was added to Jellyfin lately and what is half watched, for the row above the apps.
 
 Configured with a "jellyfin" entry in apps.json:
 
@@ -133,9 +133,19 @@ def _item(cfg, raw):
         "episode": raw.get("IndexNumber"),
         "episode_name": raw.get("Name") if kind == "episode" else None,
         "new_count": raw.get("ChildCount") if kind == "series" else None,
+        "progress": _progress(raw),
         "poster": poster,
         "backdrop": backdrop,
     }
+
+
+def _progress(raw):
+    """How far it was watched, 0..100, when it was started and not finished."""
+    data = raw.get("UserData") or {}
+    pct = data.get("PlayedPercentage")
+    if pct is None and data.get("PlaybackPositionTicks") and raw.get("RunTimeTicks"):
+        pct = 100 * data["PlaybackPositionTicks"] / raw["RunTimeTicks"]
+    return max(0.0, min(100.0, float(pct))) if pct else None
 
 
 def _user_route(cfg, uid, path, query, get):
@@ -157,6 +167,18 @@ def latest(cfg, get=None, limit=LATEST_LIMIT, types=VIDEO_TYPES):
              "EnableImageTypes": "Primary,Backdrop,Thumb", "ImageTypeLimit": 1}
     raw = _user_route(cfg, uid, "/Items/Latest", query, get)
     items = [_item(cfg, r) for r in raw or []]
+    return [i for i in items if i]
+
+
+def resume(cfg, get=None, limit=LATEST_LIMIT):
+    """What the user stopped in the middle of, most recently watched first (films
+    and episodes, each with its progress)."""
+    uid = user_id(cfg, get)
+    query = {"Limit": limit, "MediaTypes": "Video", "IncludeItemTypes": "Movie,Episode",
+             "Fields": "ProductionYear,RunTimeTicks,ParentId",
+             "EnableImageTypes": "Primary,Backdrop,Thumb", "ImageTypeLimit": 1, "EnableUserData": "true"}
+    raw = _user_route(cfg, uid, "/Items/Resume", query, get)
+    items = [_item(cfg, r) for r in (raw or {}).get("Items", [])]
     return [i for i in items if i]
 
 

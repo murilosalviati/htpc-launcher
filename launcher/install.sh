@@ -50,7 +50,7 @@ rm -f "$DATA/htpc_config.py" "$DATA/i18n.py" "$DATA/themes.py"
 
 put_dir "$HERE/../htpc" "$DATA/htpc"
 put_dir "$HERE/icons" "$DATA/icons"
-for f in background.py editor.py home.py settings.py launcher.css launcher.py; do
+for f in background.py editor.py home.py screensaver.py settings.py launcher.css launcher.py; do
     put_file "$HERE/$f" "$DATA"
 done
 # Icons chosen by you (kept out of the public repository).

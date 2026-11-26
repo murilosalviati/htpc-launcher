@@ -283,7 +283,7 @@ def e1():
     l.press()
     f = l.settings_fields
     check("the gear opens Settings with apps, background, location, temperature and language",
-          len(l.overlays) == 1 and list(f) == ["apps", "background", "location", "unit", "language", "notifications", "audio", "shortcuts", "home_assistant", "jellyfin"])
+          len(l.overlays) == 1 and list(f) == ["apps", "background", "location", "unit", "language", "notifications", "screensaver", "audio", "shortcuts", "home_assistant", "jellyfin"])
     check("Settings shows the current values",
           f["background"].value.get_label() == "Meia-noite" and f["unit"].value.get_label() == "°C"
           and f["language"].value.get_label() == "Português (Brasil)"
@@ -758,7 +758,7 @@ def tv1():
     l.press()
     f = l.ha_fields
     check("it opens the Home Assistant menu", len(l.overlays) == 2
-          and list(f) == ["enabled", "url", "webhook", "events", "token", "tv", "source", "home", "test"]
+          and list(f) == ["enabled", "url", "webhook", "events", "token", "tv", "source", "volume", "home", "test"]
           and f["token"].value.get_label() == l.t("ha_token_missing")
           and f["tv"].value.get_label() == l.t("ha_tv_needs_token"))
     l.pop_overlay()
@@ -1398,6 +1398,8 @@ def jf_get(url, key):
     path, query = parts.path, dict(up.parse_qsl(parts.query))
     if path == "/Users":
         return json.dumps([{"Id": "u1", "Name": "mu", "Policy": {"IsAdministrator": True}}]).encode()
+    if path.endswith("/Items/Resume"):
+        return json.dumps({"Items": state.get("resume", [])}).encode()
     if path.endswith("/Items/Latest"):
         types = query.get("IncludeItemTypes", "")
         items = [i for i in JF_LATEST if types != "Movie" or i["Type"] == "Movie"]
@@ -1583,10 +1585,10 @@ def hc5():
 def hc6():
     l = L()
     titles = [w.get_label() for w in label_texts_widgets(l.device_box) if w.has_css_class("area-title")]
-    check("separated by room: a title per room, a row of lights under each",
+    check("separated by room: the rooms side by side, each title over its lights, one row to move along",
           titles == ["Quarto", "Sala"] and [[t.device["entity"] for t in r] for r in l.device_rows]
-          == [["light.abajur"], ["light.fita", "light.sala"]] and l.house_rows[-2:] == l.device_rows)
-    l.device_rows[1][0].grab_focus()
+          == [["light.abajur", "light.fita", "light.sala"]] and l.house_rows[-1:] == l.device_rows)
+    l.device_rows[0][1].grab_focus()
 
 
 @step(400)
@@ -1912,6 +1914,109 @@ def q3():
     l.refresh_source_button()
     l.ha_get = ha_states
     l.tiles[0].grab_focus()
+
+
+# ---------------- continue watching, the forecast, the screensaver ----------------
+
+@step(300)
+def cw1():
+    l = L()
+    while l.overlays:
+        l.pop_overlay()
+    state["resume"] = [
+        {"Id": "e7", "Type": "Episode", "Name": "Volta", "SeriesName": "Série Dois", "SeriesId": "s1",
+         "SeriesPrimaryImageTag": "p", "ParentIndexNumber": 1, "IndexNumber": 3, "RunTimeTicks": 40 * 600_000_000,
+         "ParentBackdropItemId": "s1", "ParentBackdropImageTags": ["b"], "UserData": {"PlayedPercentage": 25}},
+        {"Id": "m1", "Type": "Movie", "Name": "Filme Um", "RunTimeTicks": 100 * 600_000_000,
+         "ImageTags": {"Primary": "p"}, "BackdropImageTags": ["b"], "UserData": {"PlayedPercentage": 70}},
+    ]
+    l.jellyfin_get = jf_get
+    l.cfg["jellyfin"] = {"url": "http://jf:8096", "api_key": "k"}
+    state["jf_tile"] = next(t for t in l.tiles if "jellyfin" in t.app["id"].lower())
+    state["jf_tile"].grab_focus()
+    l.refresh_resume()
+
+
+@step(700)
+def cw2():
+    l = L()
+    check("something half watched: a Continue tab first in Jellyfin's row",
+          [b.tab for b in l.tab_row][:2] == ["resume", "explore"])
+    l.tab_buttons["resume"].grab_focus()
+
+
+@step(700)
+def cw3():
+    l = L()
+    cards = l.recent_cards
+    check("Continue shows the episode and the film, each with its progress and the time left",
+          [c.item["id"] for c in cards] == ["e7", "m1"] and abs(cards[0].progress.get_fraction() - 0.25) < 0.01
+          and l._media_detail(cards[0].item) == l.t("media_episode", season=1, episode=3) + " · "
+          + l.t("media_left", time="30 min") and l._media_detail(cards[1].item) == l.t("media_left", time="30 min"))
+    screenshot(l.win, "41-continue-watching")
+    state["resume"] = []
+    l.refresh_resume()
+
+
+@step(700)
+def cw4():
+    l = L()
+    check("once nothing is half watched, the tab goes away", "resume" not in [b.tab for b in l.tab_row]
+          and l.media_tab != "resume")
+    state["jf_tile"].grab_focus()
+    from htpc import weather as W
+    hours = [W.Hour(h, 20 + h % 5, "rain" if h % 3 else "clear", True, 30) for h in range(14, 27)]
+    days = [W.Day("2026-11-26", 18, 28, "partly", 10), W.Day("2026-11-27", 19, 30, "storm", 80),
+            W.Day("2026-11-28", 17, 25, "clear", None)]
+    l.cfg["weather"] = {"name": "Campinas, SP", "latitude": -22.9, "longitude": -47.0}
+    l.conditions = W.Conditions(25, "partly", True, W.Forecast(hours, days, "05:12", "18:41"))
+    l.show_weather()
+
+
+@step(400)
+def fc1():
+    l = L()
+    check("the forecast sits below the house: the next hours, the days, sunrise and sunset",
+          l.forecast_section.get_visible() and len(l.day_cards) == 3
+          and l.hours_box.observe_children().get_n_items() == 13
+          and "05:12" in l.forecast_title.note.get_label() and l.rows[-1] == l.day_cards)
+    l.day_cards[1].grab_focus()
+
+
+@step(400)
+def fc2():
+    l = L()
+    check("going down to the days dims the apps", l.grid.has_css_class("dimmed"))
+    screenshot(l.win, "42-forecast")
+    state["jf_tile"].grab_focus()
+    l.cfg["screensaver_minutes"] = 5
+    l.last_input = time.monotonic() - 4 * 60
+    l._saver_check()
+    state["saver_early"] = l.saver is not None
+    l.last_input = time.monotonic() - 6 * 60
+    l._saver_check()
+
+
+@step(800)
+def sv1():
+    from htpc.backends.base import GamepadEvent as E
+    l = L()
+    check("the screensaver waits its minutes, then shows the clock", not state["saver_early"] and l.saver is not None
+          and l.saver_clock.get_label() == l.time_label.get_label())
+    screenshot(l.win, "43-screensaver")
+    before = l.win.get_focus()
+    l.navigator.active = lambda: True
+    l.navigator.handle(E("pad", "button", "a", 1))
+    l.navigator.handle(E("pad", "button", "a", 0))
+    check("any button closes it, and that press does nothing else",
+          l.saver is None and l.win.get_focus() is before and not l.overlays)
+    l.cfg["screensaver_minutes"] = 0
+    l.last_input = time.monotonic() - 60 * 60
+    l._saver_check()
+    check("Off: it never shows", l.saver is None)
+    l.cfg.pop("weather", None)
+    l.conditions = None
+    l.show_weather()
 
 
 @step(200)

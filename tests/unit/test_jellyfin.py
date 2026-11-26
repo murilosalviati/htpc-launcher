@@ -95,3 +95,32 @@ def test_other_errors_are_not_hidden():
 
 def test_test_reports_server_and_count():
     assert jellyfin.test(CFG, Server()) == ("servidor", "10.11.0", 3)
+
+
+RESUME = {"Items": [
+    {"Id": "e9", "Type": "Episode", "Name": "Part Two", "SeriesName": "A Show", "SeriesId": "s1",
+     "SeriesPrimaryImageTag": "p2", "ParentIndexNumber": 2, "IndexNumber": 5, "RunTimeTicks": 40 * 600_000_000,
+     "UserData": {"PlayedPercentage": 37.5}},
+    {"Id": "m2", "Type": "Movie", "Name": "Halfway", "RunTimeTicks": 100 * 600_000_000,
+     "ImageTags": {"Primary": "p"}, "UserData": {"PlaybackPositionTicks": 25 * 600_000_000}},
+]}
+
+
+def test_resume_lists_what_was_left_halfway_with_progress():
+    calls = []
+
+    def server(url, key):
+        calls.append(url)
+        if urllib.parse.urlsplit(url).path == "/Users":
+            return json.dumps(USERS).encode()
+        return json.dumps(RESUME).encode()
+
+    items = jellyfin.resume(CFG, server)
+    assert [i["id"] for i in items] == ["e9", "m2"]
+    assert items[0]["title"] == "A Show" and items[0]["season"] == 2 and items[0]["progress"] == 37.5
+    assert items[1]["progress"] == 25.0 and items[1]["minutes"] == 100
+    assert "/Users/u-admin/Items/Resume?" in calls[-1] and "EnableUserData=true" in calls[-1]
+
+
+def test_latest_items_have_no_progress():
+    assert all(i["progress"] is None for i in jellyfin.latest(CFG, Server()))

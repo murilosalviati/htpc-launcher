@@ -26,11 +26,12 @@ from gi.repository import Gdk, GLib, Gtk, Pango
 from htpc import home_assistant, jellyfin, steam, tmdb
 from background import in_background
 
-TABS = ("explore", "series", "movies", "games")
+TABS = ("resume", "explore", "series", "movies", "games")
 PAGE_SIZE = 5              # cards a page: one wide and four posters; RB / LB turn the page
-TAB_EVERY = {"explore": 60 * 60, "series": 10 * 60, "movies": 10 * 60, "games": 60}   # seconds
+TAB_EVERY = {"resume": 2 * 60, "explore": 60 * 60, "series": 10 * 60, "movies": 10 * 60, "games": 60}   # seconds
 HOUSE_EVERY = 5            # seconds between light/switch state updates
 HOUSE_COLUMNS = 6
+DEVICE_WIDTH = 240         # px of a light's card when shown by room
 HOUSE_SETTLE_MS = 700      # after a press: ask Home Assistant again this much later
 WIDE = (512, 288)          # the first "recently added" card (16:9)
 POSTER = (192, 288)        # the others (2:3)
@@ -85,6 +86,10 @@ class MediaCard(Gtk.Button):
             d = Gtk.Label(label=detail, xalign=0, ellipsize=Pango.EllipsizeMode.END, max_width_chars=40 if wide else 18)
             d.add_css_class("media-detail")
             band.append(d)
+        if item.get("progress") is not None:
+            self.progress = Gtk.ProgressBar(fraction=item["progress"] / 100)
+            self.progress.add_css_class("media-progress")
+            band.append(self.progress)
         stack.add_overlay(band)
         self.set_child(stack)
         self.connect("clicked", lambda _b: on_activate(self))
@@ -215,7 +220,18 @@ class HomeMixin:
         self.device_rows, self.house_grouped = [], None
         self.house_section.set_visible(False)
 
-        for w in (self.recent_section, self.grid, self.house_section):
+        self.forecast_section = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=22)
+        self.forecast_title = self._section_title(self.t("forecast_title"), "")
+        self.forecast_section.append(self.forecast_title)
+        self.hours_box = Gtk.Box(spacing=12)
+        self.hours_box.add_css_class("forecast-hours")
+        self.forecast_section.append(self.hours_box)
+        self.days_box = Gtk.Box(spacing=20)
+        self.forecast_section.append(self.days_box)
+        self.day_cards = []
+        self.forecast_section.set_visible(False)
+
+        for w in (self.recent_section, self.grid, self.house_section, self.forecast_section):
             self.content.append(w)
         self.scroller.set_child(self.content)
         viewport = self.scroller.get_child()
@@ -236,7 +252,8 @@ class HomeMixin:
     def _relayout(self):
         """The apps sit in the middle of the screen when they are alone, at the top
         of their space when other rows are shown."""
-        alone = not (self.recent_section.get_visible() or self.house_section.get_visible())
+        alone = not (self.recent_section.get_visible() or self.house_section.get_visible()
+                     or self.forecast_section.get_visible())
         self.grid.set_vexpand(alone)
         self.grid.set_valign(Gtk.Align.CENTER if alone else Gtk.Align.START)
 
@@ -252,10 +269,75 @@ class HomeMixin:
 
     @property
     def house_rows(self):
-        if not self.house_section.get_visible():
-            return []
-        rows = [list(self.scene_buttons)] if self.scene_buttons else []
-        return rows + [list(r) for r in self.device_rows]
+        """The house, then the forecast's days (both below the apps)."""
+        rows = []
+        if self.house_section.get_visible():
+            rows = ([list(self.scene_buttons)] if self.scene_buttons else []) + [list(r) for r in self.device_rows]
+        if self.forecast_section.get_visible() and self.day_cards:
+            rows.append(list(self.day_cards))
+        return rows
+
+    # --- the forecast (below the house) --------------------------------------------------
+
+    def show_forecast(self, conditions):
+        """The next hours and days, under the house. Hidden without a forecast."""
+        forecast = getattr(conditions, "forecast", None)
+        if not forecast or not forecast.days:
+            self.forecast_section.set_visible(False)
+            self._relayout()
+            return
+        focused = self.win.get_focus()
+        had_focus = focused in self.day_cards
+        index = self.day_cards.index(focused) if had_focus else 0
+        _clear(self.hours_box)
+        _clear(self.days_box)
+        note = self.t("forecast_sun", rise=forecast.sunrise, set=forecast.sunset) if forecast.sunrise else ""
+        self.forecast_title.note.set_label(note)
+        for hour in forecast.hours:
+            chip = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+            chip.add_css_class("forecast-hour")
+            when = Gtk.Label(label=self.t("forecast_now") if hour is forecast.hours[0] else f"{hour.hour:02d}h")
+            when.add_css_class("forecast-when")
+            icon = Gtk.Image.new_from_gicon(self.svg_icon(hour.icon))
+            icon.set_pixel_size(34)
+            temp = Gtk.Label(label=f"{hour.temperature}°")
+            temp.add_css_class("forecast-temp")
+            rain = Gtk.Label(label=f"{hour.rain}%" if hour.rain else "")
+            rain.add_css_class("forecast-rain")
+            for w in (when, icon, temp, rain):
+                chip.append(w)
+            self.hours_box.append(chip)
+        self.day_cards = []
+        weekdays = self.t.strings["weekdays"]
+        for n, day in enumerate(forecast.days):
+            card = Gtk.Button()
+            card.add_css_class("forecast-day")
+            card.set_focus_on_click(False)
+            box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+            try:
+                weekday = weekdays[time.strptime(day.date, "%Y-%m-%d").tm_wday]
+            except ValueError:
+                weekday = day.date
+            name = Gtk.Label(label=self.t("forecast_today") if n == 0 else weekday.split("-")[0].capitalize(), xalign=0)
+            name.add_css_class("forecast-day-name")
+            icon = Gtk.Image.new_from_gicon(self.svg_icon(day.icon))
+            icon.set_pixel_size(48)
+            icon.set_halign(Gtk.Align.START)
+            temps = Gtk.Label(label=f"{day.high}° / {day.low}°", xalign=0)
+            temps.add_css_class("forecast-temps")
+            rain = Gtk.Label(label=self.t("forecast_rain", pct=day.rain) if day.rain else " ", xalign=0)
+            rain.add_css_class("forecast-rain")
+            for w in (name, icon, temps, rain):
+                box.append(w)
+            card.set_child(box)
+            card.set_size_request(DEVICE_WIDTH, -1)
+            card.set_hexpand(False)
+            self.days_box.append(card)
+            self.day_cards.append(card)
+        self.forecast_section.set_visible(True)
+        if had_focus:
+            self.day_cards[min(index, len(self.day_cards) - 1)].grab_focus()
+        self._relayout()
 
     # --- the media tabs: Explore, Series, Films (Jellyfin) and Games (Steam) ------------------
 
@@ -265,10 +347,21 @@ class HomeMixin:
     def context_tabs(self, context):
         """The tabs of the app in focus: Jellyfin's films and series, or Steam's games."""
         if context == "jellyfin" and jellyfin.ready(self.cfg):
-            return ["explore", "series", "movies"]
+            # "Continue watching" only while something is half watched.
+            return (["resume"] if self.media.get("resume") else []) + ["explore", "series", "movies"]
         if context == "steam" and steam.available(self.steam_home()):
             return ["games"]
         return []
+
+    def fetchable_tabs(self):
+        """Every row kept up to date, shown or not ("resume" is hidden while empty)."""
+        tabs = self.context_tabs("jellyfin") + self.context_tabs("steam")
+        return (["resume"] if jellyfin.ready(self.cfg) and "resume" not in tabs else []) + tabs
+
+    def refresh_resume(self):
+        """Back from watching something: what is half watched has changed."""
+        if jellyfin.ready(self.cfg):
+            self._fetch_tab("resume")
 
     def media_ready(self):
         """Is there anything the row above the apps could show (for some app)?"""
@@ -296,7 +389,7 @@ class HomeMixin:
         """Fetch rows when they are due (at start: every row there is), then show
         the one of the app in focus."""
         self.recent_section.set_visible(self.media_ready())
-        everything = self.context_tabs("jellyfin") + self.context_tabs("steam")
+        everything = self.fetchable_tabs()
         tabs = self.available_tabs()
         for b in self.tab_buttons.values():
             b.set_visible(b.tab in tabs)
@@ -314,7 +407,9 @@ class HomeMixin:
         self.media_fetched[name] = time.monotonic()
         cfg = dict(self.cfg)
         jf_get, tmdb_get = getattr(self, "jellyfin_get", None), getattr(self, "tmdb_get", None)
-        if name == "explore" and tmdb.ready(cfg):
+        if name == "resume":
+            job = lambda: jellyfin.resume(cfg, jf_get)   # noqa: E731
+        elif name == "explore" and tmdb.ready(cfg):
             job = lambda: jellyfin.explore(cfg, tmdb.ranking(cfg, tmdb_get), jf_get)   # noqa: E731
         elif name == "explore":
             job = lambda: jellyfin.latest(cfg, jf_get)   # noqa: E731 - without TMDB: what's new
@@ -333,7 +428,7 @@ class HomeMixin:
             self.media_fetched[name] = time.monotonic() - TAB_EVERY[name] + 60   # try again in a minute
             return
         self.media[name] = result
-        if name == self.media_tab:
+        if name == self.media_tab or name == "resume":   # the Continue tab comes and goes
             self._show_media()
 
     def select_tab(self, name):
@@ -381,6 +476,15 @@ class HomeMixin:
                 else self.t("played_days", n=days)
             hours = round(item.get("minutes", 0) / 60)
             return f"{when} · {self.t('played_hours', n=hours)}" if hours else when
+        if item.get("progress") is not None:   # Continue watching: where and how long is left
+            parts = []
+            if item.get("season") is not None and item.get("episode") is not None:
+                parts.append(self.t("media_episode", season=item["season"], episode=item["episode"]))
+            if item.get("minutes"):
+                left = max(1, round(item["minutes"] * (100 - item["progress"]) / 100))
+                h, m = divmod(left, 60)
+                parts.append(self.t("media_left", time=f"{h}h{m:02d}" if h else f"{m} min"))
+            return " · ".join(parts)
         if item["kind"] == "movie":
             parts = [str(item["year"])] if item.get("year") else []
             if item.get("minutes"):
@@ -400,12 +504,16 @@ class HomeMixin:
     def _media_label(self, item):
         if item["kind"] == "game":
             return self.t("media_kind_game")
+        if self.media_tab == "resume":
+            return self.t("media_kind_resume")
         kind = "movie" if item["kind"] == "movie" else "series"
         return self.t(("media_kind_hot_" if self.media_tab == "explore" and tmdb.ready(self.cfg)
                        else "media_kind_") + kind)
 
     def _show_media(self):
         tabs = self.available_tabs()
+        if tabs and self.media_tab not in tabs:   # e.g. Continue watching, now empty
+            self.media_tab = tabs[0]
         self.recent_section.set_visible(self.media_ready())
         for b in self.tab_buttons.values():
             b.set_visible(b.tab in tabs)
@@ -544,16 +652,14 @@ class HomeMixin:
                     groups[-1][1].append(device)
                 else:
                     groups.append((key, [device]))
-            for area, members in groups:
-                if grouped:
-                    title = Gtk.Label(label=area or self.t("house_no_area"), xalign=0)
-                    title.add_css_class("area-title")
-                    self.device_box.append(title)
+            if grouped:
+                self._lay_out_rooms(groups)
+            else:
+                members = [d for _area, ds in groups for d in ds]
                 grid = Gtk.Grid(column_spacing=20, row_spacing=20, column_homogeneous=True)
                 tiles = []
                 for n, device in enumerate(members):
                     tile = DeviceTile(device, self.t, self.svg_icon, self.on_device)
-                    tile.area.set_visible(not grouped)   # the room's title says it already
                     grid.attach(tile, n % HOUSE_COLUMNS, n // HOUSE_COLUMNS, 1, 1)
                     tiles.append(tile)
                 for n in range(len(members), HOUSE_COLUMNS):   # a short row keeps the column width
@@ -571,6 +677,39 @@ class HomeMixin:
         self.house_title.note.set_label(self.t("house_note", n=on))
         self.house_section.set_visible(bool(devices or scenes))
         self._relayout()
+
+    def _lay_out_rooms(self, groups):
+        """Rooms side by side, each with its title over its lights, as many on a
+        line as fit HOUSE_COLUMNS lights; a big room goes on over the next line."""
+        line, used = None, HOUSE_COLUMNS
+        for area, members in groups:
+            first = True
+            while members:
+                if used >= HOUSE_COLUMNS:
+                    line = Gtk.Box(spacing=44, halign=Gtk.Align.START)
+                    line.add_css_class("house-line")
+                    self.device_box.append(line)
+                    self.device_rows.append([])
+                    used = 0
+                chunk, members = members[:HOUSE_COLUMNS - used], members[HOUSE_COLUMNS - used:]
+                room = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=14, hexpand=False)
+                room.add_css_class("house-room")
+                title = Gtk.Label(label=(area or self.t("house_no_area")) if first else "", xalign=0)
+                title.add_css_class("area-title")
+                room.append(title)
+                row = Gtk.Box(spacing=20)
+                for device in chunk:
+                    tile = DeviceTile(device, self.t, self.svg_icon, self.on_device)
+                    tile.area.set_visible(False)   # the room's title says it already
+                    tile.set_size_request(DEVICE_WIDTH, -1)
+                    tile.set_hexpand(False)   # its labels would stretch it over the line
+                    row.append(tile)
+                    self.device_tiles.append(tile)
+                    self.device_rows[-1].append(tile)
+                room.append(row)
+                line.append(room)
+                used += len(chunk)
+                first = False
 
     def on_device(self, tile):
         device = tile.device
@@ -732,7 +871,7 @@ class HomeMixin:
             self.select_tab(focused.tab)
         elif hasattr(focused, "app") and focused.is_ancestor(self.grid):
             self.set_context(self.context_of(focused.app))
-        in_house = focused.is_ancestor(self.house_section)
+        in_house = focused.is_ancestor(self.house_section) or focused.is_ancestor(self.forecast_section)
         if in_house:
             self.grid.add_css_class("dimmed")
         else:

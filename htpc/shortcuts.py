@@ -19,7 +19,7 @@ import logging
 import threading
 import time
 
-from . import config
+from . import config, home_assistant
 from .timing import Throttle
 
 # Both combos can be changed in Settings → Gamepad shortcuts ("shortcuts" in apps.json).
@@ -161,10 +161,15 @@ class Shortcuts:
             log.warning("launcher is not running and there is no command to start it")
 
     def volume(self, direction):
-        """direction +1 or -1: one step, and the level on screen."""
+        """direction +1 or -1: one step, and the level on screen. The computer's
+        volume, or the TV's through Home Assistant (Settings → Home Assistant)."""
+        cfg = self.settings()
         try:
-            result = self.system.change_volume(direction * VOLUME_STEP)
-        except Exception as e:  # noqa: BLE001 - no audio server, wpctl failed...
+            if home_assistant.volume_target(cfg) == "tv":
+                result = home_assistant.change_tv_volume(cfg, direction)
+            else:
+                result = self.system.change_volume(direction * VOLUME_STEP)
+        except Exception as e:  # noqa: BLE001 - no audio server, wpctl failed, TV unreachable...
             log.warning("volume: %s", e)
             return
         if result is None:

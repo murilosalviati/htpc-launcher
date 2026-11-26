@@ -72,6 +72,7 @@ Each entry in `apps` is one tile.
 | `temperature_unit` | `celsius`, `fahrenheit` | `celsius` | Unit |
 | `weather` | `{"query", "name", "latitude", "longitude"}`: the place you confirmed. Remove it to hide the weather. | none | Location |
 | `notifications` | `true`, `false` | `true` | On-screen notices |
+| `screensaver_minutes` | Minutes without a press before the screensaver; `0` turns it off. | `5` | Screensaver |
 | `shortcuts` | `{"home": [...], "close": [...]}`: only the combos you changed. Button names: `guide`, `start`, `select`, `l1`, `r1`, `a`, `b`, `x`, `y`. Invalid combos fall back to the defaults. | Home + LB + RB, Start + Select + LB + RB | Gamepads |
 | `home_assistant` | See the [Home Assistant settings reference](home-assistant.md#settings-reference). | none | Home Assistant |
 | `jellyfin` | See [Jellyfin](#jellyfin) below. | none | Jellyfin |

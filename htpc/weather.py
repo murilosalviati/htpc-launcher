@@ -4,7 +4,8 @@
 
   * Location: a Brazilian CEP (looked up on ViaCEP) or a city name, both turned
     into coordinates by Open-Meteo's geocoding. City precision is enough.
-  * Conditions: Open-Meteo's current temperature, weather code and day/night.
+  * Conditions: Open-Meteo's current temperature, weather code and day/night,
+    and in the same answer the next hours, the next days, sunrise and sunset.
 
 Both services are free and need no account or key. Nothing here touches the
 UI or the operating system: every function takes a `fetch(url) -> dict` so the
@@ -54,18 +55,58 @@ class Place:
     longitude: float
 
 
+def icon_for(kind, is_day=True):
+    """Icon file name in launcher/icons/ for a kind of weather."""
+    if kind in ("clear", "partly"):
+        return f"weather-{kind}-{'day' if is_day else 'night'}.svg"
+    return f"weather-{kind}.svg"
+
+
+@dataclass
+class Hour:
+    hour: int          # 0..23, local time
+    temperature: int
+    kind: str
+    is_day: bool
+    rain: int = None   # chance of rain, %
+
+    @property
+    def icon(self):
+        return icon_for(self.kind, self.is_day)
+
+
+@dataclass
+class Day:
+    date: str          # YYYY-MM-DD
+    low: int
+    high: int
+    kind: str
+    rain: int = None   # highest chance of rain that day, %
+
+    @property
+    def icon(self):
+        return icon_for(self.kind)
+
+
+@dataclass
+class Forecast:
+    hours: list        # [Hour], from the current hour on
+    days: list         # [Day], today first
+    sunrise: str = ""  # "06:12", today
+    sunset: str = ""
+
+
 @dataclass
 class Conditions:
     temperature: int   # rounded, in the unit that was asked for
     kind: str          # clear, partly, cloudy, fog, rain, storm, snow
     is_day: bool
+    forecast: Forecast = None
 
     @property
     def icon(self):
         """Icon file name in launcher/icons/."""
-        if self.kind in ("clear", "partly"):
-            return f"weather-{self.kind}-{'day' if self.is_day else 'night'}.svg"
-        return f"weather-{self.kind}.svg"
+        return icon_for(self.kind, self.is_day)
 
 
 def http_json(url):
@@ -150,15 +191,52 @@ def kind_for_code(code):
     return "cloudy"
 
 
+HOURS = 12        # hours shown after the current one
+DAYS = 6          # today and the next five
+
+
 def current(latitude, longitude, unit="celsius", fetch=http_json):
-    """Conditions right now. unit: "celsius" or "fahrenheit". Raises Unreachable."""
+    """Conditions right now, with the forecast. unit: "celsius" or "fahrenheit".
+    Raises Unreachable."""
     params = {"latitude": latitude, "longitude": longitude,
               "current": "temperature_2m,weather_code,is_day",
+              "hourly": "temperature_2m,weather_code,is_day,precipitation_probability",
+              "daily": "weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset,"
+                       "precipitation_probability_max",
+              "timezone": "auto", "forecast_days": DAYS,
               "temperature_unit": "fahrenheit" if unit == "fahrenheit" else "celsius"}
     data = fetch(f"{FORECAST}?{urllib.parse.urlencode(params)}")
     try:
         now = data["current"]
-        return Conditions(round(now["temperature_2m"]), kind_for_code(int(now["weather_code"])),
-                          bool(now.get("is_day", 1)))
+        conditions = Conditions(round(now["temperature_2m"]), kind_for_code(int(now["weather_code"])),
+                                bool(now.get("is_day", 1)))
     except (KeyError, TypeError, ValueError) as e:
         raise Unreachable(f"unexpected answer: {e}") from e
+    try:
+        conditions.forecast = _forecast(data, now.get("time", ""))
+    except (KeyError, TypeError, ValueError, IndexError):
+        conditions.forecast = None   # the current weather still shows
+    return conditions
+
+
+def _pct(values, i):
+    v = (values or [None] * (i + 1))[i]
+    return None if v is None else round(v)
+
+
+def _forecast(data, now):
+    hourly, daily = data.get("hourly"), data.get("daily")
+    if not hourly or not daily:
+        return None
+    this_hour = now[:13]   # "2026-11-26T14"
+    times = hourly["time"]
+    start = next((i for i, t in enumerate(times) if t[:13] >= this_hour), 0) if this_hour else 0
+    hours = [Hour(int(times[i][11:13]), round(hourly["temperature_2m"][i]),
+                  kind_for_code(int(hourly["weather_code"][i])), bool(hourly["is_day"][i]),
+                  _pct(hourly.get("precipitation_probability"), i))
+             for i in range(start, min(len(times), start + HOURS + 1))]
+    days = [Day(daily["time"][i], round(daily["temperature_2m_min"][i]), round(daily["temperature_2m_max"][i]),
+                kind_for_code(int(daily["weather_code"][i])), _pct(daily.get("precipitation_probability_max"), i))
+            for i in range(len(daily["time"]))]
+    sunrise, sunset = (daily.get("sunrise") or [""])[0], (daily.get("sunset") or [""])[0]
+    return Forecast(hours, days, sunrise[11:16], sunset[11:16])

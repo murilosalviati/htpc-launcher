@@ -70,6 +70,7 @@ from htpc.i18n import Translator  # noqa: E402
 from background import in_background  # noqa: E402
 from editor import EditorMixin  # noqa: E402
 from home import HOUSE_EVERY, HomeMixin  # noqa: E402
+from screensaver import ScreensaverMixin  # noqa: E402
 from settings import SettingsMixin  # noqa: E402
 
 CSS = HERE / "launcher.css"
@@ -119,7 +120,8 @@ class Navigator:
     HOLD_MS = 500         # Ⓐ held this long on a light opens its settings
 
     def __init__(self, gamepads, active, move, press, back, other_button, blocked=lambda: False,
-                 shoulder=lambda step: None, can_hold=lambda: False, long_press=lambda: None):
+                 shoulder=lambda step: None, can_hold=lambda: False, long_press=lambda: None,
+                 wake=lambda: False):
         self.gamepads = gamepads
         self.blocked = blocked  # True while the TV is off: input is ignored (it only wakes the TV)
         self.capture = None     # set while Settings records a shortcut: gets every button event
@@ -129,6 +131,7 @@ class Navigator:
         self.shoulder = shoulder          # called with -1 (LB) or 1 (RB) when one is tapped alone
         self.tapping = None               # (device, "l1"/"r1") pressed with nothing else so far
         self.can_hold, self.long_press = can_hold, long_press
+        self.wake = wake                  # a press: True when it only closed the screensaver
         self.hold_timer = 0               # Ⓐ down on something that does more when held
         self.stick = {}         # (device, axis) -> -1 / 0 / 1
         self.direction = None   # (dx, dy) being held
@@ -203,6 +206,8 @@ class Navigator:
         if self.capture is not None and ev.kind in ("button", "disconnected"):
             self.capture(ev)   # recording a new shortcut: buttons go there only
             return
+        if home_assistant.is_press(ev, self.DEAD_ZONE) and self.active() and self.wake():
+            return   # it closed the screensaver, nothing more
         if ev.kind == "button":
             held = self.held.setdefault(ev.device, set())
             (held.add if ev.value else held.discard)(ev.name)
@@ -381,7 +386,7 @@ class AddTile(Gtk.Button):
 PAD_ICONS = ("xbox", "playstation", "generic")   # a Nintendo pad gets the plain drawing
 
 
-class Launcher(HomeMixin, EditorMixin, SettingsMixin):
+class Launcher(HomeMixin, EditorMixin, SettingsMixin, ScreensaverMixin):
     gicon = staticmethod(gicon)  # the editor turns backend icons into GTK icons with it
     svg_icon = staticmethod(svg_icon)
 
@@ -447,7 +452,7 @@ class Launcher(HomeMixin, EditorMixin, SettingsMixin):
         self.navigator = Navigator(backend.gamepads(), self.win.is_active, self.move, self.press,
                                    self.back, self.other_button, blocked=home_assistant.input_blocked,
                                    shoulder=self.shoulder, can_hold=self.can_hold,
-                                   long_press=self.long_press)
+                                   long_press=self.long_press, wake=self.wake)
         self.gamepads = self.navigator.gamepads
 
         GLib.timeout_add_seconds(1, self._update_clock)
@@ -460,6 +465,7 @@ class Launcher(HomeMixin, EditorMixin, SettingsMixin):
         GLib.timeout_add_seconds(1, self._in_front(self._update_gamepads))
         GLib.timeout_add_seconds(1, lambda: self.opening and self._check_opening() or True)
         GLib.timeout_add_seconds(3, self._every_3s)
+        self.start_screensaver_timer()
         GLib.timeout_add(500, self._check_screen_size)
         GLib.timeout_add_seconds(HOUSE_EVERY, self._home_tick)
         self.refresh_top_bar()
@@ -951,6 +957,7 @@ class Launcher(HomeMixin, EditorMixin, SettingsMixin):
 
     def show_weather(self):
         place, c = self.cfg.get("weather"), self.conditions
+        self.show_forecast(c if place else None)
         if not place or not c:
             self.weather_box.set_visible(False)
             return
@@ -978,6 +985,7 @@ class Launcher(HomeMixin, EditorMixin, SettingsMixin):
             self.restore_display()
             self._update_gamepads()
             self._update_network()
+            self.refresh_resume()
             self._home_tick()
 
     def _every_3s(self):
@@ -1252,6 +1260,8 @@ class Launcher(HomeMixin, EditorMixin, SettingsMixin):
             self.open_light(self.win.get_focus())
 
     def _on_key(self, _ctl, keyval, _code, _mods):
+        if self.wake():
+            return True   # it closed the screensaver
         top = self.overlays[-1] if self.overlays else {}
         if top.get("type"):  # on-screen keyboard open: a real keyboard types too
             if keyval == Gdk.KEY_BackSpace:

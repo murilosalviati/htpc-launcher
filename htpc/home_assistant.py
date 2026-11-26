@@ -514,6 +514,47 @@ def _post(cfg, path, payload, post=None):
     return (post or http_post_api)(f"{ha['url'].rstrip('/')}/api/{path}", ha["token"], payload)
 
 
+# media_player supported_features bits
+VOLUME_SET, VOLUME_MUTE, VOLUME_STEP = 4, 8, 1024
+TV_VOLUME_STEP = 0.02     # 2 of the TV's 100 steps per press
+
+
+def volume_target(cfg):
+    """"tv" when the volume shortcut goes to the TV through Home Assistant
+    (Settings → Home Assistant → Volume), else "computer"."""
+    ha = (cfg or {}).get("home_assistant") or {}
+    return "tv" if api_ready(cfg) and ha.get("volume") == "tv" else "computer"
+
+
+def tv_volume_support(cfg, get=None):
+    """Can Home Assistant change this TV's volume? (reads the TV's state)"""
+    data = _api(cfg, "states/" + cfg["home_assistant"]["tv_entity"], get)
+    features = int((data.get("attributes") or {}).get("supported_features") or 0)
+    return bool(features & (VOLUME_SET | VOLUME_STEP))
+
+
+def change_tv_volume(cfg, direction, get=None, post=None):
+    """One step up (+1) or down (-1) on the TV. (level 0..1, muted), or None when
+    the TV doesn't say its level. Raises on network errors."""
+    entity = cfg["home_assistant"]["tv_entity"]
+    data = _api(cfg, "states/" + entity, get)
+    attrs = data.get("attributes") or {}
+    features = int(attrs.get("supported_features") or 0)
+    level, muted = attrs.get("volume_level"), bool(attrs.get("is_volume_muted"))
+    if features & VOLUME_SET and level is not None:
+        level = max(0.0, min(1.0, round(float(level) + direction * TV_VOLUME_STEP, 2)))
+        _post(cfg, "services/media_player/volume_set", {"entity_id": entity, "volume_level": level}, post)
+        return level, muted
+    if features & VOLUME_STEP:
+        _post(cfg, "services/media_player/" + ("volume_up" if direction > 0 else "volume_down"),
+              {"entity_id": entity}, post)
+        if level is None:
+            return None
+        # One step is one of the TV's 100 (LG webOS); its state catches up a moment later.
+        return max(0.0, min(1.0, round(float(level) + direction * 0.01, 2))), muted
+    raise ValueError(f"{entity} can't change its volume through Home Assistant")
+
+
 def _domain(entity):
     return entity.split(".", 1)[0]
 
