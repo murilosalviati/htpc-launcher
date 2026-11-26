@@ -118,4 +118,4 @@ Older versions used Portuguese field names (`nome`, `abrir`...). They are conver
 
 ## Your own icons
 
-To replace one of the launcher's top-bar icons with your own drawing, put an SVG with the same file name in `~/.local/share/htpc-launcher/icons/` and restart the launcher. The names are those in `launcher/icons/` (for example `console.svg` for the TV input button). Draw it in a light color (`#eef2f8`), since `currentColor` isn't set.
+To replace one of the launcher's top-bar icons with your own drawing, put an SVG with the same file name in `~/.config/htpc-launcher/icons/` (the installer never touches it) and restart the launcher. The names are those in `launcher/icons/` (for example `console.svg` for the TV input button). Draw it in a light color (`#eef2f8`), since `currentColor` isn't set.
