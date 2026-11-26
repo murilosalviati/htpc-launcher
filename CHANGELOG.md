@@ -4,6 +4,8 @@ The project is in beta: every `0.x` version is a pre-release, and the configurat
 
 ## Unreleased
 
+- **Your own icons:** an SVG in `~/.local/share/htpc-launcher/icons/` replaces the launcher icon of the same name (e.g. `console.svg`, the TV input button). See Configuration.
+
 - **Turning a gamepad on wakes the TV and switches it to the launcher**, without pressing a button. The wake automation now waits only 5 seconds after the TV goes off for a gamepad connecting (15 for button presses). Update the automation in Home Assistant from `extras/home-assistant/wake-tv.yaml`.
 
 - **Turning off the TV turns off the Bluetooth gamepads too** (Settings → Gamepads → Turn off with the TV, on by default). A moment after the TV goes off, the launcher disconnects them, which switches Xbox and PlayStation controllers off. Their home button turns them on again, and reconnecting wakes the TV through Home Assistant, as before. Gamepads on a cable or a dongle stay as they are.

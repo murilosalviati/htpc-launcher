@@ -284,8 +284,11 @@ class Navigator:
 def svg_icon(name):
     """One of our own icons (launcher/icons/*.svg) as a GIcon. GTK draws a GIcon
     from the vector at the size it is shown at; Gtk.Image.set_from_file would
-    rasterize the SVG at its 24 px and then stretch it (blurry on a 4K TV)."""
-    return Gio.FileIcon.new(Gio.File.new_for_path(str(ICONS / name)))
+    rasterize the SVG at its 24 px and then stretch it (blurry on a 4K TV).
+    A file of the same name in the user's icons folder (~/.local/share/
+    htpc-launcher/icons) replaces ours, for the user's own drawings."""
+    own = paths.data_dir() / "icons" / name
+    return Gio.FileIcon.new(Gio.File.new_for_path(str(own if own.is_file() else ICONS / name)))
 
 
 def gicon(ref):

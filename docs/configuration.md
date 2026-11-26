@@ -115,3 +115,7 @@ Older versions used Portuguese field names (`nome`, `abrir`...). They are conver
 | `~/.local/share/htpc-launcher/app-icons/` | Your own icons, picked in Settings → Apps. |
 | `~/.local/share/htpc-launcher/tv-gate` | Whether the TV is off, written by the service for the launcher. See [Home Assistant](home-assistant.md). |
 | `~/.local/share/htpc-launcher/tv-off` | When "Turn off TV" was last pressed. |
+
+## Your own icons
+
+To replace one of the launcher's top-bar icons with your own drawing, put an SVG with the same file name in `~/.local/share/htpc-launcher/icons/` and restart the launcher. The names are those in `launcher/icons/` (for example `console.svg` for the TV input button). Draw it in a light color (`#eef2f8`), since `currentColor` isn't set.
