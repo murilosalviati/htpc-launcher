@@ -7,22 +7,16 @@ HTPC Launcher: a gamepad-driven TV home screen for Ubuntu with GNOME on Wayland.
 
 ![Lights by room, further down the home screen](https://raw.githubusercontent.com/murilosalviati/htpc-launcher/main/docs/preview-house.png)
 
-## What's new in 0.1.0-beta.11
+## What's new in 0.1.0-beta.12
 
-### Films and series
-- **Continue watching:** a Jellyfin tab, after Explore, with what you stopped in the middle of, a progress bar and the time left. It only shows while something is half watched.
-- **LT / RT switch tabs** (Explore, Continue, Series, Films) from the app, a tab or a card. **LB / RB** still turn the page; their hint moved under the cards.
+- **Settings → Audio gathers the sound settings.** Its first line, **Volume shortcut changes**, chooses what Start + Select + ↑ / ↓ changes, one or the other: **System (Ubuntu)** or **TV (Home Assistant)**. Below it, the sound output and Bluetooth pairing. The choice moved there from the Home Assistant menu; yours is kept.
+- **The TV's volume shows a TV on the indicator,** so it isn't mistaken for the system's (GNOME's volume indicator looked the same for both).
 
-### Home screen
-- **Screensaver:** after 5 minutes without a press, your films' and series' pictures with a big clock, the date and the temperature. Any button, or turning a gamepad on, brings the launcher back at the start of the home screen; that press does nothing else. Settings → Screensaver: 2, 5, 10, 30 minutes or Off.
-- **Forecast** under the lights: the next 12 hours with the chance of rain, the next days, sunrise and sunset.
-- **Lights by room, side by side**, in one row to move along.
-- **Reorder the apps** in edit mode with LB / RB.
+### Also in 0.1.0-beta.11
 
-### Gamepads, TV and PC
-- **PlayStation controllers:** with only PlayStation controllers connected, the launcher's hints say ✕ ○ □ △ and L1 / R1 / L2 / R2.
-- **The volume shortcut can change the TV's volume** through Home Assistant (Settings → Home Assistant → Volume shortcut). The launcher checks first that the TV allows it.
-- **Wake the PC you stream games from** when Steam opens: give the Steam app a `wake_on_lan` in `apps.json` (a Home Assistant automation or script, a Wake-on-LAN button, or a MAC address). See [Configuration](https://github.com/murilosalviati/htpc-launcher/blob/main/docs/configuration.md#apps).
+- **Continue watching** in Jellyfin's row, **LT / RT** to switch tabs, the **screensaver** (closed by any button or by turning a gamepad on), the **forecast** under the lights, **lights by room side by side**, **reordering apps** with LB / RB.
+- **PlayStation controllers:** ✕ ○ □ △ and L1 / R1 / L2 / R2 in the hints.
+- **Wake the PC Steam streams from** when it opens: give the Steam app a `wake_on_lan` in `apps.json`. See [Configuration](https://github.com/murilosalviati/htpc-launcher/blob/main/docs/configuration.md#apps).
 
 Gamepads drawn with their battery, the TV input button and turning the gamepads off with the TV came in [0.1.0-beta.10](https://github.com/murilosalviati/htpc-launcher/releases/tag/v0.1.0-beta.10).
 
@@ -34,7 +28,7 @@ The full list is in [CHANGELOG.md](https://github.com/murilosalviati/htpc-launch
 
 ## Install or update
 
-1. Download **htpc-launcher-0.1.0-beta.11.tar.gz** below and extract it: `tar xzf htpc-launcher-*.tar.gz`. `SHA256SUMS` lets you check it: `sha256sum -c SHA256SUMS`.
+1. Download **htpc-launcher-0.1.0-beta.12.tar.gz** below and extract it: `tar xzf htpc-launcher-*.tar.gz`. `SHA256SUMS` lets you check it: `sha256sum -c SHA256SUMS`.
 2. Run `./install.sh` inside the extracted folder. An existing `apps.json` is kept.
 3. **Log out and back in** if you are coming from beta.5 or older: GNOME only loads the extension's version 7 at login. On a first install, then run `gnome-extensions enable htpc-launcher@htpc`. The launcher starts by itself at login.
 

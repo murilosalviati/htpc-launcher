@@ -16,9 +16,11 @@ A gamepad-driven home screen for a living-room PC running Ubuntu with GNOME on W
   - across the top: the clock, the date with the weather, each connected gamepad drawn by kind (Xbox, PlayStation or plain) with its battery under it, the network status, and the TV input, Settings and power buttons;
   - sizes that follow the screen, from 1080p to 4K.
 - **Films, series and games above the apps (optional):** the row follows the app in focus.
-  - **Jellyfin:** Explore (what's trending this week on TMDB that is in your library, new titles only), Series and Films (the newest on your server).
-  - **Steam:** your recently played games, including the ones you stream with Remote Play.
-  - LB / RB turn the page.
+  - **Jellyfin:** Explore (what's trending this week on TMDB that is in your library, new titles only), Continue (what you stopped halfway, with a progress bar and the time left), Series and Films (the newest on your server).
+  - **Steam:** your recently played games, including the ones you stream with Remote Play. Opening Steam can also wake the PC the games stream from, through Home Assistant.
+  - LT / RT switch tabs, LB / RB turn the page.
+- **Below the apps:** your lights by room, side by side (with Home Assistant), and the forecast: the next hours, the next days, sunrise and sunset.
+- **Screensaver:** after a few minutes without a press, your films' and series' pictures with a big clock. Any button, or turning a gamepad on, brings the launcher back.
 - **Apps open in full screen and resume, never duplicate.** Selecting an app that is already running brings it back. Steam opens in Big Picture.
 - **Shortcuts in any app:**
 
@@ -26,19 +28,24 @@ A gamepad-driven home screen for a living-room PC running Ubuntu with GNOME on W
   |---|---|
   | Home + LB + RB | Back to the launcher (pausing the video). |
   | Start + Select + LB + RB | Close the app. |
-  | Start + Select + ↑ / ↓ | Volume, with GNOME's volume indicator. |
+  | Start + Select + ↑ / ↓ | Volume: the system's, or the TV's through Home Assistant (Settings → Audio). |
 
   The first two can be changed from Settings.
 - **Over whatever is playing:** a short notice when a gamepad connects or disconnects, when a battery gets low, or when the internet drops or comes back. They show even over full-screen video and games.
+- **Every gamepad speaks its own language:** with PlayStation controllers, the hints say ✕ ○ □ △ and L1 / R1 / L2 / R2.
 - **Settings from the couch:**
   - apps, with an on-screen keyboard: add, edit, remove, and **reorder** them (LB / RB in edit mode);
   - background color, weather location, °C/°F, and English or Brazilian Portuguese;
   - **Bluetooth gamepad pairing**, newer Xbox controllers (Bluetooth LE) included;
+  - audio: what the volume shortcut changes, the sound output, Bluetooth headphones and speakers;
+  - the screensaver;
   - shortcuts;
   - Home Assistant and Jellyfin.
 - **Home Assistant (optional):**
   - **The TV:** turning a gamepad on, or pressing a button, wakes the TV and switches it to the launcher; while it's off, the gamepad only wakes it. Turning the TV off from the power menu also turns the Bluetooth gamepads off.
   - **Another input:** a button switches the TV to a console on another HDMI input.
+  - **The TV's volume** from the volume shortcut, when you choose it in Settings → Audio.
+  - **Wake a PC** when an app opens, such as the one Steam streams games from (a Wake-on-LAN button, an automation or a script).
   - **Your lights by room,** under the apps: Ⓐ turns one on or off, holding Ⓐ opens its brightness, white temperature and colour. Scenes sit there too.
   - **Cinema mode** dims the lights while a video plays.
 - **Per-app resolution:** for example, 4K for movies in Jellyfin and 1440p at 60 Hz everywhere else, switching by itself.
