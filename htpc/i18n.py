@@ -6,6 +6,9 @@ The language comes from "language" in apps.json ("en" or "pt-BR").
 To add a language, copy the "en" block, translate it, and use its code.
 """
 
+import re
+
+
 STRINGS = {
     "en": {
         "hint_normal": "Ⓐ open    Ⓑ back\n{home}: come back here\n{close}: close the app",
@@ -165,7 +168,8 @@ STRINGS = {
         "media_kind_resume": "CONTINUE WATCHING",
         "media_left": "{time} left",
         "tab_explore": "Explore",
-        "media_pages": "LB ‹  {page} / {pages}  › RB",
+        "media_pages": "LB ‹  page {page} of {pages}  › RB",
+        "media_tabs_hint": "LT ‹  categories  › RT",
         "tab_series": "Series",
         "tab_movies": "Films",
         "tab_games": "Games",
@@ -474,7 +478,8 @@ STRINGS = {
         "media_kind_resume": "CONTINUAR ASSISTINDO",
         "media_left": "faltam {time}",
         "tab_explore": "Explorar",
-        "media_pages": "LB ‹  {page} / {pages}  › RB",
+        "media_pages": "LB ‹  página {page} de {pages}  › RB",
+        "media_tabs_hint": "LT ‹  categorias  › RT",
         "tab_series": "Séries",
         "tab_movies": "Filmes",
         "tab_games": "Jogos",
@@ -632,11 +637,15 @@ STRINGS = {
 # The face buttons as a PlayStation-style pad marks them, at the same places
 # (bottom, right, left, top) as Ⓐ Ⓑ Ⓧ Ⓨ.
 PLAYSTATION_GLYPHS = str.maketrans({"Ⓐ": "✕", "Ⓑ": "○", "Ⓧ": "□", "Ⓨ": "△"})
+PLAYSTATION_SHOULDERS = {"LB": "L1", "RB": "R1", "LT": "L2", "RT": "R2"}
+_SHOULDER = re.compile(r"\b(LB|RB|LT|RT)\b")
 
 
 def glyphs(text, style):
     """The button names in text, as the gamepad in use labels them."""
-    return text.translate(PLAYSTATION_GLYPHS) if style == "playstation" else text
+    if style != "playstation":
+        return text
+    return _SHOULDER.sub(lambda m: PLAYSTATION_SHOULDERS[m.group(1)], text.translate(PLAYSTATION_GLYPHS))
 
 
 class Translator:

@@ -136,11 +136,33 @@ if evdev is not None:
         ecodes.BTN_WEST: "x", ecodes.BTN_NORTH: "y",
         ecodes.BTN_START: "start", ecodes.BTN_SELECT: "select",
         ecodes.BTN_TL: "l1", ecodes.BTN_TR: "r1", ecodes.BTN_MODE: "guide",
+        ecodes.BTN_TL2: "l2", ecodes.BTN_TR2: "r2",
         ecodes.BTN_DPAD_UP: "up", ecodes.BTN_DPAD_DOWN: "down",
         ecodes.BTN_DPAD_LEFT: "left", ecodes.BTN_DPAD_RIGHT: "right",
     }
     STICK = {ecodes.ABS_X: "lx", ecodes.ABS_Y: "ly"}
     HATS = {ecodes.ABS_HAT0X: ("left", "right"), ecodes.ABS_HAT0Y: ("up", "down")}
+
+
+def trigger_axes(caps):
+    """The analog triggers of a gamepad, {abs code: "l2" / "r2"}, from its
+    capabilities ({EV_KEY: [codes], EV_ABS: [codes]}). Pads that also send the
+    triggers as buttons (PlayStation) use those; Bluetooth Xbox pads send them as
+    brake and gas; USB Xbox pads (xpad) as Z and RZ, next to a right stick on RX
+    and RY. On other pads Z and RZ can be the right stick, so they're left alone."""
+    keys, axes = set(caps.get(ecodes.EV_KEY, [])), set(caps.get(ecodes.EV_ABS, []))
+    if {ecodes.BTN_TL2, ecodes.BTN_TR2} <= keys:
+        return {}
+    if {ecodes.ABS_BRAKE, ecodes.ABS_GAS} <= axes:
+        return {ecodes.ABS_BRAKE: "l2", ecodes.ABS_GAS: "r2"}
+    if {ecodes.ABS_Z, ecodes.ABS_RZ, ecodes.ABS_RX, ecodes.ABS_RY} <= axes:
+        return {ecodes.ABS_Z: "l2", ecodes.ABS_RZ: "r2"}
+    return {}
+
+
+def _codes(caps):
+    """dev.capabilities() lists EV_ABS entries as (code, absinfo) pairs."""
+    return {kind: [c[0] if isinstance(c, tuple) else c for c in codes] for kind, codes in caps.items()}
 
 
 def is_gamepad(dev):
@@ -196,6 +218,8 @@ class EvdevGamepads(Gamepads):
         self.virtual = {}    # path -> made by software (not counted in connected())
         self.sysfs = {}      # path -> the input device's real sysfs path
         self.xbox_codes = {} # path -> X/Y come swapped (Xbox-style driver)
+        self.triggers = {}   # path -> {abs code: "l2" / "r2"}: analog triggers read as buttons
+        self.pulled = {}     # (path, abs code) -> the trigger is past half way
 
     def available(self):
         return evdev is not None
@@ -299,6 +323,7 @@ class EvdevGamepads(Gamepads):
                 self.virtual[path] = False
                 self.sysfs[path] = os.path.realpath(f"/sys/class/input/{os.path.basename(path)}/device")
                 self.xbox_codes[path] = uses_xbox_codes(path, dev.name)
+                self.triggers[path] = trigger_axes(_codes(dev.capabilities()))
                 log.info("gamepad connected: %s (%s)%s", dev.name, path,
                          " [Xbox X/Y codes]" if self.xbox_codes[path] else "")
             else:
@@ -310,7 +335,8 @@ class EvdevGamepads(Gamepads):
         self.virtual.pop(path, None)
         self.sysfs.pop(path, None)
         self.xbox_codes.pop(path, None)
-        for table in (self.hats, self.sticks, self.ranges):
+        self.triggers.pop(path, None)
+        for table in (self.hats, self.sticks, self.ranges, self.pulled):
             for key in [k for k in table if k[0] == path]:
                 del table[key]
         if dev:
@@ -344,6 +370,21 @@ class EvdevGamepads(Gamepads):
             if value:
                 out.append(GamepadEvent(path, "button", neg if value < 0 else pos, 1))
             return out
+        trigger = self.triggers.get(path, {}).get(ev.code)
+        if trigger:
+            # An analog trigger: a press past half way, a release back under a third.
+            key = (path, ev.code)
+            if key not in self.ranges:
+                info = dev.absinfo(ev.code)
+                self.ranges[key] = (info.min, (info.max - info.min) or 1)
+            low, span = self.ranges[key]
+            pos = (ev.value - low) / span
+            was = self.pulled.get(key, False)
+            now = pos > 0.5 if not was else pos > 0.33
+            if now == was:
+                return []
+            self.pulled[key] = now
+            return [GamepadEvent(path, "button", trigger, int(now))]
         if ev.code in STICK:
             key = (path, ev.code)
             if key not in self.ranges:

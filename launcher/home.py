@@ -26,7 +26,7 @@ from gi.repository import Gdk, GLib, Gtk, Pango
 from htpc import home_assistant, jellyfin, steam, tmdb
 from background import in_background
 
-TABS = ("resume", "explore", "series", "movies", "games")
+TABS = ("explore", "resume", "series", "movies", "games")
 PAGE_SIZE = 5              # cards a page: one wide and four posters; RB / LB turn the page
 TAB_EVERY = {"resume": 2 * 60, "explore": 60 * 60, "series": 10 * 60, "movies": 10 * 60, "games": 60}   # seconds
 HOUSE_EVERY = 5            # seconds between light/switch state updates
@@ -200,6 +200,12 @@ class HomeMixin:
         self.recent_box.set_size_request(-1, WIDE[1] + 32)
         recent_scroll.set_child(self.recent_box)
         self.recent_section.append(recent_scroll)
+        # LB / RB turn the page: said under the cards, in a line that is always there
+        # (empty with one page), so nothing jumps.
+        self.page_hint = Gtk.Label(xalign=0)
+        self.page_hint.add_css_class("section-note")
+        self.page_hint.add_css_class("page-hint")
+        self.recent_section.append(self.page_hint)
         self.media_empty = Gtk.Label(xalign=0)
         self.media_empty.add_css_class("media-empty")
         self.media_empty.set_visible(False)
@@ -348,7 +354,7 @@ class HomeMixin:
         """The tabs of the app in focus: Jellyfin's films and series, or Steam's games."""
         if context == "jellyfin" and jellyfin.ready(self.cfg):
             # "Continue watching" only while something is half watched.
-            return (["resume"] if self.media.get("resume") else []) + ["explore", "series", "movies"]
+            return ["explore"] + (["resume"] if self.media.get("resume") else []) + ["series", "movies"]
         if context == "steam" and steam.available(self.steam_home()):
             return ["games"]
         return []
@@ -446,10 +452,28 @@ class HomeMixin:
             note = self.t("explore_note" if tmdb.ready(self.cfg) else "explore_note_no_tmdb")
         else:
             note = self.t(f"{self.media_tab}_note")
-        pages = self._pages()
-        if pages > 1:
-            note += "    " + self.t("media_pages", page=self.media_page[self.media_tab] + 1, pages=pages)
+        if len(self.available_tabs()) > 1:
+            note += "    " + self.t("media_tabs_hint")
         return note
+
+    def _page_hint(self):
+        pages = self._pages()
+        return self.t("media_pages", page=self.media_page[self.media_tab] + 1, pages=pages) if pages > 1 else ""
+
+    def switch_tab(self, step):
+        """LT / RT: the previous or next tab of the row in view, keeping the focus
+        where it was (on a card: the first card of the new tab)."""
+        tabs = self.available_tabs()
+        if len(tabs) < 2 or self.overlays or self.media_tab not in tabs:
+            return
+        name = tabs[(tabs.index(self.media_tab) + step) % len(tabs)]
+        focused = self.win.get_focus()
+        on_tab, on_card = focused in self.tab_buttons.values(), focused in self.recent_cards
+        self.select_tab(name)
+        if on_tab:
+            self.tab_buttons[name].grab_focus()
+        elif on_card and self.recent_cards:
+            self.recent_cards[0].grab_focus()
 
     def _pages(self):
         items = self.media.get(self.media_tab, [])
@@ -523,6 +547,7 @@ class HomeMixin:
         page = self.media_page[self.media_tab] = min(self.media_page.get(self.media_tab, 0), pages - 1)
         items = all_items[page * PAGE_SIZE:(page + 1) * PAGE_SIZE]
         self.media_note.set_label(self._media_note() if tabs else "")
+        self.page_hint.set_label(self._page_hint() if tabs else "")
         shown = (self.media_tab if tabs else None, page, tuple(i["id"] for i in items))
         if shown != self.media_shown:
             focused = self.win.get_focus()
@@ -588,6 +613,8 @@ class HomeMixin:
         if item["kind"] == "game":
             tile = next((t for t in self.tiles if "steam" in t.app.get("id", "").lower()), None)
             command = steam.run_command(tile.app if tile else None, item["appid"], item.get("installed", True))
+            if tile is not None:
+                self.wake_pc_for(tile.app)   # the PC the game streams from
             log("starting", item["title"], command)
             if self._spawn(command) and tile is not None:
                 self.opening[tile.app["id"]] = time.monotonic()

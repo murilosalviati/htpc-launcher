@@ -124,3 +124,31 @@ def test_bluez_batteries_reads_battery1():
                 "/org/bluez/hci0/dev_BB": {"org.bluez.Device1": {"Address": ("s", "11:22:33:44:55:66")}},
             },)
     assert bluez_batteries(Client()) == {"AA:BB:CC:DD:EE:FF": 64}
+
+
+def test_which_axes_are_triggers(ecodes):
+    from htpc.backends.linux.gamepads import trigger_axes
+    keys = [ecodes.BTN_SOUTH, ecodes.BTN_START]
+    ps = {ecodes.EV_KEY: keys + [ecodes.BTN_TL2, ecodes.BTN_TR2], ecodes.EV_ABS: [ecodes.ABS_Z, ecodes.ABS_RZ]}
+    xbox_bt = {ecodes.EV_KEY: keys, ecodes.EV_ABS: [ecodes.ABS_X, ecodes.ABS_Z, ecodes.ABS_RZ, ecodes.ABS_BRAKE, ecodes.ABS_GAS]}
+    xbox_usb = {ecodes.EV_KEY: keys, ecodes.EV_ABS: [ecodes.ABS_Z, ecodes.ABS_RZ, ecodes.ABS_RX, ecodes.ABS_RY]}
+    dinput = {ecodes.EV_KEY: keys, ecodes.EV_ABS: [ecodes.ABS_X, ecodes.ABS_Y, ecodes.ABS_Z, ecodes.ABS_RZ]}
+    assert trigger_axes(ps) == {}   # sends BTN_TL2 / BTN_TR2 already
+    assert trigger_axes(xbox_bt) == {ecodes.ABS_BRAKE: "l2", ecodes.ABS_GAS: "r2"}
+    assert trigger_axes(xbox_usb) == {ecodes.ABS_Z: "l2", ecodes.ABS_RZ: "r2"}
+    assert trigger_axes(dinput) == {}   # Z / RZ are its right stick
+
+
+def test_an_analog_trigger_is_a_button_past_half_way(ecodes):
+    pads = EvdevGamepads()
+    pads.triggers["p"] = {ecodes.ABS_GAS: "r2"}
+    dev = SimpleNamespace(absinfo=lambda code: SimpleNamespace(min=0, max=1023))
+    values = (0, 300, 600, 900, 400, 300, 0, 800)
+    events = [e for v in values for e in pads.translate("p", dev, raw(ecodes.EV_ABS, ecodes.ABS_GAS, v))]
+    assert [(e.kind, e.name, e.value) for e in events] == [("button", "r2", 1), ("button", "r2", 0), ("button", "r2", 1)]
+
+
+def test_digital_triggers_are_buttons(ecodes):
+    pads = EvdevGamepads()
+    events = pads.translate("p", None, raw(ecodes.EV_KEY, ecodes.BTN_TL2, 1))
+    assert [(e.name, e.value) for e in events] == [("l2", 1)]

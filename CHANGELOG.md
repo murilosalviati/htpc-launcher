@@ -4,7 +4,9 @@ The project is in beta: every `0.x` version is a pre-release, and the configurat
 
 ## Unreleased
 
-- **Continue watching:** a Jellyfin tab with what you stopped in the middle of, with a progress bar and the time left. It only shows while something is half watched, and is checked again each time you come back to the launcher.
+- **LT / RT switch tabs** in the row above the apps (Explore, Continue, Series, Films). The note next to the tabs says so; the LB / RB page hint moved under the cards. With PlayStation controllers the hints say L1 / R1 / L2 / R2.
+- **Wake the gaming PC when Steam opens:** an app's `wake_on_lan` runs a Home Assistant automation or script, presses a Wake-on-LAN button, or sends a magic packet, when the app or one of its game cards opens.
+- **Continue watching:** a Jellyfin tab, after Explore, with what you stopped in the middle of, with a progress bar and the time left. It only shows while something is half watched, and is checked again each time you come back to the launcher.
 - **Forecast under the lights:** the next 12 hours, the next days, sunrise and sunset, with the weather's location.
 - **Screensaver:** after 5 minutes without a press, your films' and series' pictures with a big clock. Any button brings the launcher back. Settings → Screensaver: 2, 5, 10, 30 minutes or Off.
 - **Lights by room, side by side:** the rooms sit next to each other in one row instead of one under the other.

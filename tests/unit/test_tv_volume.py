@@ -44,3 +44,18 @@ def test_a_tv_without_volume_control_says_so():
         ha.change_tv_volume(CFG, 1, get=tv(0), post=lambda u, t, p: None)
     assert not ha.tv_volume_support(CFG, get=tv(ha.VOLUME_MUTE))
     assert ha.tv_volume_support(CFG, get=tv(ha.VOLUME_STEP))
+
+
+def test_wake_on_lan_with_a_button_or_a_mac():
+    posts = []
+    post = lambda url, token, payload: posts.append((url.split("/api/")[1], payload))   # noqa: E731
+    ha.wake_on_lan(CFG, "button.wake_on_lan_04_d9_f5_09_f3_12", post)
+    ha.wake_on_lan(CFG, "04-D9-F5-09-F3-12", post)
+    ha.wake_on_lan(CFG, "automation.ligar_pc", post)
+    ha.wake_on_lan(CFG, "script.ligar_pc", post)
+    assert posts == [("services/button/press", {"entity_id": "button.wake_on_lan_04_d9_f5_09_f3_12"}),
+                     ("services/wake_on_lan/send_magic_packet", {"mac": "04:D9:F5:09:F3:12"}),
+                     ("services/automation/trigger", {"entity_id": "automation.ligar_pc"}),
+                     ("services/script/turn_on", {"entity_id": "script.ligar_pc"})]
+    with pytest.raises(ValueError):
+        ha.wake_on_lan(CFG, "light.desk", post)

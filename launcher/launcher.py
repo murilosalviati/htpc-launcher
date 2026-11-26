@@ -121,7 +121,7 @@ class Navigator:
 
     def __init__(self, gamepads, active, move, press, back, other_button, blocked=lambda: False,
                  shoulder=lambda step: None, can_hold=lambda: False, long_press=lambda: None,
-                 wake=lambda: False):
+                 wake=lambda: False, trigger=lambda step: None):
         self.gamepads = gamepads
         self.blocked = blocked  # True while the TV is off: input is ignored (it only wakes the TV)
         self.capture = None     # set while Settings records a shortcut: gets every button event
@@ -132,6 +132,7 @@ class Navigator:
         self.tapping = None               # (device, "l1"/"r1") pressed with nothing else so far
         self.can_hold, self.long_press = can_hold, long_press
         self.wake = wake                  # a press: True when it only closed the screensaver
+        self.trigger = trigger            # LT / RT: -1 / +1
         self.hold_timer = 0               # Ⓐ down on something that does more when held
         self.stick = {}         # (device, axis) -> -1 / 0 / 1
         self.direction = None   # (dx, dy) being held
@@ -244,6 +245,8 @@ class Navigator:
                     self.back()
                 elif ev.name in ("x", "y"):
                     self.other_button(ev.name)
+                elif ev.name in ("l2", "r2"):
+                    self.trigger(-1 if ev.name == "l2" else 1)
         elif ev.kind == "axis":
             value = 1 if ev.value > self.DEAD_ZONE else -1 if ev.value < -self.DEAD_ZONE else 0
             key = (ev.device, ev.name)
@@ -425,6 +428,7 @@ class Launcher(HomeMixin, EditorMixin, SettingsMixin, ScreensaverMixin):
         for folder in self.apps.icon_dirs():
             theme.add_search_path(folder)
         self.opening = {}         # app id -> when it was started (None once its window showed up)
+        self.woken = {}           # Wake-on-LAN target -> when it was last sent
         self.overlays = []        # stack of things shown on top (confirmation, editor...)
         self.editing = False
         self.tiles, self.add_tile, self.tile_rows = [], None, []
@@ -452,7 +456,7 @@ class Launcher(HomeMixin, EditorMixin, SettingsMixin, ScreensaverMixin):
         self.navigator = Navigator(backend.gamepads(), self.win.is_active, self.move, self.press,
                                    self.back, self.other_button, blocked=home_assistant.input_blocked,
                                    shoulder=self.shoulder, can_hold=self.can_hold,
-                                   long_press=self.long_press, wake=self.wake)
+                                   long_press=self.long_press, wake=self.wake, trigger=self.switch_tab)
         self.gamepads = self.navigator.gamepads
 
         GLib.timeout_add_seconds(1, self._update_clock)
@@ -878,6 +882,9 @@ class Launcher(HomeMixin, EditorMixin, SettingsMixin, ScreensaverMixin):
         self.hint.set_label(self.t("hint_edit") if self.editing else self.hint_text())
         if getattr(self, "house_data", None) is not None:
             self._show_house(self.house_data)
+        if self.available_tabs():
+            self.media_note.set_label(self._media_note())
+            self.page_hint.set_label(self._page_hint())
 
     def _update_gamepads(self):
         """One drawing per connected gamepad, its battery under it. The list is kept
@@ -1060,9 +1067,34 @@ class Launcher(HomeMixin, EditorMixin, SettingsMixin, ScreensaverMixin):
     def _spawn(self, command):
         return self.system.spawn(command)
 
+    WAKE_AGAIN_S = 60    # the same PC is woken at most once a minute
+
+    def wake_pc_for(self, app):
+        """The app's "wake_on_lan" (a Home Assistant Wake-on-LAN button or a MAC):
+        wakes the computer it streams from, in the background."""
+        target = (app or {}).get("wake_on_lan")
+        ha = self.cfg.get("home_assistant") or {}
+        if not target or not (ha.get("enabled", True) and ha.get("url") and ha.get("token")):
+            return
+        now = time.monotonic()
+        if now - self.woken.get(target, -self.WAKE_AGAIN_S) < self.WAKE_AGAIN_S:
+            return
+        self.woken[target] = now
+        cfg, post = dict(self.cfg), getattr(self, "ha_api_post", None)
+
+        def done(result):
+            if isinstance(result, Exception):
+                log("wake on LAN failed:", result)
+                self.woken.pop(target, None)
+            else:
+                log("wake on LAN sent:", target)
+
+        in_background(lambda: home_assistant.wake_on_lan(cfg, target, post), done)
+
     def open_app(self, tile):
         app = tile.app
         app_id = app["id"]
+        self.wake_pc_for(app)
         # The app's own resolution (or the default) before its window shows up.
         mode = app.get("display_mode")
         if self.use_display_mode(mode) or mode:

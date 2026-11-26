@@ -33,6 +33,7 @@ only logged.
 """
 
 import json
+import re
 import logging
 import socket
 import threading
@@ -553,6 +554,24 @@ def change_tv_volume(cfg, direction, get=None, post=None):
         # One step is one of the TV's 100 (LG webOS); its state catches up a moment later.
         return max(0.0, min(1.0, round(float(level) + direction * 0.01, 2))), muted
     raise ValueError(f"{entity} can't change its volume through Home Assistant")
+
+
+def wake_on_lan(cfg, target, post=None):
+    """Wakes a computer before an app that needs it (a game-streaming PC for Steam).
+    target: an automation or script of yours that turns it on (automation.trigger,
+    script.turn_on), a Wake-on-LAN button (button.press) or a MAC address
+    (wake_on_lan.send_magic_packet)."""
+    target = target.strip()
+    if target.startswith("automation."):
+        _post(cfg, "services/automation/trigger", {"entity_id": target}, post)
+    elif target.startswith("script."):
+        _post(cfg, "services/script/turn_on", {"entity_id": target}, post)
+    elif target.startswith("button."):
+        _post(cfg, "services/button/press", {"entity_id": target}, post)
+    elif re.fullmatch(r"[0-9A-Fa-f]{2}([:-][0-9A-Fa-f]{2}){5}", target):
+        _post(cfg, "services/wake_on_lan/send_magic_packet", {"mac": target.replace("-", ":")}, post)
+    else:
+        raise ValueError(f"not a Wake-on-LAN button or MAC address: {target}")
 
 
 def _domain(entity):

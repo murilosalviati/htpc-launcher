@@ -62,6 +62,7 @@ Each entry in `apps` is one tile.
 | `preferred_windows` | For apps with several windows: titles to bring to the front, in order of preference. Without it, the most recently used window comes up. |
 | `icon` | A theme icon name or an image path. Without it, the launcher uses the icon the app installed. |
 | `desktop` | The `.desktop` file to take the icon from, when it differs from `id`. |
+| `wake_on_lan` | Wakes a computer through Home Assistant when the app opens, such as the PC Steam streams games from. One of: an automation (`automation.turn_on_pc`, triggered) or script (`script.turn_on_pc`) of yours, a Wake-on-LAN button (`button.wake_on_lan_…`), or a MAC address (sent with `wake_on_lan.send_magic_packet`). Sent at most once a minute, also when a game card starts. Needs Home Assistant's address and token. |
 
 ## Top-level settings
 

@@ -1459,7 +1459,7 @@ def h2():
           and l.rows[3] == l.tiles and l.rows[4] == l.scene_buttons and l.rows[5] == l.device_tiles)
     check("without a TMDB key and without Steam: Explore, Series and Films; Explore shows what's new",
           [b.tab for b in l.tab_row] == ["explore", "series", "movies"] and l.media_tab == "explore"
-          and l.media_note.get_label() == l.t("explore_note_no_tmdb"))
+          and l.media_note.get_label() == l.t("explore_note_no_tmdb") + "    " + l.t("media_tabs_hint"))
     check("with other rows, the apps sit at the top of their space", not l.grid.get_vexpand())
     l.tiles[0].grab_focus()
     l.move(0, -1)
@@ -1757,7 +1757,7 @@ def m2():
           l.media_context == "jellyfin" and [b.tab for b in l.tab_row] == ["explore", "series", "movies"])
     check("Explore: TMDB's popular titles that are in the library, in TMDB's order",
           [c.item["title"] for c in l.recent_cards] == ["Série em Alta", "Filme em Alta"]
-          and l.media_note.get_label() == l.t("explore_note")
+          and l.media_note.get_label() == l.t("explore_note") + "    " + l.t("media_tabs_hint")
           and l.recent_cards[0].get_child().get_last_child().get_first_child().get_label() == l.t("media_kind_hot_series"))
     l.move(0, -1)
     l.move(0, -1)
@@ -1813,8 +1813,9 @@ def m3():
     l.media["movies"] = [{"id": f"f{n}", "kind": "movie", "title": f"Filme {n}"} for n in range(12)]
     l.media_page["movies"] = 0
     l._show_media()
-    check("five cards a page, and the note says which page", [c.item["title"] for c in l.recent_cards]
-          == [f"Filme {n}" for n in range(5)] and l.media_note.get_label().endswith(l.t("media_pages", page=1, pages=3)))
+    check("five cards a page; under them, which page and LB / RB", [c.item["title"] for c in l.recent_cards]
+          == [f"Filme {n}" for n in range(5)] and l.page_hint.get_label() == l.t("media_pages", page=1, pages=3)
+          and l.media_note.get_label().endswith(l.t("media_tabs_hint")))
     nav.handle(E("pad", "button", "r1", 1)); nav.handle(E("pad", "button", "r1", 0))
     check("RB: the next five, with Jellyfin still in focus", [c.item["title"] for c in l.recent_cards]
           == [f"Filme {n}" for n in range(5, 10)] and l.win.get_focus() is l.tiles[0])
@@ -1831,6 +1832,14 @@ def m3():
     nav.handle(E("pad", "button", "l1", 1)); nav.handle(E("pad", "button", "r1", 1))
     nav.handle(E("pad", "button", "l1", 0)); nav.handle(E("pad", "button", "r1", 0))
     check("nor do LB and RB together", l.recent_cards[0].item["title"] == "Filme 5")
+    nav.handle(E("pad", "button", "r2", 1)); nav.handle(E("pad", "button", "r2", 0))
+    check("RT: the next tab (Films → Explore, around)", l.media_tab == "explore" and l.win.get_focus() is l.tiles[0])
+    nav.handle(E("pad", "button", "l2", 1)); nav.handle(E("pad", "button", "l2", 0))
+    check("LT: back to Films, on the page it was", l.media_tab == "movies" and l.recent_cards[0].item["title"] == "Filme 5")
+    l.tab_buttons["movies"].grab_focus()
+    l.switch_tab(-1)
+    check("on a tab, the focus follows to the new tab", l.media_tab == "series" and l.win.get_focus() is l.tab_buttons["series"])
+    l.switch_tab(1)
     l.recent_cards[2].grab_focus()
     l.page_media(-1)
     check("turning the page with a card in focus keeps the focus in the row", l.win.get_focus() is l.recent_cards[2]
@@ -1940,8 +1949,8 @@ def cw1():
 @step(700)
 def cw2():
     l = L()
-    check("something half watched: a Continue tab first in Jellyfin's row",
-          [b.tab for b in l.tab_row][:2] == ["resume", "explore"])
+    check("something half watched: a Continue tab, right after Explore",
+          [b.tab for b in l.tab_row] == ["explore", "resume", "series", "movies"])
     l.tab_buttons["resume"].grab_focus()
 
 
@@ -2017,6 +2026,24 @@ def sv1():
     l.cfg.pop("weather", None)
     l.conditions = None
     l.show_weather()
+
+
+@step(300)
+def wol1():
+    l = L()
+    state["wol"] = []
+    l.cfg.setdefault("home_assistant", {}).update({"url": "http://ha:8123", "token": "T"})
+    l.ha_api_post = lambda url, token, payload: state["wol"].append((url, payload)) or "[]"
+    steam_app = {"id": "com.valvesoftware.Steam", "wake_on_lan": "button.wake_on_lan_pc"}
+    l.wake_pc_for(steam_app)
+    l.wake_pc_for(steam_app)          # again at once: not sent twice
+    l.wake_pc_for({"id": "other"})    # no "wake_on_lan": nothing
+
+
+@step(500)
+def wol2():
+    check("opening Steam wakes the PC it streams from, once a minute at most",
+          state["wol"] == [("http://ha:8123/api/services/button/press", {"entity_id": "button.wake_on_lan_pc"})])
 
 
 @step(200)

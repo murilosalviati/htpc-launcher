@@ -52,14 +52,16 @@ Above the apps, a row of cards that follows the app in focus:
 
 | App in focus | Tabs | What they show |
 |---|---|---|
-| **Jellyfin** | **Continue** | What you stopped in the middle of, the last watched first, with a progress bar and the time left. The tab only shows while something is half watched, and is checked again each time you come back to the launcher. |
-| | **Explore** | What is new and popular on [TMDB](https://www.themoviedb.org/) **and is in your library**: this week's trending films and series that came out in the last 18 months, series with new episodes this week, films in cinemas, then the most popular series with an episode in the last 45 days and recent films. Old favourites that trend without anything new (a 90s sitcom) are left out. Without a TMDB key: what was added lately. |
+| **Jellyfin** | **Explore** | What is new and popular on [TMDB](https://www.themoviedb.org/) **and is in your library**: this week's trending films and series that came out in the last 18 months, series with new episodes this week, films in cinemas, then the most popular series with an episode in the last 45 days and recent films. Old favourites that trend without anything new (a 90s sitcom) are left out. Without a TMDB key: what was added lately. |
+| | **Continue** | What you stopped in the middle of, the last watched first, with a progress bar and the time left. The tab only shows while something is half watched, and is checked again each time you come back to the launcher. |
 | | **Series**, **Films** | What was added lately to Jellyfin. New episodes are grouped under their series, with how many are new. |
 | **Steam** | **Games** | Your Steam games, the last played first, with when and how long you played. Games streamed from another computer (Remote Play) count too. |
 | Any other app | none | The space stays empty, so nothing on screen jumps. |
 
 - **Tabs:** go up from the cards to reach them. Moving onto a tab shows it; the launcher remembers the last one per app.
-- **More:** **RB** shows the next five cards and **LB** goes back, with the app or a card in focus. The note next to the tabs says which page you're on. LB and RB only turn the page when tapped alone, so Home + LB + RB still brings the launcher back.
+- **Tabs from anywhere:** **RT** goes to the next tab and **LT** to the previous one, round and round, with the app, a tab or a card in focus. The note next to the tabs reminds you.
+- **More:** **RB** shows the next five cards and **LB** goes back, with the app or a card in focus. The line under the cards says which page you're on. LB and RB only turn the page when tapped alone, so Home + LB + RB still brings the launcher back.
+- **PlayStation controllers:** with only PlayStation controllers connected, the hints say L1 / R1 / L2 / R2 and ✕ ○ □ △.
 - **Select a card:** a film or series opens the Jellyfin app (on its home screen). An installed game starts through Steam (`steam://rungameid/…`), using the same Steam shortcut as the tile. A game that isn't installed here opens its page in Steam, where **Stream** plays it from the computer that has it.
 - **Updates:** at start, then while the launcher is in front: Explore every hour, Series and Films every 10 minutes, Games every minute (they're read from Steam's own files, without its API). If something can't be reached, the row keeps what it had and tries again a minute later.
 
