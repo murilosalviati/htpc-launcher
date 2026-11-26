@@ -23,6 +23,8 @@ What changed in each version is in the [CHANGELOG](../CHANGELOG.md).
 
 ![The home screen](preview.png)
 
+![Lights by room, further down](preview-house.png)
+
 - **Home screen:** one tile per app (with Recently added from Jellyfin above and your lights below), the clock, the weather, gamepad and battery icons, and the network status.
 - **Shortcuts in any app:**
 

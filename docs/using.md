@@ -127,6 +127,7 @@ At the bottom:
   - **Name:** typed on an on-screen keyboard. Ⓧ deletes, Ⓨ types a space, and a physical keyboard works too.
   - **Icon:** the app's own, or any image in `~/.local/share/htpc-launcher/app-icons/`.
   - **Resolution:** the default, or one of the screen's modes, as described in [Per-app resolution](#per-app-resolution).
+- **Reorder the apps:** LB / RB (Page Up / Page Down on a keyboard) move the app in focus one place back or forward.
 - **Remove an app:** the grid reflows.
 
 For the fields that aren't in edit mode, such as pause on Home, close commands and preferred windows, see [Configuration](configuration.md).

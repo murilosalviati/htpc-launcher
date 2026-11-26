@@ -9,7 +9,7 @@ To add a language, copy the "en" block, translate it, and use its code.
 STRINGS = {
     "en": {
         "hint_normal": "Ⓐ open    Ⓑ back\n{home}: come back here\n{close}: close the app",
-        "hint_edit": "Edit mode    Ⓐ edit or add    Ⓑ leave edit mode",
+        "hint_edit": "Edit mode    Ⓐ edit or add    LB RB move    Ⓑ leave edit mode",
         "background": "Background",
         "choose_background": "Choose the background",
         "theme_midnight": "Midnight",
@@ -302,7 +302,7 @@ STRINGS = {
     },
     "pt-BR": {
         "hint_normal": "Ⓐ abrir    Ⓑ voltar\n{home}: volta para cá\n{close}: fecha o app",
-        "hint_edit": "Modo de edição    Ⓐ editar ou adicionar    Ⓑ sair da edição",
+        "hint_edit": "Modo de edição    Ⓐ editar ou adicionar    LB RB mover    Ⓑ sair da edição",
         "background": "Plano de fundo",
         "choose_background": "Escolha o fundo",
         "theme_midnight": "Meia-noite",

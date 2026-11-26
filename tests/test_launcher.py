@@ -459,6 +459,24 @@ def e8():
 
 
 @step(500)
+def e8b():
+    l = L()
+    before = [a["id"] for a in saved_apps()]
+    l.tiles[0].grab_focus()
+    l.shoulder(1)
+    after = [a["id"] for a in saved_apps()]
+    check("RB in edit mode moves the app one place forward", after == [before[1], before[0], *before[2:]])
+    check("the moved app keeps the focus", l.win.get_focus() is l.tiles[1] and l.tiles[1].app["id"] == before[0])
+    l.shoulder(1)
+    l.shoulder(1)
+    l.shoulder(1)
+    check("it stops at the last app", [a["id"] for a in saved_apps()][-1] == before[0] and l.win.get_focus() is l.tiles[-1])
+    for _ in range(4):
+        l.shoulder(-1)
+    check("LB moves it back to the start", [a["id"] for a in saved_apps()] == before and l.win.get_focus() is l.tiles[0])
+
+
+@step(500)
 def e9():
     l = L()
     screenshot(l.win, "11-after-remove")

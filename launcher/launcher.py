@@ -446,7 +446,7 @@ class Launcher(HomeMixin, EditorMixin, SettingsMixin):
 
         self.navigator = Navigator(backend.gamepads(), self.win.is_active, self.move, self.press,
                                    self.back, self.other_button, blocked=home_assistant.input_blocked,
-                                   shoulder=self.page_media, can_hold=self.can_hold,
+                                   shoulder=self.shoulder, can_hold=self.can_hold,
                                    long_press=self.long_press)
         self.gamepads = self.navigator.gamepads
 
@@ -1261,7 +1261,7 @@ class Launcher(HomeMixin, EditorMixin, SettingsMixin):
         elif keyval == Gdk.KEY_Escape:
             self.back()
         elif keyval in (Gdk.KEY_Page_Down, Gdk.KEY_Page_Up):
-            self.page_media(1 if keyval == Gdk.KEY_Page_Down else -1)
+            self.shoulder(1 if keyval == Gdk.KEY_Page_Down else -1)
         else:
             return False
         return True

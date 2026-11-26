@@ -69,6 +69,27 @@ class EditorMixin:
             self.btn_settings.label.set_visible(False)
         self.build_grid(focus=0 if self.cfg.get("apps") else -1)
 
+    # --- reordering --------------------------------------------------------------------
+
+    def shoulder(self, step):
+        """LB / RB (Page Up / Page Down). In edit mode, on an app: move that app one
+        place back or forward. Otherwise: page through the recommendations."""
+        focused = self.win.get_focus()
+        if self.editing and not self.overlays and focused in self.tiles:
+            self.move_app(self.tiles.index(focused), step)
+        else:
+            self.page_media(step)
+
+    def move_app(self, index, step):
+        """Swaps the app with its neighbour (wrapping across rows) and keeps it focused."""
+        apps = self.cfg["apps"]
+        target = index + step
+        if not 0 <= target < len(apps):
+            return
+        apps[index], apps[target] = apps[target], apps[index]
+        self.save_config()
+        self.build_grid(focus=target)
+
     def new_app(self):
         self.edit_app(None)
 

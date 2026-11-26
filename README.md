@@ -7,7 +7,7 @@ A gamepad-driven home screen for a living-room PC running Ubuntu with GNOME on W
 
 ![Launcher home screen](docs/preview.png)
 
-*The app icons in these screenshots are placeholders. On a real install the launcher shows each app's own icon, or images you choose.*
+*Everything in these screenshots is made up by `tests/make_preview.py`: the app icons are placeholders and the films and series are invented. On a real install the launcher shows each app's own icon, or images you choose.*
 
 ## Features
 
