@@ -4,6 +4,8 @@ The project is in beta: every `0.x` version is a pre-release, and the configurat
 
 ## Unreleased
 
+- **Turning a gamepad on wakes the TV and switches it to the launcher**, without pressing a button. The wake automation now waits only 5 seconds after the TV goes off for a gamepad connecting (15 for button presses). Update the automation in Home Assistant from `extras/home-assistant/wake-tv.yaml`.
+
 - **Turning off the TV turns off the Bluetooth gamepads too** (Settings → Gamepads → Turn off with the TV, on by default). A moment after the TV goes off, the launcher disconnects them, which switches Xbox and PlayStation controllers off. Their home button turns them on again, and reconnecting wakes the TV through Home Assistant, as before. Gamepads on a cable or a dongle stay as they are.
 
 - **Each gamepad drawn in the top bar, with its battery under it:** an Xbox-style drawing for an Xbox controller, a PlayStation-style one for a PlayStation controller, a plain one for others (from the USB/Bluetooth vendor, or the name). Bluetooth LE controllers (newer Xbox) report their battery through BlueZ, which is read too. The bar is green, yellow under 50%, red under 20%, blue while charging, and plain grey on a cable. Nothing is drawn when no gamepad is connected.

@@ -42,10 +42,13 @@ actions:
           entity_id: "{{ tv }}"
       - stop: TV turned off from the launcher
   # The press on "Turn off TV" itself also arrives as gamepad activity: do not
-  # wake a TV that went off a moment ago.
+  # wake a TV that went off a moment ago. A gamepad connecting is a deliberate
+  # act (the launcher disconnects the pads when the TV goes off), so it only
+  # waits 5 seconds.
   - condition: template
     value_template: >-
-      {{ is_on or (now() - states[tv].last_changed).total_seconds() > 15 }}
+      {{ is_on or (now() - states[tv].last_changed).total_seconds()
+         > (5 if event == 'gamepad_connected' else 15) }}
   - if:
       - condition: template
         value_template: "{{ not is_on }}"

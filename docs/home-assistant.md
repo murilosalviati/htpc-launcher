@@ -72,7 +72,7 @@ What the automation does:
 | `tv_off` | Turns the TV off. |
 | any other (`gamepad_activity`, `gamepad_connected`, `test`) | If the TV is off, turns it on and waits for it. Then, if it isn't on the HTPC's input, switches to it. |
 
-The automation runs in `queued` mode, so the events of the "Turn off TV" press are handled in order. It also ignores gamepad activity for 15 seconds after the TV goes off, so that pressing Ⓐ on "Turn off TV" doesn't immediately turn the TV back on.
+The automation runs in `queued` mode, so the events of the "Turn off TV" press are handled in order. It also ignores gamepad activity for 15 seconds after the TV goes off, so that pressing Ⓐ on "Turn off TV" doesn't immediately turn the TV back on. A gamepad connecting waits only 5 seconds: turning the gamepad back on wakes the TV and switches it to the launcher, even if no button is pressed.
 
 ### 2. The launcher's settings
 
@@ -139,7 +139,7 @@ The token needs no extra permission, but rooms come from a template call: a toke
 - Press any button or plug in a gamepad. The TV turns on and switches to the HTPC.
 - A connected gamepad sends button presses at most once a minute, so Home Assistant isn't flooded. The exception is right after "Turn off TV": then the next press is sent at once.
 
-**Turn the TV off:** open the power menu (top right) and press Ⓐ on **Turn off the TV**, which is already selected. The launcher goes back to its start for the next time. Wait about 15 seconds before pressing a button to wake the TV again.
+**Turn the TV off:** open the power menu (top right) and press Ⓐ on **Turn off the TV**, which is already selected. The launcher goes back to its start for the next time. To wake it again, turn the gamepad on (wait about 5 seconds after turning the TV off) or press a button after about 15 seconds.
 
 **TV off, with the token set:**
 - The launcher and the gamepad shortcuts (back to the launcher, close the app) ignore the gamepad.
