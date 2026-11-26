@@ -13,7 +13,7 @@ import select
 import struct
 import time
 
-from ..base import STICK_DEAD_ZONE, Battery, GamepadEvent, Gamepads
+from ..base import STICK_DEAD_ZONE, Battery, GamepadEvent, Gamepads, PadStatus, pad_kind
 
 try:
     import evdev
@@ -194,13 +194,14 @@ class EvdevGamepads(Gamepads):
             names.append(dev.name)
         return names
 
-    def batteries(self, root=POWER_SUPPLY):
-        """A power supply belongs to a gamepad when its device is the gamepad's input
-        device or one of its parents (e.g. the HID device of a Bluetooth pad)."""
+    def _batteries_by_path(self, root=POWER_SUPPLY):
+        """{event path: Battery}. A power supply belongs to a gamepad when its device
+        is the gamepad's input device or one of its parents (e.g. the HID device of
+        a Bluetooth pad)."""
         supplies = device_batteries(root)
         if not supplies:
-            return []
-        out, seen = [], set()
+            return {}
+        out, seen = {}, set()
         for path, dev in sorted(self.devs.items()):
             if self.virtual.get(path):
                 continue
@@ -210,8 +211,34 @@ class EvdevGamepads(Gamepads):
                 if owner not in seen and (sysfs == owner or sysfs.startswith(owner + "/")):
                     seen.add(owner)
                     battery.name = dev.name
-                    out.append(battery)
+                    out[path] = battery
                     break
+        return out
+
+    def batteries(self, root=POWER_SUPPLY):
+        return list(self._batteries_by_path(root).values())
+
+    def pads(self, root=POWER_SUPPLY):
+        """One PadStatus per physical gamepad, with its kind (from the USB/Bluetooth
+        vendor, or the name) and its battery."""
+        batteries = self._batteries_by_path(root)
+        groups = {}   # one gamepad may show up as more than one device (same uniq)
+        order = []
+        for path, dev in sorted(self.devs.items()):
+            if self.virtual.get(path):
+                continue
+            key = getattr(dev, "uniq", "") or path
+            if key not in groups:
+                groups[key] = []
+                order.append(key)
+            groups[key].append(path)
+        out = []
+        for key in order:
+            paths = groups[key]
+            dev = self.devs[paths[0]]
+            vendor = getattr(getattr(dev, "info", None), "vendor", None)
+            battery = next((batteries[p] for p in paths if p in batteries), None)
+            out.append(PadStatus(dev.name, pad_kind(dev.name, vendor), battery))
         return out
 
     def _rescan(self, events):

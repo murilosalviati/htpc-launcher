@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#eef2f8" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+  <!-- Xbox-style layout (no logo): left stick above the d-pad, right stick below the buttons -->
+  <path d="M6.6 6h10.8c2.2 0 3.7 1.4 4.2 3.6l1.2 6.1c.4 2.2-2 3.6-3.6 2.1L16.7 15.5H7.3l-2.5 2.3c-1.6 1.5-4-.1-3.6-2.1l1.2-6.1C2.9 7.4 4.4 6 6.6 6z"/>
+  <circle cx="6.9" cy="9.7" r="1.4"/>
+  <circle cx="14.6" cy="13" r="1.4"/>
+  <path d="M9.6 12.1v2.4M8.4 13.3h2.4"/>
+  <circle cx="17.5" cy="8.6" r=".45" fill="#eef2f8"/>
+  <circle cx="16.4" cy="9.7" r=".45" fill="#eef2f8"/>
+  <circle cx="18.6" cy="9.7" r=".45" fill="#eef2f8"/>
+  <circle cx="17.5" cy="10.8" r=".45" fill="#eef2f8"/>
+</svg>

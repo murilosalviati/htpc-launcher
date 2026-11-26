@@ -685,6 +685,21 @@ pads.virtual = {}
 bats = pads.batteries(ps)
 check("battery: the wireless pad's battery is found through its parent device, the wired one has none",
       [(b.name, b.percent, b.bars) for b in bats] == [("Xbox Wireless Controller", 42, 2)])
+pads.devs = {"/dev/input/event40": SimpleNamespace(name="Xbox Wireless Controller", uniq="aa",
+                                                  info=SimpleNamespace(vendor=0x045E)),
+             "/dev/input/event42": SimpleNamespace(name="Xbox Wireless Controller", uniq="aa",
+                                                  info=SimpleNamespace(vendor=0x045E)),
+             "/dev/input/event41": SimpleNamespace(name="Wireless Controller", uniq="",
+                                                  info=SimpleNamespace(vendor=0x054C))}
+pads.sysfs["/dev/input/event42"] = _os.path.join(dev_root, "other")
+status = pads.pads(ps)
+check("pads: one per gamepad, its kind from the vendor, its battery (none on a cable)",
+      [(p.name, p.kind, p.battery.percent if p.battery else None) for p in status]
+      == [("Xbox Wireless Controller", "xbox", 42), ("Wireless Controller", "playstation", None)])
+from htpc.backends.base import pad_kind  # noqa: E402
+check("pads: the kind from the name when the vendor is unknown",
+      [pad_kind(n) for n in ("8BitDo Pro 2", "Sony Interactive Entertainment DualSense", "Pro Controller",
+                             "Microsoft X-Box 360 pad")] == ["generic", "playstation", "nintendo", "xbox"])
 from htpc.backends.base import Battery  # noqa: E402
 check("battery: levels without a percentage still map to bars",
       [Battery("x", level=l).bars for l in ("full", "high", "normal", "low", "critical")] == [4, 3, 2, 1, 0])

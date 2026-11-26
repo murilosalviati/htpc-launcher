@@ -65,6 +65,30 @@ class Battery:
         return {"full": 4, "high": 3, "normal": 2, "low": 1, "critical": 0}.get(self.level, 2)
 
 
+XBOX_VENDOR, SONY_VENDOR, NINTENDO_VENDOR = 0x045E, 0x054C, 0x057E
+
+
+def pad_kind(name, vendor=None):
+    """"xbox", "playstation", "nintendo" or "generic", for the top bar's icon."""
+    n = (name or "").lower()
+    if vendor == XBOX_VENDOR or any(w in n for w in ("xbox", "x-box", "microsoft")):
+        return "xbox"
+    if vendor == SONY_VENDOR or any(w in n for w in ("dualshock", "dualsense", "playstation", "ps4", "ps5",
+                                                      "sony")):
+        return "playstation"
+    if vendor == NINTENDO_VENDOR or any(w in n for w in ("pro controller", "joy-con", "nintendo")):
+        return "nintendo"
+    return "generic"
+
+
+@dataclass
+class PadStatus:
+    """One connected gamepad, for the top bar: what it is and its battery."""
+    name: str
+    kind: str = "generic"       # see pad_kind
+    battery: Battery = None     # None on a cable (or when it doesn't say)
+
+
 # How far a stick must go to count as a press. Backends only send an "axis" event
 # when the stick crosses it (into or out of the middle, or to the other side): the
 # launcher and the shortcuts only care about that, and a moving stick would
@@ -178,6 +202,18 @@ class Gamepads(ABC):
         """List[Battery] for the connected gamepads that report one (wireless ones,
         usually; a gamepad on a cable reports nothing)."""
         return []
+
+    def pads(self):
+        """List[PadStatus], one per connected gamepad, in connected() order.
+        This default matches batteries to gamepads by name."""
+        left = list(self.batteries())
+        out = []
+        for name in self.connected():
+            battery = next((b for b in left if b.name == name), None)
+            if battery is not None:
+                left.remove(battery)
+            out.append(PadStatus(name, pad_kind(name), battery))
+        return out
 
 
 class AppCatalog(ABC):

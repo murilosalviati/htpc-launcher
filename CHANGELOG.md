@@ -4,6 +4,8 @@ The project is in beta: every `0.x` version is a pre-release, and the configurat
 
 ## Unreleased
 
+- **Each gamepad drawn in the top bar, with its battery under it:** an Xbox-style drawing for an Xbox controller, a PlayStation-style one for a PlayStation controller, a plain one for others (from the USB/Bluetooth vendor, or the name). The bar is green, yellow under 50%, red under 20%, blue while charging, and plain grey on a cable. Nothing is drawn when no gamepad is connected.
+
 - **A button for another TV input** (a console on HDMI 2): Settings → Home Assistant → TV input button lists the TV's inputs; the chosen one gets a round button at the top right, before Settings. While the TV shows that input, the HTPC's gamepads only bring it back (the first press, through the wake automation), like when the TV is off; the press on the button itself doesn't. Needs the token and the TV set up.
 
 ## 0.1.0-beta.9

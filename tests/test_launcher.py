@@ -127,7 +127,7 @@ def s1():
           and l.net_icon.get_pixel_size() == 84 and all(i.get_pixel_size() == 56 for i in l.footer_images))
     from gi.repository import Gio as _Gio
     check("edge icons are drawn from the vector at their size (GIcon, not a stretched file)",
-          all(isinstance(i.get_gicon(), _Gio.FileIcon) for i in [l.net_icon, l.pad_icon, *l.footer_images]))
+          all(isinstance(i.get_gicon(), _Gio.FileIcon) for i in [l.net_icon, *l.footer_images]))
     l.apply_edge_scale(1.0)
 
 
@@ -488,30 +488,33 @@ def n1():
     nav.handle(E("pad", "button", "b", 1))
     check("gamepad: B goes back", not l.overlays)
 
-    # Gamepad indicator next to the Wi-Fi icon.
-    real = l.gamepads.connected
-    l.gamepads.connected = lambda: []
+    # Gamepads in the top bar: one drawing per gamepad, its battery under it.
+    from htpc.backends.base import Battery, PadStatus
+
+    def drawn():
+        out, c = [], l.pads_box.get_first_child()
+        while c is not None:
+            image, bar = c.get_first_child(), c.get_last_child()
+            out.append((image.get_gicon().get_file().get_basename(), round(bar.get_value()),
+                        [k for k in ("wired", "ok", "half", "low", "charging") if bar.has_css_class(k)]))
+            c = c.get_next_sibling()
+        return out
+
+    l.gamepads.pads = lambda: []
     l._update_gamepads()
-    check("indicator: no gamepad shows the dimmed icon without a number",
-          not l.pad_count.get_visible())
-    l.gamepads.connected = lambda: ["Xbox"]
+    check("no gamepad: no drawing at all", not l.pads_box.get_visible() and drawn() == [])
+    l.gamepads.pads = lambda: [PadStatus("Xbox Wireless Controller", "xbox", Battery("x", 80))]
     l._update_gamepads()
-    check("indicator: one gamepad shows the icon without a number", not l.pad_count.get_visible())
-    l.gamepads.connected = lambda: ["Xbox", "8BitDo", "PS4"]
+    check("an Xbox controller: its drawing, the battery under it",
+          l.pads_box.get_visible() and drawn() == [("pad-xbox.svg", 80, ["ok"])])
+    l.gamepads.pads = lambda: [PadStatus("Xbox Wireless Controller", "xbox", Battery("x", 80)),
+                               PadStatus("Wireless Controller", "playstation", Battery("p", level="low", charging=True)),
+                               PadStatus("USB pad", "generic", None),
+                               PadStatus("Pro Controller", "nintendo", Battery("n", 30))]
     l._update_gamepads()
-    check("indicator: three gamepads show 3",
-          l.pad_count.get_visible() and l.pad_count.get_label() == "3")
-    from htpc.backends.base import Battery
-    l.gamepads.batteries = lambda: [Battery("Xbox", 80), Battery("8BitDo", level="low", charging=True)]
-    l.gamepads.connected = lambda: ["Xbox", "8BitDo"]
-    l._update_gamepads()
-    icons = []
-    c = l.battery_box.get_first_child()
-    while c is not None:
-        icons.append(c.get_gicon().get_file().get_basename())
-        c = c.get_next_sibling()
-    check("one battery icon per wireless gamepad, charging shown with a bolt",
-          icons == ["battery-3.svg", "battery-charging.svg"] and l.battery_box.get_visible())
+    check("several: each one's drawing and battery (charging in blue, a cable as a plain full bar)",
+          drawn() == [("pad-xbox.svg", 80, ["ok"]), ("pad-playstation.svg", 20, ["charging"]),
+                      ("pad-generic.svg", 100, ["wired"]), ("pad-generic.svg", 30, ["half"])])
     l.tiles[0].grab_focus()
 
 
@@ -519,8 +522,7 @@ def n1():
 def n2():
     l = L()
     screenshot(l.win, "9-two-gamepads")
-    l.gamepads.batteries = lambda: []
-    l.gamepads.connected = lambda: []
+    l.gamepads.pads = lambda: []
     l._update_gamepads()
 
 

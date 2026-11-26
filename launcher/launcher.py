@@ -375,6 +375,9 @@ class AddTile(Gtk.Button):
 # ---------------------------------------------------------------------------
 # The launcher window
 
+PAD_ICONS = ("xbox", "playstation", "generic")   # a Nintendo pad gets the plain drawing
+
+
 class Launcher(HomeMixin, EditorMixin, SettingsMixin):
     gicon = staticmethod(gicon)  # the editor turns backend icons into GTK icons with it
     svg_icon = staticmethod(svg_icon)
@@ -522,18 +525,14 @@ class Launcher(HomeMixin, EditorMixin, SettingsMixin):
             image.set_pixel_size(self.px("footer_icon"))
         self.weather_icon.set_pixel_size(self.px("weather_icon"))
         self.net_icon.set_pixel_size(self.px("status_icon"))
-        self.pad_icon.set_pixel_size(self.px("status_icon"))
-        image = self.battery_box.get_first_child()
-        while image is not None:
-            image.set_pixel_size(self.px("status_icon"))
-            image = image.get_next_sibling()
+        self.pads_state = None
+        self._update_gamepads()
         log(f"screen {self.screen_size}: edge scale {scale:.2f}")
 
     def refresh_top_bar(self):
         self._update_clock()
         self._update_network()
-        self.gamepad_count = None
-        self.battery_state = None
+        self.pads_state = None
         self._update_gamepads()
         self.show_weather()
 
@@ -701,23 +700,14 @@ class Launcher(HomeMixin, EditorMixin, SettingsMixin):
         self.net_icon = Gtk.Image()
         self.net_icon.set_pixel_size(self.px("status_icon"))
 
-        # Gamepads: lit when at least one is connected, with the count when there are more.
-        pads = Gtk.Box(spacing=4, valign=Gtk.Align.CENTER)
-        pads.add_css_class("gamepads")
-        self.pad_icon = Gtk.Image()
-        self.pad_icon.set_pixel_size(self.px("status_icon"))
-        self.pad_count = Gtk.Label(label="")
-        self.pad_count.add_css_class("gamepad-count")
-        pads.append(self.pad_icon)
-        pads.append(self.pad_count)
-        # One battery per wireless gamepad that reports one (nothing on a cable).
-        self.battery_box = Gtk.Box(spacing=6, valign=Gtk.Align.CENTER)
-        self.battery_box.set_margin_start(6)
-        self.battery_state = None
-        pads.append(self.battery_box)
-        pads.set_margin_end(14)
-
-        net.append(pads)
+        # Gamepads: one drawing per connected gamepad (an Xbox-style one, a
+        # PlayStation-style one, or a plain one), its battery bar under it.
+        # Nothing at all when none is connected.
+        self.pads_box = Gtk.Box(spacing=18, valign=Gtk.Align.CENTER)
+        self.pads_box.add_css_class("gamepads")
+        self.pads_box.set_margin_end(14)
+        self.pads_state = None
+        net.append(self.pads_box)
         net.append(self.net_text)
         net.append(self.net_icon)
 
@@ -853,35 +843,54 @@ class Launcher(HomeMixin, EditorMixin, SettingsMixin):
                 del self.opening[app_id]     # never showed up
         return True
 
-    def _update_batteries(self):
-        batteries = self.gamepads.batteries()[:4]
-        state = tuple((b.bars, b.charging) for b in batteries)
-        if state == self.battery_state:
-            return
-        self.battery_state = state
-        child = self.battery_box.get_first_child()
-        while child is not None:
-            following = child.get_next_sibling()
-            self.battery_box.remove(child)
-            child = following
-        for b in batteries:
-            image = Gtk.Image.new_from_gicon(
-                svg_icon("battery-charging.svg" if b.charging else f"battery-{b.bars}.svg"))
-            image.set_pixel_size(self.px("status_icon"))
-            image.set_tooltip_text(f"{b.name}: {b.percent}%" if b.percent is not None else b.name)
-            self.battery_box.append(image)
-        self.battery_box.set_visible(bool(batteries))
+    @staticmethod
+    def battery_percent(battery):
+        """0..100 for the bar; a level without a number becomes a rough one."""
+        if battery.percent is not None:
+            return max(0, min(100, battery.percent))
+        return {"full": 100, "high": 75, "normal": 50, "low": 20, "critical": 5}.get(battery.level, 50)
 
     def _update_gamepads(self):
-        """The gamepad list is kept up to date by the Navigator (it reads the gamepads)."""
-        self._update_batteries()
-        n = len(self.gamepads.connected())
-        if n != self.gamepad_count:
-            self.gamepad_count = n
-            self.pad_icon.set_from_gicon(svg_icon("gamepad.svg" if n else "gamepad-off.svg"))
-            self.pad_icon.set_pixel_size(self.px("status_icon"))
-            self.pad_count.set_label(str(n) if n > 1 else "")
-            self.pad_count.set_visible(n > 1)
+        """One drawing per connected gamepad, its battery under it. The list is kept
+        up to date by the Navigator (it reads the gamepads)."""
+        pads = self.gamepads.pads()
+        state = tuple((p.kind, p.name, None if p.battery is None else
+                       (self.battery_percent(p.battery), p.battery.charging)) for p in pads)
+        if state == self.pads_state:
+            return True
+        self.pads_state = state
+        child = self.pads_box.get_first_child()
+        while child is not None:
+            following = child.get_next_sibling()
+            self.pads_box.remove(child)
+            child = following
+        size = round(self.px("status_icon") * 1.3)   # big enough to tell the kinds apart
+        for pad in pads[:4]:
+            column = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5, valign=Gtk.Align.CENTER)
+            column.add_css_class("pad")
+            image = Gtk.Image.new_from_gicon(svg_icon(f"pad-{pad.kind if pad.kind in PAD_ICONS else 'generic'}.svg"))
+            image.set_pixel_size(size)
+            column.append(image)
+            bar = Gtk.LevelBar(min_value=0, max_value=100)
+            bar.set_size_request(size, 7)
+            bar.add_css_class("pad-battery")
+            for name in ("low", "high", "full"):
+                bar.remove_offset_value(name)
+            if pad.battery is None:
+                bar.set_value(100)
+                bar.add_css_class("wired")        # on a cable: a full, plain bar
+                tip = pad.name
+            else:
+                pct = self.battery_percent(pad.battery)
+                bar.set_value(pct)
+                bar.add_css_class("charging" if pad.battery.charging else
+                                  "low" if pct < 20 else "half" if pct < 50 else "ok")
+                tip = f"{pad.name}: {pct}%"
+            column.set_tooltip_text(tip)
+            column.update_property([Gtk.AccessibleProperty.LABEL], [tip])
+            column.append(bar)
+            self.pads_box.append(column)
+        self.pads_box.set_visible(bool(pads))
         return True
 
     # --- weather -------------------------------------------------------------------

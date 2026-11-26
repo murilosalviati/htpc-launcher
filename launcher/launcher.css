@@ -16,6 +16,28 @@ window.htpc {
 
 /* Weather on the left, clock in the middle, gamepads and network on the right. */
 
+/* a gamepad in the top bar: its drawing, its battery under it */
+levelbar.pad-battery trough {
+  min-height: 7px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.12);
+  border: none;
+  padding: 0;
+}
+levelbar.pad-battery block.filled {
+  border-radius: 4px;
+  border: none;
+  background: #4ade80;
+}
+levelbar.pad-battery.half block.filled { background: #facc15; }
+levelbar.pad-battery.low block.filled { background: #f87171; }
+levelbar.pad-battery.charging block.filled { background: #7cb7ff; }
+levelbar.pad-battery.wired block.filled { background: rgba(255, 255, 255, 0.45); }
+levelbar.pad-battery block.empty {
+  border: none;
+  background: transparent;
+}
+
 .clock {
   font-size: 40pt;
   font-weight: 700;
