@@ -4,6 +4,10 @@ The project is in beta: every `0.x` version is a pre-release, and the configurat
 
 ## Unreleased
 
+## 0.1.0-beta.10
+
+Update by running `./install.sh` again, or from Settings → Updates. Your `apps.json` is kept. If you use the wake automation, update it in Home Assistant from `extras/home-assistant/wake-tv.yaml`.
+
 - **Your own icons:** an SVG in `~/.config/htpc-launcher/icons/` replaces the launcher icon of the same name (e.g. `console.svg`, the TV input button). See Configuration.
 
 - **Turning a gamepad on wakes the TV and switches it to the launcher**, without pressing a button. The wake automation now waits only 5 seconds after the TV goes off for a gamepad connecting (15 for button presses). Update the automation in Home Assistant from `extras/home-assistant/wake-tv.yaml`.

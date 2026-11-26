@@ -13,4 +13,4 @@ Nothing in here imports a UI toolkit or an OS-specific library at module level;
 those live in htpc.backends.<os> and in the launcher UI.
 """
 
-__version__ = "0.1.0-beta.9"
+__version__ = "0.1.0-beta.10"

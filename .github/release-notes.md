@@ -5,16 +5,16 @@ HTPC Launcher: a gamepad-driven TV home screen for Ubuntu with GNOME on Wayland.
 
 ![Launcher home screen](https://raw.githubusercontent.com/murilosalviati/htpc-launcher/main/docs/preview.png)
 
-## What's new in 0.1.0-beta.9
+## What's new in 0.1.0-beta.10
 
-### Bluetooth Xbox controllers work
-- **Pairing** no longer fails with "Authentication Failed": the launcher answers the controller's pairing request itself, and tries once more if the first attempt is refused.
-- **Once paired**, newer Xbox controllers (Bluetooth LE) were ignored, taken for Steam Input's virtual gamepads. They control the launcher and the shortcuts now.
-- A refused pairing says what to do, and long messages no longer run off the screen.
+### Gamepads and the TV
+- **Each gamepad is drawn in the top bar** (an Xbox-style, PlayStation-style or plain drawing), with its **battery** under it: green, yellow under 50%, red under 20%, blue while charging. Newer Bluetooth LE Xbox controllers report their battery through BlueZ. Nothing is drawn when no gamepad is connected.
+- **Turning off the TV turns off the Bluetooth gamepads** (Settings → Gamepads → Turn off with the TV, on by default).
+- **Turning a gamepad on wakes the TV** and switches it to the launcher, without pressing a button. Update the wake automation in Home Assistant from `extras/home-assistant/wake-tv.yaml`.
 
-### Home screen
-- **Explore** leaves out shows that never stop (SNL, SpongeBob...): only series that premiered in the last 8 years count as new, and kids', news, soap and talk shows don't.
-- **Lights by room** follow the order you chose, and lights can have **names of your own** (`names` in `apps.json`), such as a dashboard's short names.
+### Top bar
+- **A button for another TV input**, such as a console on HDMI 2: choose the input in Settings → Home Assistant → TV input button. While the TV shows it, the HTPC's gamepads only bring the TV back.
+- **Your own icons:** an SVG in `~/.config/htpc-launcher/icons/` replaces the launcher icon of the same name (for example `console.svg` for the TV input button).
 
 The new home screen arrived in [0.1.0-beta.8](https://github.com/murilosalviati/htpc-launcher/releases/tag/v0.1.0-beta.8): films and series from Jellyfin, Steam games, your lights, the power menu.
 
@@ -24,7 +24,7 @@ The full list is in [CHANGELOG.md](https://github.com/murilosalviati/htpc-launch
 
 ## Install or update
 
-1. Download **htpc-launcher-0.1.0-beta.9.tar.gz** below and extract it: `tar xzf htpc-launcher-*.tar.gz`. `SHA256SUMS` lets you check it: `sha256sum -c SHA256SUMS`.
+1. Download **htpc-launcher-0.1.0-beta.10.tar.gz** below and extract it: `tar xzf htpc-launcher-*.tar.gz`. `SHA256SUMS` lets you check it: `sha256sum -c SHA256SUMS`.
 2. Run `./install.sh` inside the extracted folder. An existing `apps.json` is kept.
 3. **Log out and back in** if you are coming from beta.5 or older: GNOME only loads the extension's version 7 at login. On a first install, then run `gnome-extensions enable htpc-launcher@htpc`. The launcher starts by itself at login.
 
