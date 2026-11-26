@@ -891,6 +891,8 @@ class Launcher(HomeMixin, EditorMixin, SettingsMixin, ScreensaverMixin):
         up to date by the Navigator (it reads the gamepads)."""
         pads = self.gamepads.pads()
         self._set_button_style(pads)
+        if self.pads_state is not None and len(pads) > len(self.pads_state):
+            self.pad_connected()
         state = tuple((p.kind, p.name, None if p.battery is None else
                        (self.battery_percent(p.battery), p.battery.charging)) for p in pads)
         if state == self.pads_state:

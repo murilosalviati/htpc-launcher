@@ -46,6 +46,14 @@ class ScreensaverMixin:
         self.hide_screensaver()
         return True
 
+    def pad_connected(self):
+        """A gamepad was turned on: someone is about to use the launcher. The
+        screensaver closes and the home screen comes back at its start."""
+        self.last_input = time.monotonic()
+        if self.saver is not None:
+            self.hide_screensaver()
+            self.go_home()
+
     def _saver_check(self):
         minutes = self.saver_minutes()
         if (minutes and self.saver is None and self.win.is_active() and not self.overlays

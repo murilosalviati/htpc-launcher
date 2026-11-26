@@ -14,7 +14,7 @@ HTPC Launcher: a gamepad-driven TV home screen for Ubuntu with GNOME on Wayland.
 - **LT / RT switch tabs** (Explore, Continue, Series, Films) from the app, a tab or a card. **LB / RB** still turn the page; their hint moved under the cards.
 
 ### Home screen
-- **Screensaver:** after 5 minutes without a press, your films' and series' pictures with a big clock, the date and the temperature. Any button brings the launcher back, and that press does nothing else. Settings → Screensaver: 2, 5, 10, 30 minutes or Off.
+- **Screensaver:** after 5 minutes without a press, your films' and series' pictures with a big clock, the date and the temperature. Any button, or turning a gamepad on, brings the launcher back at the start of the home screen; that press does nothing else. Settings → Screensaver: 2, 5, 10, 30 minutes or Off.
 - **Forecast** under the lights: the next 12 hours with the chance of rain, the next days, sunrise and sunset.
 - **Lights by room, side by side**, in one row to move along.
 - **Reorder the apps** in edit mode with LB / RB.

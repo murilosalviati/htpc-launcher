@@ -2008,7 +2008,7 @@ def fc2():
 
 @step(800)
 def sv1():
-    from htpc.backends.base import GamepadEvent as E
+    from htpc.backends.base import Battery, GamepadEvent as E, PadStatus
     l = L()
     check("the screensaver waits its minutes, then shows the clock", not state["saver_early"] and l.saver is not None
           and l.saver_clock.get_label() == l.time_label.get_label())
@@ -2019,6 +2019,18 @@ def sv1():
     l.navigator.handle(E("pad", "button", "a", 0))
     check("any button closes it, and that press does nothing else",
           l.saver is None and l.win.get_focus() is before and not l.overlays)
+    l.house_rows[-1][0].grab_focus()   # somewhere down the home screen
+    l.last_input = time.monotonic() - 6 * 60
+    l._saver_check()
+    shown = l.saver is not None
+    pads = l.gamepads.pads
+    l.pads_state = ()
+    l.gamepads.pads = lambda: [PadStatus("Xbox Wireless Controller", "xbox", Battery("x", 80))]
+    l._update_gamepads()
+    check("a gamepad turned on closes the screensaver and brings back the start of the home screen",
+          shown and l.saver is None and l.win.get_focus() is l.tiles[0])
+    l.gamepads.pads = pads
+    l._update_gamepads()
     l.cfg["screensaver_minutes"] = 0
     l.last_input = time.monotonic() - 60 * 60
     l._saver_check()
@@ -2051,11 +2063,22 @@ def finish():
     L().win.get_application().quit()
 
 
+def run(f):
+    """One step; an exception in it fails the run (and the next steps still go)."""
+    try:
+        f()
+    except Exception:  # noqa: BLE001
+        import traceback
+        traceback.print_exc()
+        check(f"step {f.__name__} ran without an error", False)
+    return False
+
+
 def schedule():
     total = 0
     for delay, f in steps:
         total += delay
-        GLib.timeout_add(total, lambda f=f: (f(), False)[1])
+        GLib.timeout_add(total, lambda f=f: run(f))
 
 
 GLib.idle_add(lambda: (schedule(), False)[1])

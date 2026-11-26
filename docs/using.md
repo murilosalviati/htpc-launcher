@@ -91,7 +91,7 @@ Below the lights (go further down): the next 12 hours with the chance of rain, t
 
 ### Screensaver
 
-After 5 minutes with nobody pressing anything while the launcher is in front, the screen shows the pictures of your films and series (Continue, Explore, Films, Series) one after the other, with a big clock, the date and the temperature. Any button brings the launcher back, and that press does nothing else. Settings → **Screensaver** chooses 2, 5, 10 or 30 minutes, or Off.
+After 5 minutes with nobody pressing anything while the launcher is in front, the screen shows the pictures of your films and series (Continue, Explore, Films, Series) one after the other, with a big clock, the date and the temperature. Any button brings the launcher back, and that press does nothing else. Turning a gamepad on closes it too, and brings back the start of the home screen. Settings → **Screensaver** chooses 2, 5, 10 or 30 minutes, or Off.
 
 ### No stray mouse pointer
 
