@@ -13,8 +13,12 @@ A gamepad-driven home screen for a living-room PC running Ubuntu with GNOME on W
 
 - **A home screen made for the couch:**
   - one tile per app, with a glow and press animations;
-  - the clock, the weather, gamepad and battery icons, and the network status across the top;
+  - across the top: the clock, the date with the weather, each connected gamepad drawn by kind (Xbox, PlayStation or plain) with its battery under it, the network status, and the TV input, Settings and power buttons;
   - sizes that follow the screen, from 1080p to 4K.
+- **Films, series and games above the apps (optional):** the row follows the app in focus.
+  - **Jellyfin:** Explore (what's trending this week on TMDB that is in your library, new titles only), Series and Films (the newest on your server).
+  - **Steam:** your recently played games, including the ones you stream with Remote Play.
+  - LB / RB turn the page.
 - **Apps open in full screen and resume, never duplicate.** Selecting an app that is already running brings it back. Steam opens in Big Picture.
 - **Shortcuts in any app:**
 
@@ -27,15 +31,22 @@ A gamepad-driven home screen for a living-room PC running Ubuntu with GNOME on W
   The first two can be changed from Settings.
 - **Over whatever is playing:** a short notice when a gamepad connects or disconnects, when a battery gets low, or when the internet drops or comes back. They show even over full-screen video and games.
 - **Settings from the couch:**
-  - apps (with an on-screen keyboard), background color, weather location, °C/°F, and English or Brazilian Portuguese;
-  - **Bluetooth gamepad pairing**;
+  - apps, with an on-screen keyboard: add, edit, remove, and **reorder** them (LB / RB in edit mode);
+  - background color, weather location, °C/°F, and English or Brazilian Portuguese;
+  - **Bluetooth gamepad pairing**, newer Xbox controllers (Bluetooth LE) included;
   - shortcuts;
   - Home Assistant and Jellyfin.
-- **Recently added (optional):** the newest films and series on your Jellyfin server, above the apps.
-- **Home Assistant (optional):** the gamepad wakes the TV and switches it to the right input, a button turns the TV off, and while it's off the gamepad only wakes it. Your lights and scenes sit under the apps, to turn on and off and dim from the couch. Cinema mode dims the lights while a video plays.
+- **Home Assistant (optional):**
+  - **The TV:** turning a gamepad on, or pressing a button, wakes the TV and switches it to the launcher; while it's off, the gamepad only wakes it. Turning the TV off from the power menu also turns the Bluetooth gamepads off.
+  - **Another input:** a button switches the TV to a console on another HDMI input.
+  - **Your lights by room,** under the apps: Ⓐ turns one on or off, holding Ⓐ opens its brightness, white temperature and colour. Scenes sit there too.
+  - **Cinema mode** dims the lights while a video plays.
 - **Per-app resolution:** for example, 4K for movies in Jellyfin and 1440p at 60 Hz everywhere else, switching by itself.
 - **Updates from the couch:** the launcher and the Flatpak apps, from Settings.
-- **Small touches:** the mouse pointer hides while you use the gamepad, and one power button turns off the TV (through Home Assistant), restarts or shuts down the computer.
+- **Small touches:**
+  - the mouse pointer hides while you use the gamepad;
+  - one power button turns off the TV (through Home Assistant), restarts or shuts down the computer, and turning off the TV puts the launcher back at its start;
+  - your own icons can replace the launcher's (`~/.config/htpc-launcher/icons/`).
 
 The default configuration has VacuumTube (YouTube's TV interface), Jellyfin Desktop, Moonlight and Steam, all as Flatpaks.
 
