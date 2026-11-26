@@ -124,7 +124,7 @@ To come back, press any button on the HTPC's gamepads: while the TV shows the ot
 
 ### Optional: the TV's volume
 
-Settings → Home Assistant → **Volume shortcut** chooses what Start + Select + ↑ / ↓ changes: the computer's volume (the default) or **the TV's**, through Home Assistant (`media_player.volume_set`, or `volume_up` / `volume_down` for TVs that only take steps, like LG webOS). The launcher checks first that Home Assistant can change the TV's volume. With sound going to a soundbar over ARC, whether the TV passes the change on depends on the TV.
+Settings → **Audio** → **Volume shortcut changes** chooses what Start + Select + ↑ / ↓ changes, one or the other: the system's volume (the default) or **the TV's**, through Home Assistant (`media_player.volume_set`, or `volume_up` / `volume_down` for TVs that only take steps, like LG webOS). The launcher checks first that Home Assistant can change the TV's volume. With sound going to a soundbar over ARC, whether the TV passes the change on depends on the TV.
 
 ### 5. Optional: lights on the home screen
 
@@ -172,7 +172,7 @@ The `home_assistant` entry of `apps.json`:
 | `quick_source` | `{"source": "HDMI 2", "label": "Nintendo Switch"}`: a button at the top switches the TV to this input. | TV input button |
 | `htpc_source` | The HTPC's own input, remembered on the first switch. While the TV shows another input, the HTPC's gamepads only bring it back. It must match `htpc_input` in the wake automation. | (set by the launcher) |
 | `group_by_area` | `true` shows the rooms side by side, each name over its lights, in the order they first come in `devices`. | Lights on the home screen → Separate by room |
-| `volume` | `"tv"`: the volume shortcut changes the TV's volume through Home Assistant. Otherwise the computer's. | Volume shortcut |
+| `volume` | `"tv"`: the volume shortcut changes the TV's volume through Home Assistant. Otherwise the computer's. | Audio → Volume shortcut changes |
 | `names` | `{"light.x": "Desk"}`: names of your own, instead of Home Assistant's (like a dashboard card's). | (apps.json only) |
 | `scenes` | The scenes or scripts above them (entity ids). Without it, the first 6 scenes. | (apps.json only) |
 

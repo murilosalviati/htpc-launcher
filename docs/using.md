@@ -145,7 +145,10 @@ For the fields that aren't in edit mode, such as pause on Home, close commands a
 
 ### Audio
 
-Settings → **Audio** lists the sound outputs, with the one **In use** marked. Select another and all sound goes there, including whatever is already playing.
+Settings → **Audio** gathers the sound settings:
+
+- **Volume shortcut changes:** what Start + Select + ↑ / ↓ changes, one or the other: **System (Ubuntu)**, the default, or **TV (Home Assistant)**, the TV's own volume. The indicator on screen shows a TV when it's the TV's. The TV needs Home Assistant set up first (see the [Home Assistant guide](home-assistant.md#optional-the-tvs-volume)).
+- **Sound output:** the outputs, with the one **In use** marked. Select another and all sound goes there, including whatever is already playing.
 
 **Pair Bluetooth headphones or a speaker:**
 

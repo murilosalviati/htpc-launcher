@@ -164,8 +164,9 @@ class Shortcuts:
         """direction +1 or -1: one step, and the level on screen. The computer's
         volume, or the TV's through Home Assistant (Settings → Home Assistant)."""
         cfg = self.settings()
+        to_tv = home_assistant.volume_target(cfg) == "tv"
         try:
-            if home_assistant.volume_target(cfg) == "tv":
+            if to_tv:
                 result = home_assistant.change_tv_volume(cfg, direction)
             else:
                 result = self.system.change_volume(direction * VOLUME_STEP)
@@ -175,7 +176,10 @@ class Shortcuts:
         if result is None:
             return
         level, muted = result
-        if muted or level <= 0:
+        if to_tv and not muted:
+            # The TV's volume, not the system's: GNOME's volume indicator with a TV on it.
+            icon = "video-display-symbolic"
+        elif muted or level <= 0:
             icon = "audio-volume-muted-symbolic"
         elif level < 0.34:
             icon = "audio-volume-low-symbolic"
@@ -183,7 +187,8 @@ class Shortcuts:
             icon = "audio-volume-medium-symbolic"
         else:
             icon = "audio-volume-high-symbolic"
-        log.info("volume %s: %d%%%s", "up" if direction > 0 else "down", round(level * 100),
+        log.info("%s volume %s: %d%%%s", "TV" if to_tv else "system", "up" if direction > 0 else "down",
+                 round(level * 100),
                  " (muted)" if muted else "")
         try:
             if not self.windows.show_osd(icon, level):

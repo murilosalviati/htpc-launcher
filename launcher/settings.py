@@ -167,6 +167,12 @@ class SettingsMixin:
         box.add_css_class("editor")
         box.add_css_class("settings")
         box.set_spacing(16)
+        # What Start + Select + ↑ / ↓ changes: one volume only, the system's or the TV's.
+        volume = self._field(self.t("ha_volume"), self._ha_toggle_volume, title_width=420)
+        box.append(volume)
+        outputs = Gtk.Label(label=self.t("audio_outputs"), xalign=0)
+        outputs.add_css_class("area-title")
+        box.append(outputs)
         listing = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=16)
         waiting = Gtk.Label(label=self.t("updates_checking"))
         waiting.add_css_class("dialog-text")
@@ -179,11 +185,18 @@ class SettingsMixin:
         close_box.add_css_class("editor-buttons")
         close_box.append(close)
         box.append(close_box)
-        rows = [[pair], [close]]
-        self.audio_menu = a = {"listing": listing, "rows": rows, "pair": pair, "close": close}
-        self.push_overlay(box, rows, focus=pair)
+        rows = [[volume], [pair], [close]]
+        self.audio_menu = a = {"listing": listing, "rows": rows, "pair": pair, "close": close, "volume": volume}
+        self.push_overlay(box, rows, focus=volume)
         a["overlay"] = self.overlays[-1]
+        self.refresh_volume_target()
         self.refresh_audio()
+
+    def refresh_volume_target(self):
+        a = getattr(self, "audio_menu", None)
+        if a is not None:
+            target = home_assistant.volume_target(self.cfg)
+            a["volume"].value.set_label(self.t("ha_volume_tv" if target == "tv" else "ha_volume_computer"))
 
     def refresh_audio(self):
         a = getattr(self, "audio_menu", None)
@@ -205,7 +218,7 @@ class SettingsMixin:
             label = Gtk.Label(label=text)
             label.add_css_class("dialog-text")
             listing.append(label)
-            a["rows"][:] = [[a["pair"]], [a["close"]]]
+            a["rows"][:] = [[a["volume"]], [a["pair"]], [a["close"]]]
             return
         rows, focus = [], None
         for out in result[:self.AUDIO_ROWS]:
@@ -218,8 +231,9 @@ class SettingsMixin:
             if out.current:
                 focus = b
                 self.audio_current = out.name
-        a["rows"][:] = rows + [[a["pair"]], [a["close"]]]
-        if self.overlays and self.overlays[-1] is a.get("overlay") and focus is not None:
+        a["rows"][:] = [[a["volume"]]] + rows + [[a["pair"]], [a["close"]]]
+        if self.overlays and self.overlays[-1] is a.get("overlay") and focus is not None \
+                and self.win.get_focus() is not a["volume"]:
             focus.grab_focus()
         self.refresh_settings()
 
@@ -718,7 +732,7 @@ class SettingsMixin:
         box = self.dialog_box(self.t("settings_ha"))
         box.add_css_class("editor")
         box.add_css_class("settings")
-        box.set_spacing(10)
+        box.set_spacing(16)
         f = self.ha_fields = {
             "enabled": self._field(self.t("ha_enabled"), self._ha_toggle_enabled, title_width=300),
             "url": self._field(self.t("ha_url"), self._ha_edit_url, title_width=300),
@@ -728,7 +742,6 @@ class SettingsMixin:
                                  title_width=300),
             "tv": self._field(self.t("ha_tv"), self._ha_choose_tv, title_width=300),
             "source": self._field(self.t("quick_source"), self._ha_choose_source, title_width=300),
-            "volume": self._field(self.t("ha_volume"), self._ha_toggle_volume, title_width=300),
             "home": self._field(self.t("ha_home"), self._ha_choose_home, title_width=300),
             "test": self._field(self.t("ha_test"), self._ha_test, title_width=300),
         }
@@ -762,10 +775,7 @@ class SettingsMixin:
             f["source"].value.set_label(self.t("quick_source_needs_tv"))
         else:
             f["source"].value.set_label((ha.get("quick_source") or {}).get("source") or self.t("off"))
-        if not ha.get("token") or not ha.get("tv_entity"):
-            f["volume"].value.set_label(self.t("ha_volume_computer"))
-        else:
-            f["volume"].value.set_label(self.t("ha_volume_tv" if ha.get("volume") == "tv" else "ha_volume_computer"))
+
 
     def _ha_toggle_volume(self):
         """The volume shortcut changes the computer's volume or the TV's. The TV
@@ -773,9 +783,10 @@ class SettingsMixin:
         ha = self._ha()
         if ha.get("volume") == "tv":
             self._ha_set(volume=None)
+            self.refresh_volume_target()
             return
         if not ha.get("token") or not ha.get("tv_entity"):
-            self._message(self.t("quick_source_needs_tv"))
+            self._message(self.t("ha_volume_needs_tv"))
             return
         cfg, get = dict(self.cfg), getattr(self, "ha_get", None)
 
@@ -786,6 +797,7 @@ class SettingsMixin:
                 self._message(self.t("ha_volume"), self.t("ha_volume_unsupported"))
             else:
                 self._ha_set(volume="tv")
+                self.refresh_volume_target()
 
         self._ha_ask(lambda: home_assistant.tv_volume_support(cfg, get), done)
 

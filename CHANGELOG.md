@@ -4,6 +4,8 @@ The project is in beta: every `0.x` version is a pre-release, and the configurat
 
 ## Unreleased
 
+- **Settings → Audio gathers the sound settings:** what the volume shortcut changes (System or TV, one or the other) sits there now, above the outputs. When it's the TV's volume, the indicator on screen shows a TV, so it isn't mistaken for the system's.
+
 ## 0.1.0-beta.11
 
 Update by running `./install.sh` again, or from Settings → Updates. Your `apps.json` is kept.

@@ -758,7 +758,7 @@ def tv1():
     l.press()
     f = l.ha_fields
     check("it opens the Home Assistant menu", len(l.overlays) == 2
-          and list(f) == ["enabled", "url", "webhook", "events", "token", "tv", "source", "volume", "home", "test"]
+          and list(f) == ["enabled", "url", "webhook", "events", "token", "tv", "source", "home", "test"]
           and f["token"].value.get_label() == l.t("ha_token_missing")
           and f["tv"].value.get_label() == l.t("ha_tv_needs_token"))
     l.pop_overlay()
@@ -1225,12 +1225,15 @@ def au2():
     l = L()
     a = l.audio_menu
     names = label_texts(a["listing"])
-    check("Settings → Audio lists the outputs, the one in use marked and focused",
-          "TV (HDMI)" in names and "JBL Flip 5" in names and l.t("audio_current") in names
-          and l.win.get_focus() is a["rows"][0][0] and a["rows"][-2] == [a["pair"]])
+    check("Settings → Audio: first what the volume shortcut changes (the system's, by default), then the outputs",
+          a["rows"][0] == [a["volume"]] and a["volume"].value.get_label() == l.t("ha_volume_computer")
+          and l.win.get_focus() is a["volume"])
+    check("the outputs, the one in use marked", "TV (HDMI)" in names and "JBL Flip 5" in names
+          and l.t("audio_current") in names and a["rows"][1][0].value.get_label() == l.t("audio_current")
+          and a["rows"][-2] == [a["pair"]])
     check("Settings shows the output in use", l.settings_fields["audio"].value.get_label() == "TV (HDMI)")
     screenshot(l.win, "20-audio")
-    a["rows"][1][0].grab_focus()
+    a["rows"][2][0].grab_focus()
     l.press()
 
 
@@ -1239,8 +1242,8 @@ def au3():
     l = L()
     a = l.audio_menu
     check("choosing the speaker sends the sound there", l._audio_state["default"] == "bluez_output.X.1"
-          and a["rows"][0][0].audio_id == "bluez_output.X.1"
-          and a["rows"][0][0].value.get_label() == l.t("audio_current"))
+          and a["rows"][1][0].audio_id == "bluez_output.X.1"
+          and a["rows"][1][0].value.get_label() == l.t("audio_current"))
     from htpc.backends.linux.bluetooth import BluezBluetooth
     fakes.bluez["devices"].clear()
     fakes.bluez["fail_pair"].clear()
