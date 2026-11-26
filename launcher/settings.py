@@ -681,6 +681,7 @@ class SettingsMixin:
         self.save_config()
         self.refresh_home_assistant()
         self.refresh_settings()
+        self.refresh_source_button()
 
     def _ha_summary(self):
         ha = self._ha()
@@ -704,6 +705,7 @@ class SettingsMixin:
             "token": self._field(self.t("ha_token"), lambda: self._message(self.t("ha_token"), self.t("ha_token_text")),
                                  title_width=300),
             "tv": self._field(self.t("ha_tv"), self._ha_choose_tv, title_width=300),
+            "source": self._field(self.t("quick_source"), self._ha_choose_source, title_width=300),
             "home": self._field(self.t("ha_home"), self._ha_choose_home, title_width=300),
             "test": self._field(self.t("ha_test"), self._ha_test, title_width=300),
         }
@@ -733,6 +735,10 @@ class SettingsMixin:
             f["tv"].value.set_label(ha.get("tv_name") or ha.get("tv_entity") or self.t("ha_tv_none"))
         f["test"].value.set_label(self.t("ha_test_value"))
         f["home"].value.set_label(self._ha_home_summary())
+        if not ha.get("token") or not ha.get("tv_entity"):
+            f["source"].value.set_label(self.t("quick_source_needs_tv"))
+        else:
+            f["source"].value.set_label((ha.get("quick_source") or {}).get("source") or self.t("off"))
 
     def _ha_toggle_enabled(self):
         self._ha_set(enabled=None if not self._ha().get("enabled", True) else False)
@@ -841,6 +847,48 @@ class SettingsMixin:
             box.append(b)
             rows.append([b])
         self.push_overlay(box, rows, focus=focus)
+
+    def _ha_choose_source(self):
+        """The input the top button switches the TV to (a console on HDMI 2...)."""
+        ha = self._ha()
+        if not ha.get("token") or not ha.get("tv_entity"):
+            self._message(self.t("quick_source"), self.t("quick_source_needs_tv_text"))
+            return
+        get = getattr(self, "ha_get", None)
+        cfg = dict(self.cfg)
+        self._ha_ask(lambda: home_assistant.tv_sources(cfg, get), self._ha_sources_arrived)
+
+    def _ha_sources_arrived(self, result):
+        if isinstance(result, Exception):
+            self._message(self.t("ha_list_failed", error=self._reason(result)))
+            return
+        current, sources = result
+        home = self._ha().get("htpc_source") or current
+        choices = [s for s in sources if s != home]
+        if not choices:
+            self._message(self.t("quick_source_no_inputs"))
+            return
+        box = self.dialog_box(self.t("quick_source_title"), self.t("quick_source_text"))
+        box.add_css_class("editor")
+        chosen = (self._ha().get("quick_source") or {}).get("source")
+        none = self._field(self.t("quick_source_none"), lambda: self._ha_source_chosen(None, None), title_width=380)
+        box.append(none)
+        rows, focus = [[none]], none
+        for source in choices[:7]:
+            b = self._field(source, lambda s=source: self._ha_source_chosen(s, home), title_width=380)
+            b.value.set_label("✓" if source == chosen else "")
+            if source == chosen:
+                focus = b
+            box.append(b)
+            rows.append([b])
+        self.push_overlay(box, rows, focus=focus)
+
+    def _ha_source_chosen(self, source, home):
+        self.pop_overlay()
+        values = {"quick_source": {"source": source, "label": source} if source else None}
+        if source and home and not self._ha().get("htpc_source"):
+            values["htpc_source"] = home   # the HTPC's own input, to come back to
+        self._ha_set(**values)
 
     def _ha_tv_chosen(self, entity, name):
         self.pop_overlay()

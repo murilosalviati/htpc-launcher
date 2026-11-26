@@ -31,6 +31,7 @@ The apps row has one tile per app. Move between them with the d-pad or the left 
   - **Gamepads:** an icon that lights up when a gamepad is connected (USB, Bluetooth or a wireless receiver). With more than one connected, it shows how many.
   - **Batteries:** one battery icon per wireless gamepad that reports its charge, from empty (red) to full, with a bolt while charging. A gamepad on a cable reports no charge, so no icon shows for it.
   - **Network:** a cable symbol on a wired connection, or Wi-Fi bars on Wi-Fi. Text appears only when the connection is limited or down.
+  - **TV input** (when set up in Settings → Home Assistant → TV input button): switches the TV to another input, such as a console. Any button on the HTPC's gamepads brings the TV back.
   - **Settings** and **power:** two round buttons. Go up from the top row to reach them.
 
 The power button opens a menu:

@@ -729,7 +729,7 @@ def tv1():
     l.press()
     f = l.ha_fields
     check("it opens the Home Assistant menu", len(l.overlays) == 2
-          and list(f) == ["enabled", "url", "webhook", "events", "token", "tv", "home", "test"]
+          and list(f) == ["enabled", "url", "webhook", "events", "token", "tv", "source", "home", "test"]
           and f["token"].value.get_label() == l.t("ha_token_missing")
           and f["tv"].value.get_label() == l.t("ha_tv_needs_token"))
     l.pop_overlay()
@@ -1805,6 +1805,71 @@ def m4():
     l.update_media(force=True)
     check("nothing set up: no tabs", not l.recent_section.get_visible() and l.tab_row == [])
     l.save_config()
+    l.tiles[0].grab_focus()
+
+
+# ---------------- the TV input button (a console on HDMI 2) ----------------
+
+def tv_route(url, token):
+    if url.endswith("/api/states/media_player.tv"):
+        return {"state": "on", "attributes": {"source": "PC", "source_list": ["PC", "HDMI 2", "HDMI 3"]}}
+    return HA_STATES
+
+
+@step(300)
+def q1():
+    l = L()
+    while l.overlays:
+        l.pop_overlay()
+    ha = dict(l.cfg.get("home_assistant") or {})
+    ha.update(url="http://192.168.0.22:8123", token="T", tv_entity="media_player.tv", webhook_id="w")
+    ha.pop("quick_source", None)
+    ha.pop("htpc_source", None)
+    l.cfg["home_assistant"] = ha
+    l.ha_get, l.ha_api_post = tv_route, ha_api_post
+    l.refresh_source_button()
+    check("no input chosen: no button at the top", not l.btn_source.get_visible() and l.btn_source not in l.top_buttons)
+    l.open_home_assistant(focus="source")
+    check("Home Assistant → TV input button: off", l.ha_fields["source"].value.get_label() == l.t("off"))
+    l.press()
+
+
+@step(600)
+def q2():
+    l = L()
+    rows = l.overlays[-1]["rows"]
+    check("it lists the TV's other inputs (not the HTPC's own)",
+          [label_texts_widgets(r[0])[0].get_label() for r in rows[1:]] == ["HDMI 2", "HDMI 3"])
+    screenshot(l.win, "39-tv-input-choice")
+    rows[1][0].grab_focus()
+    l.press()
+    ha = l.cfg["home_assistant"]
+    check("choosing HDMI 2 saves it, and remembers the HTPC's own input",
+          ha["quick_source"]["source"] == "HDMI 2" and ha["htpc_source"] == "PC"
+          and l.ha_fields["source"].value.get_label() == "HDMI 2")
+    check("the button shows at the top, before Settings", l.btn_source.get_visible()
+          and l.top_buttons == [l.btn_source, l.btn_settings, l.btn_power])
+    while l.overlays:
+        l.pop_overlay()
+    state["ha_posts"] = []
+    l.btn_source.grab_focus()
+    l.press()
+
+
+@step(600)
+def q3():
+    l = L()
+    from htpc import home_assistant as hass
+    screenshot(l.win, "40-tv-input-button")
+    check("the button switches the TV to HDMI 2", ("services/media_player/select_source",
+          {"entity_id": "media_player.tv", "source": "HDMI 2"}) in state.get("ha_posts", []))
+    check("and leaves the marker, so this press doesn't switch it back", hass.recently_away())
+    ha = l.cfg["home_assistant"]
+    for key in ("quick_source", "htpc_source", "tv_entity", "token"):
+        ha.pop(key, None)
+    l.save_config()
+    l.refresh_source_button()
+    l.ha_get = ha_states
     l.tiles[0].grab_focus()
 
 

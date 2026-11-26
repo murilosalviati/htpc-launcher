@@ -2,6 +2,10 @@
 
 The project is in beta: every `0.x` version is a pre-release, and the configuration format or install steps may still change.
 
+## Unreleased
+
+- **A button for another TV input** (a console on HDMI 2): Settings → Home Assistant → TV input button lists the TV's inputs; the chosen one gets a round button at the top right, before Settings. While the TV shows that input, the HTPC's gamepads only bring it back (the first press, through the wake automation), like when the TV is off; the press on the button itself doesn't. Needs the token and the TV set up.
+
 ## 0.1.0-beta.9
 
 Update by running `./install.sh` again, or from Settings → Updates. Your `apps.json` is kept.

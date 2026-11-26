@@ -553,6 +553,53 @@ class Launcher(HomeMixin, EditorMixin, SettingsMixin):
         the apps, the house."""
         return [self.top_buttons, self.tab_row, self.recent_row] + self.tile_rows + self.house_rows
 
+    @property
+    def top_buttons(self):
+        return [b for b in (self.btn_source, self.btn_settings, self.btn_power) if b.get_visible()]
+
+    # --- the TV input button ---------------------------------------------------------
+
+    def quick_source(self):
+        """The input the top button switches the TV to, or None when not set up."""
+        ha = self.cfg.get("home_assistant") or {}
+        source = (ha.get("quick_source") or {}).get("source")
+        return source if source and home_assistant.api_ready(self.cfg) else None
+
+    def refresh_source_button(self):
+        source = self.quick_source()
+        self.btn_source.set_visible(bool(source))
+        if source:
+            label = (self.cfg["home_assistant"].get("quick_source") or {}).get("label") or source
+            self.btn_source.update_property([Gtk.AccessibleProperty.LABEL], [self.t("switch_to", source=label)])
+
+    def switch_tv_source(self):
+        """Switch the TV to the other input. The first time, the HTPC's own input is
+        remembered, so the HTPC's gamepads can bring the TV back (see home_assistant)."""
+        source = self.quick_source()
+        if not source:
+            return
+        cfg, get, post = dict(self.cfg), getattr(self, "ha_get", None), getattr(self, "ha_api_post", None)
+
+        def job():
+            home = cfg["home_assistant"].get("htpc_source")
+            if not home:
+                current, _ = home_assistant.tv_sources(cfg, get)
+                home = current if current and current != source else None
+            home_assistant.switch_source(cfg, source, post)
+            return home
+
+        def done(result):
+            if isinstance(result, Exception):
+                self._message(self.t("switch_failed", error=self._reason(result)))
+                return
+            ha = self.cfg.get("home_assistant") or {}
+            if result and not ha.get("htpc_source"):
+                self.cfg["home_assistant"] = {**ha, "htpc_source": result}
+                self.save_config()
+            log("tv switched to", source)
+
+        in_background(job, done)
+
     def apply_theme(self, theme_id):
         """Switch the background color right away (does not save it)."""
         if theme_id not in themes.THEMES:
@@ -679,13 +726,15 @@ class Launcher(HomeMixin, EditorMixin, SettingsMixin):
         self.date_label.set_xalign(0)
         left = Gtk.Box(valign=Gtk.Align.START)
         left.append(clock)
+        # The TV input button (a console on HDMI 2...), when one is set up.
+        self.btn_source = self._top_button("console.svg", self.t("switch_input"), self.switch_tv_source)
         self.btn_settings = self._top_button("settings.svg", self.t("settings"), self.settings_button)
         self.btn_power = self._top_button("power.svg", self.t("power_menu"), self.power_menu)
-        self.top_buttons = [self.btn_settings, self.btn_power]
         buttons = Gtk.Box(spacing=12, valign=Gtk.Align.CENTER)
         buttons.add_css_class("top-buttons")
-        for b in self.top_buttons:
+        for b in (self.btn_source, self.btn_settings, self.btn_power):
             buttons.append(b)
+        self.refresh_source_button()
         net.set_valign(Gtk.Align.CENTER)
         right = Gtk.Box(spacing=32, valign=Gtk.Align.START)
         right.append(net)

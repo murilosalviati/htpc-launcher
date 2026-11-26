@@ -54,6 +54,49 @@ def tv_off_marker():
     return paths.data_dir() / "tv-off"
 
 
+# --- another input (a console on HDMI 2) ----------------------------------------------
+#
+# "quick_source": {"source": "HDMI 2", "label": "Nintendo Switch"} in the
+# home_assistant entry puts a button at the top of the launcher that switches
+# the TV to that input. "htpc_source" (remembered on the first switch) is the
+# HTPC's own input: while the TV shows another one, the HTPC's gamepads only
+# bring it back (the first press goes to the wake webhook, whose automation
+# selects the HTPC's input), like when the TV is off.
+
+AWAY_QUIET = 15.0   # seconds after a switch when the HTPC's gamepads don't bring the TV back
+
+
+def away_marker():
+    return paths.data_dir() / "tv-away"
+
+
+def recently_away(marker=None, now=time.time, quiet=AWAY_QUIET):
+    """Did the launcher switch the TV to another input a moment ago? (The press on
+    the button itself must not switch it back.)"""
+    try:
+        return now() - (marker or away_marker()).stat().st_mtime < quiet
+    except OSError:
+        return False
+
+
+def tv_sources(cfg, get=None):
+    """(the TV's current input, [its inputs]) from Home Assistant."""
+    attrs = _api(cfg, "states/" + cfg["home_assistant"]["tv_entity"], get).get("attributes") or {}
+    return attrs.get("source"), list(attrs.get("source_list") or [])
+
+
+def switch_source(cfg, source, post=None, marker=None):
+    """Switch the TV to another input; leaves the marker first (see recently_away)."""
+    path = marker or away_marker()
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(str(time.time()))
+    except OSError as e:
+        log.warning("could not leave the tv-away marker: %s", e)
+    _post(cfg, "services/media_player/select_source",
+          {"entity_id": cfg["home_assistant"]["tv_entity"], "source": source}, post)
+
+
 def webhook_url(cfg):
     """The webhook to call, or None when Home Assistant is not set up (or turned off)."""
     ha = (cfg or {}).get("home_assistant") or {}
@@ -107,7 +150,7 @@ def http_post(url, payload):
 
 class HomeAssistant:
     def __init__(self, gamepads, settings=None, post=None, clock=time.monotonic, background=True,
-                 marker=tv_off_marker):
+                 marker=tv_off_marker, away=recently_away):
         self.gamepads = gamepads
         self.settings = settings or config.load_quietly
         self.post = post
@@ -117,6 +160,7 @@ class HomeAssistant:
         self.activity = Throttle(ACTIVITY_EVERY, clock)
         self.last_sent_wall = 0.0   # wall clock, to compare with the tv-off marker
         self.marker = marker
+        self.away = away
 
     def _send(self, event, gamepad=""):
         try:
@@ -136,6 +180,8 @@ class HomeAssistant:
         """Called for every gamepad event; only presses count."""
         if event.kind != "button" or not event.value:
             return
+        if self.away():
+            return   # the press that switched the TV to another input: don't switch it back
         if not self.activity.ready() and not self._tv_turned_off_since_last_send():
             return
         self.activity.touch()
@@ -200,14 +246,20 @@ def _api(cfg, path, get=None):
 
 
 def fetch_tv_state(cfg, get=None):
-    """"on", "off", or None when unknown (not set up, unavailable, unreachable)."""
+    """"on", "off", "away" (on, but showing another input than the HTPC's), or
+    None when unknown (not set up, unavailable, unreachable)."""
     if not api_ready(cfg):
         return None
-    state = _api(cfg, "states/" + cfg["home_assistant"]["tv_entity"], get).get("state")
+    data = _api(cfg, "states/" + cfg["home_assistant"]["tv_entity"], get)
+    state = data.get("state")
     if state in OFF_STATES:
         return "off"
     if state in ("unavailable", "unknown", None):
         return None
+    home = cfg["home_assistant"].get("htpc_source")
+    source = (data.get("attributes") or {}).get("source")
+    if home and source and source != home:
+        return "away"
     return "on"
 
 
@@ -255,7 +307,8 @@ def is_press(event, dead_zone=STICK_DEAD_ZONE):
 class TvGate:
     """In the controller service: keeps the TV's state and swallows input while it is off."""
 
-    def __init__(self, settings, send_wake, get=None, clock=time.monotonic, gate=write_gate):
+    def __init__(self, settings, send_wake, get=None, clock=time.monotonic, gate=write_gate,
+                 away=recently_away):
         self.settings = settings
         self.send_wake = send_wake      # called with the event that should wake the TV
         self.get = get
@@ -266,6 +319,7 @@ class TvGate:
         self.wakes = []                 # times of the recent wake requests
         self.distrust_until = None      # Home Assistant says "off" but the TV doesn't wake up
         self.gate_written = None        # what the gate file says now (None: not written yet)
+        self.away = away
         self._lock = threading.Lock()
 
     def _set_gate(self, blocked):
@@ -288,11 +342,11 @@ class TvGate:
             if state != self.state:
                 log.info("tv: %s", state or "unknown")
             self.state = state
-            if state != "off":
+            if state not in ("off", "away"):
                 self.last_wake = None
                 self.wakes = []
                 self.distrust_until = None
-            blocked = state == "off" and not self._distrusted()
+            blocked = state in ("off", "away") and not self._distrusted()
         self._set_gate(blocked)
 
     def _distrusted(self):
@@ -310,10 +364,12 @@ class TvGate:
         """True when the event must not be used. The first press while the TV is
         off wakes it (again after WAKE_RETRY if it is still off)."""
         with self._lock:
-            if self.state != "off" or self._distrusted():
+            if self.state not in ("off", "away") or self._distrusted():
                 return False
             if not is_press(event):
                 return False   # releases and a stick going back to the middle are harmless
+            if self.state == "away" and self.away():
+                return True    # just switched away by the launcher: not this press
             now = self.clock()
             wake = self.last_wake is None or now - self.last_wake >= WAKE_RETRY
             if wake:
@@ -332,7 +388,8 @@ class TvGate:
             self._set_gate(False)
             return False
         if wake:
-            log.info("tv is off: this press only wakes it")
+            log.info("tv is %s: this press only brings it back",
+                     "off" if self.state == "off" else "on another input")
             self.send_wake(event)
         return True
 

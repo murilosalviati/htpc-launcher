@@ -121,3 +121,57 @@ def test_set_light():
         ("http://ha:8123/api/services/light/turn_on", {"entity_id": "light.sala", "color_temp_kelvin": 2700}),
         ("http://ha:8123/api/services/light/turn_on", {"entity_id": "light.sala", "hs_color": [0, 100]}),
     ]
+
+
+# --- another input (HDMI 2) --------------------------------------------------------
+
+TV = {"home_assistant": {**CFG["home_assistant"], "tv_entity": "media_player.tv", "htpc_source": "PC"}}
+
+
+def tv_state(source, state="on"):
+    return lambda url, token: {"state": state, "attributes": {"source": source, "source_list": ["PC", "HDMI 2"]}}
+
+
+def test_another_input_is_away():
+    assert ha.fetch_tv_state(TV, tv_state("PC")) == "on"
+    assert ha.fetch_tv_state(TV, tv_state("HDMI 2")) == "away"
+    assert ha.fetch_tv_state(TV, tv_state("HDMI 2", "off")) == "off"
+    no_home = {"home_assistant": {**TV["home_assistant"], "htpc_source": None}}
+    assert ha.fetch_tv_state(no_home, tv_state("HDMI 2")) == "on"   # not known yet: never blocks
+    assert ha.tv_sources(TV, tv_state("HDMI 2")) == ("HDMI 2", ["PC", "HDMI 2"])
+
+
+def test_switch_source_leaves_the_marker_then_asks(tmp_path):
+    post = Post()
+    marker = tmp_path / "tv-away"
+    ha.switch_source(TV, "HDMI 2", post, marker=marker)
+    assert marker.exists() and ha.recently_away(marker)
+    assert not ha.recently_away(marker, now=lambda: marker.stat().st_mtime + ha.AWAY_QUIET + 1)
+    assert post.calls == [("http://ha:8123/api/services/media_player/select_source",
+                           {"entity_id": "media_player.tv", "source": "HDMI 2"})]
+
+
+class Event:
+    def __init__(self, value=1):
+        self.kind, self.name, self.value, self.device = "button", "a", value, "pad"
+
+
+def test_away_blocks_and_the_first_press_brings_the_tv_back():
+    woke = []
+    gate = ha.TvGate(lambda: TV, woke.append, get=tv_state("HDMI 2"), gate=lambda blocked: None,
+                     away=lambda: False)
+    gate.check()
+    assert gate.state == "away" and gate.blocks(Event()) and len(woke) == 1
+
+
+def test_right_after_the_switch_presses_do_not_bring_it_back():
+    woke = []
+    gate = ha.TvGate(lambda: TV, woke.append, get=tv_state("HDMI 2"), gate=lambda blocked: None,
+                     away=lambda: True)
+    gate.check()
+    assert gate.blocks(Event()) and woke == []
+    sent = []
+    activity = ha.HomeAssistant(None, settings=lambda: {}, away=lambda: True)
+    activity._send = lambda *a: sent.append(a)
+    activity.button(Event())
+    assert sent == []
