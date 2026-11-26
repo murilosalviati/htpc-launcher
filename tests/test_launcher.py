@@ -778,9 +778,20 @@ def tv2b():
     from htpc import home_assistant as hass
     screenshot(l.win, "15-power-menu")
     hass.http_post = lambda url, payload: None
+    state["real_bluetooth"] = l.bluetooth
+    l.bluetooth = NS2(disconnect_gamepads=lambda: state.setdefault("pads_off", []).append(1) or ["Xbox"])
     l.press()
     check("turning off the TV closes the menu and goes back to the start (first app, top of the screen)",
           not l.overlays and l.win.get_focus() is l.tiles[0] and l.scroller.get_vadjustment().get_value() == 0)
+    check("...and the gamepads are not turned off right away (the press is still being let go of)",
+          not state.get("pads_off"))
+
+
+@step(2000)
+def tv2c():
+    l = L()
+    check("a moment later, the Bluetooth gamepads are turned off too", state.get("pads_off") == [1])
+    l.bluetooth = state.pop("real_bluetooth")
 
 
 @step(400)
@@ -913,7 +924,7 @@ def sc1():
     check("Settings has a gamepad shortcuts row", l.settings_fields["shortcuts"].value.get_label() == "Home + LB + RB")
     l.press()
     f = l.shortcut_fields
-    check("it opens the shortcuts menu", list(f) == ["pairing", "home", "close", "volume", "reset"]
+    check("it opens the shortcuts menu", list(f) == ["pairing", "home", "close", "volume", "tv_off", "reset"]
           and f["close"].value.get_label() == "Start + Select + LB + RB")
     f["home"].grab_focus()
     l.press()

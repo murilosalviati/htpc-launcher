@@ -380,6 +380,11 @@ class Bluetooth:
         """Remove a paired device."""
         raise RuntimeError("no Bluetooth")
 
+    def disconnect_gamepads(self):
+        """Disconnect every Bluetooth gamepad, which turns it off (it stays paired:
+        its home button turns it on and it reconnects). Names of the ones disconnected."""
+        return []
+
 
 class Backend(ABC):
     name = "?"

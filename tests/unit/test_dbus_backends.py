@@ -134,3 +134,14 @@ def test_without_an_agent_it_still_pairs():
     b = _bluez()
     b.pair("AA", agent=broken, sleep=lambda s: None)
     assert b.calls == ["Pair", "Set", "Connect"]
+
+
+def test_disconnect_gamepads_only_connected_gamepads():
+    from htpc.backends.base import BluetoothDevice
+    b = _bluez()
+    b.devices = lambda: [
+        BluetoothDevice("AA", "Xbox", paired=True, connected=True, gamepad=True, kind="gamepad", path="/p/aa"),
+        BluetoothDevice("BB", "Fone", paired=True, connected=True, audio=True, kind="audio", path="/p/bb"),
+        BluetoothDevice("CC", "DS4", paired=True, connected=False, gamepad=True, kind="gamepad", path="/p/cc"),
+    ]
+    assert b.disconnect_gamepads() == ["Xbox"] and b.calls == ["Disconnect"]

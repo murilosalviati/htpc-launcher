@@ -533,6 +533,7 @@ class SettingsMixin:
             "volume": self._field(self.t("shortcut_volume"),
                                   lambda: self._message(self.t("shortcut_volume"), self.t("shortcut_volume_text")),
                                   title_width=300),
+            "tv_off": self._field(self.t("tv_off_gamepads"), self._toggle_tv_off_gamepads, title_width=300),
             "reset": self._field(self.t("shortcuts_reset"), self._reset_shortcuts, title_width=300),
         }
         for w in f.values():
@@ -553,6 +554,7 @@ class SettingsMixin:
             f["home"].value.set_label(shortcuts.combo_label(current["home"]))
             f["close"].value.set_label(shortcuts.combo_label(current["close"]))
             f["volume"].value.set_label(self.t("shortcut_volume_value"))
+            f["tv_off"].value.set_label(self.t("on" if self.cfg.get("tv_off_gamepads", True) else "off"))
             d = shortcuts.DEFAULT_COMBOS
             f["reset"].value.set_label(self.t("shortcuts_reset_value", home=shortcuts.combo_label(d["home"]),
                                               close=shortcuts.combo_label(d["close"])))
@@ -569,6 +571,14 @@ class SettingsMixin:
             self.cfg["shortcuts"] = saved
         else:
             self.cfg.pop("shortcuts", None)
+        self.save_config()
+        self.refresh_shortcuts()
+
+    def _toggle_tv_off_gamepads(self):
+        if self.cfg.get("tv_off_gamepads", True):
+            self.cfg["tv_off_gamepads"] = False
+        else:
+            self.cfg.pop("tv_off_gamepads", None)
         self.save_config()
         self.refresh_shortcuts()
 

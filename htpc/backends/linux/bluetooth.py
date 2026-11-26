@@ -281,6 +281,21 @@ class BluezBluetooth(Bluetooth):
             self._call(path, DEVICE, "Connect", timeout=PAIR_TIMEOUT)
         log.info("bluetooth: paired %s", address)
 
+    def disconnect_gamepads(self):
+        """Xbox and PlayStation controllers switch themselves off when the computer
+        ends the connection; pressing their home button turns them on again."""
+        done = []
+        for d in self.devices():
+            if d.connected and d.kind == "gamepad":
+                try:
+                    self._call(d.path, DEVICE, "Disconnect", timeout=CALL_TIMEOUT)
+                    done.append(d.name)
+                except Exception as e:  # noqa: BLE001 - the others still go
+                    log.warning("bluetooth: could not disconnect %s: %s", d.name, e)
+        if done:
+            log.info("bluetooth: disconnected %s", ", ".join(done))
+        return done
+
     def forget(self, address):
         path = self._path(address)
         adapter = path.rsplit("/", 1)[0]

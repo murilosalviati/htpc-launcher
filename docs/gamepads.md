@@ -102,3 +102,8 @@ Wireless gamepads that report their charge get a battery icon in the top bar. Yo
 ## Jellyfin and other apps
 
 Apps read the gamepad themselves, and the launcher's shortcuts work on top of them. If a gamepad does nothing inside a Flatpak app, the app probably can't see input devices; see [Installation → App notes](installation.md#app-notes).
+
+
+## Turning off with the TV
+
+When you turn off the TV from the power menu, the launcher also disconnects every Bluetooth gamepad a moment later, which switches Xbox and PlayStation controllers off and saves their batteries. Press the controller's home button to turn it on: it reconnects, and with Home Assistant set up, that wakes the TV. Gamepads on a cable or a wireless dongle are not affected. Switch it off in Settings → Gamepads → **Turn off with the TV** (`"tv_off_gamepads": false` in `apps.json`).

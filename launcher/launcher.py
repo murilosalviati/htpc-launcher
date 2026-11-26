@@ -767,6 +767,15 @@ class Launcher(HomeMixin, EditorMixin, SettingsMixin):
         log("asking Home Assistant to turn the TV off")
         home_assistant.turn_tv_off(self.cfg)
         self.go_home()
+        if self.cfg.get("tv_off_gamepads", True):
+            # A moment later, so the press on the menu has been let go of.
+            GLib.timeout_add(1500, lambda: (self._gamepads_off(), False)[1])
+
+    def _gamepads_off(self):
+        """Bluetooth gamepads off with the TV (Settings → Gamepads). Their home
+        button turns them on; reconnecting wakes the TV through Home Assistant."""
+        in_background(self.bluetooth.disconnect_gamepads,
+                      lambda r: log("gamepads off with the TV:", r if not isinstance(r, Exception) else repr(r)))
 
     def go_home(self):
         while self.overlays:
