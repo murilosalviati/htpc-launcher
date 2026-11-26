@@ -597,13 +597,24 @@ STRINGS = {
 }
 
 
+# The face buttons as a PlayStation-style pad marks them, at the same places
+# (bottom, right, left, top) as Ⓐ Ⓑ Ⓧ Ⓨ.
+PLAYSTATION_GLYPHS = str.maketrans({"Ⓐ": "✕", "Ⓑ": "○", "Ⓧ": "□", "Ⓨ": "△"})
+
+
+def glyphs(text, style):
+    """The button names in text, as the gamepad in use labels them."""
+    return text.translate(PLAYSTATION_GLYPHS) if style == "playstation" else text
+
+
 class Translator:
-    def __init__(self, language):
+    def __init__(self, language, buttons="xbox"):
         self.strings = {**STRINGS["en"], **STRINGS.get(language, {})}
+        self.buttons = buttons      # "playstation": △ ○ ✕ □ in place of Ⓐ Ⓑ Ⓧ Ⓨ
 
     def __call__(self, key, **values):
         text = self.strings[key]
-        return text.format(**values) if values else text
+        return glyphs(text.format(**values) if values else text, self.buttons)
 
     def raw(self, key):
         return self.strings[key]

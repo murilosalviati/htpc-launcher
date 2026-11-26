@@ -107,3 +107,7 @@ Apps read the gamepad themselves, and the launcher's shortcuts work on top of th
 ## Turning off with the TV
 
 When you turn off the TV from the power menu, the launcher also disconnects every Bluetooth gamepad a moment later, which switches Xbox and PlayStation controllers off and saves their batteries. Press the controller's home button to turn it on: it reconnects, and with Home Assistant set up, that wakes the TV. Gamepads on a cable or a wireless dongle are not affected. Switch it off in Settings → Gamepads → **Turn off with the TV** (`"tv_off_gamepads": false` in `apps.json`).
+
+## Button names
+
+The docs and the launcher call the face buttons Ⓐ Ⓑ Ⓧ Ⓨ, by their place: bottom, right, left, top. When only PlayStation controllers are connected, the launcher shows ✕ ○ □ △ instead, at the same places. Steam and the games show their own: Steam Big Picture recognizes a PlayStation controller, but most games streamed with Steam Remote Play see an Xbox controller and show its buttons.

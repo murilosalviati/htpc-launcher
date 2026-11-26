@@ -1191,7 +1191,7 @@ class SettingsMixin:
         if code != self.cfg.get("language"):
             self.cfg["language"] = code
             self.save_config()
-            self.t = Translator(code)
+            self.t = Translator(code, self.t.buttons)
             self.build_ui()
             self.refresh_top_bar()
         self.open_settings(focus="language")

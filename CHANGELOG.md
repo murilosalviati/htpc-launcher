@@ -4,6 +4,8 @@ The project is in beta: every `0.x` version is a pre-release, and the configurat
 
 ## Unreleased
 
+- **PlayStation button names:** with only PlayStation controllers connected, the launcher names the face buttons ✕ ○ □ △ (edit-mode hint, lights, on-screen keyboard, dialogs) instead of Ⓐ Ⓑ Ⓧ Ⓨ.
+
 - **Reorder the apps in edit mode:** LB / RB (Page Up / Page Down on a keyboard) move the app in focus one place back or forward. The edit-mode hint says so.
 
 ## 0.1.0-beta.10

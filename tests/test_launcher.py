@@ -533,6 +533,15 @@ def n1():
     check("several: each one's drawing and battery (charging in blue, a cable as a plain full bar)",
           drawn() == [("pad-xbox.svg", 80, ["ok"]), ("pad-playstation.svg", 20, ["charging"]),
                       ("pad-generic.svg", 100, ["wired"]), ("pad-generic.svg", 30, ["half"])])
+    l.gamepads.pads = lambda: [PadStatus("Wireless Controller", "playstation", Battery("p", 60))]
+    l._update_gamepads()
+    check("only a PlayStation pad: the buttons are named ✕ ○ □ △",
+          l.t.buttons == "playstation" and "✕" in l.hint.get_label() and "Ⓐ" not in l.hint.get_label()
+          and l.t("keyboard_hint").startswith("□"))
+    l.gamepads.pads = lambda: [PadStatus("Wireless Controller", "playstation", Battery("p", 60)),
+                               PadStatus("Xbox Wireless Controller", "xbox", Battery("x", 80))]
+    l._update_gamepads()
+    check("with an Xbox pad too: back to Ⓐ Ⓑ Ⓧ Ⓨ", l.t.buttons == "xbox" and "Ⓐ" in l.hint.get_label())
     l.tiles[0].grab_focus()
 
 
