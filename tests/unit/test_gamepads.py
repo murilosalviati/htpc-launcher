@@ -96,3 +96,31 @@ def test_bluetooth_le_gamepads_are_not_virtual(tmp_path):
     assert is_virtual("/dev/input/event20", str(sys_input))
     assert not is_virtual("/dev/input/event21", str(sys_input))
     assert not is_virtual("/dev/input/event22", str(sys_input))
+
+
+def test_bluetooth_le_battery_comes_from_bluez():
+    from types import SimpleNamespace
+    from htpc.backends.linux.gamepads import EvdevGamepads
+    pads = EvdevGamepads.__new__(EvdevGamepads)
+    pads.devs = {"/dev/input/event21": SimpleNamespace(name="Xbox Wireless Controller", uniq="aa:bb:cc:dd:ee:ff",
+                                                       info=SimpleNamespace(vendor=0x045E))}
+    pads.virtual, pads.sysfs = {}, {"/dev/input/event21": "/nowhere"}
+    asked = []
+    pads.bluez_lookup = lambda: asked.append(1) or {"AA:BB:CC:DD:EE:FF": 64}
+    status = pads.pads(root="/nonexistent")
+    assert [(p.kind, p.battery.percent) for p in status] == [("xbox", 64)]
+    pads.pads(root="/nonexistent")
+    assert len(asked) == 1   # asked again only after BLUEZ_EVERY
+
+
+def test_bluez_batteries_reads_battery1():
+    from htpc.backends.linux.gamepads import bluez_batteries
+
+    class Client:
+        def call(self, address, method, timeout=2):
+            return ({
+                "/org/bluez/hci0/dev_AA": {"org.bluez.Device1": {"Address": ("s", "aa:bb:cc:dd:ee:ff")},
+                                           "org.bluez.Battery1": {"Percentage": ("y", 64)}},
+                "/org/bluez/hci0/dev_BB": {"org.bluez.Device1": {"Address": ("s", "11:22:33:44:55:66")}},
+            },)
+    assert bluez_batteries(Client()) == {"AA:BB:CC:DD:EE:FF": 64}

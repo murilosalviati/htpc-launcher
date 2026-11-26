@@ -88,6 +88,25 @@ class DirWatch:
         return names, overflow
 
 
+BLUEZ_EVERY = 30.0   # seconds between asking BlueZ for Bluetooth batteries
+
+
+def bluez_batteries(client=None):
+    """{bluetooth address (upper case): percent} from BlueZ's Battery1 interface.
+    Bluetooth LE gamepads (newer Xbox controllers) report their battery there,
+    not through the kernel's power_supply class."""
+    from .dbus import DBusAddress, DBusClient   # noqa: PLC0415 - only when there is a Bluetooth pad
+    client = client or DBusClient("SYSTEM")
+    objects = client.call(DBusAddress("/", bus_name="org.bluez", interface="org.freedesktop.DBus.ObjectManager"),
+                          "GetManagedObjects", timeout=2)[0]
+    found = {}
+    for interfaces in objects.values():
+        device, battery = interfaces.get("org.bluez.Device1"), interfaces.get("org.bluez.Battery1")
+        if device and battery and "Address" in device and "Percentage" in battery:
+            found[str(device["Address"][1]).upper()] = int(battery["Percentage"][1])
+    return found
+
+
 def device_batteries(root=POWER_SUPPLY):
     """(device sysfs path, Battery without a name) for every battery that belongs
     to a device (scope "Device": gamepads, mice...), not to the machine."""
@@ -238,8 +257,26 @@ class EvdevGamepads(Gamepads):
             dev = self.devs[paths[0]]
             vendor = getattr(getattr(dev, "info", None), "vendor", None)
             battery = next((batteries[p] for p in paths if p in batteries), None)
+            address = str(getattr(dev, "uniq", "") or "").upper()
+            if battery is None and len(address) == 17 and address.count(":") == 5:
+                percent = self._bluez_battery(address)
+                if percent is not None:
+                    battery = Battery(dev.name, percent=percent)
             out.append(PadStatus(dev.name, pad_kind(dev.name, vendor), battery))
         return out
+
+    def _bluez_battery(self, address, clock=time.monotonic):
+        """A Bluetooth gamepad's battery from BlueZ, asked at most every BLUEZ_EVERY s."""
+        now = clock()
+        cache = getattr(self, "_bluez_cache", None)
+        if cache is None or now - cache[0] >= BLUEZ_EVERY:
+            try:
+                found = self.bluez_lookup() if hasattr(self, "bluez_lookup") else bluez_batteries()
+            except Exception as e:  # noqa: BLE001 - no BlueZ, no system bus: no battery shown
+                log.debug("bluez batteries: %s", e)
+                found = {}
+            cache = self._bluez_cache = (now, found)
+        return cache[1].get(address)
 
     def _rescan(self, events):
         paths = set(evdev.list_devices())
