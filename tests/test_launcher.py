@@ -1535,7 +1535,8 @@ def hc3():
           len(l.overlays) == 1 and len(rows) == 4 and l.brightness_value.get_label() == "50%"
           and [b.value for b in rows[1]] == [2200, 2700, 3000, 4000, 5000, 6500] and len(rows[2]) == 8
           and rows[1][1].has_css_class("selected"))
-    check("letting go after the panel opened does not toggle the light", not state["ha_posts"])
+    toggles = [p for p in state["ha_posts"] if p[0].startswith("services/")]   # a house refresh may read states meanwhile
+    check("letting go after the panel opened does not toggle the light", not toggles)
 
 
 @step(300)
