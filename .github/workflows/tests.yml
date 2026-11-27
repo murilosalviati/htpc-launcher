@@ -40,3 +40,38 @@ jobs:
           export HOME="$(mktemp -d)"
           python3 tests/make_test_home.py "$HOME"
           xvfb-run -a -s "-screen 0 1920x1080x24" dbus-run-session -- python3 tests/test_launcher.py
+
+  # The installers' packages on each family of distributions: scripts/packages.sh
+  # must find and install GTK 4, python-evdev and jeepney with the distribution's
+  # own package manager.
+  distros:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: ubuntu:24.04
+            prepare: apt-get update && apt-get install -y python3
+          - image: debian:trixie
+            prepare: apt-get update && apt-get install -y python3
+          - image: fedora:latest
+            prepare: dnf install -y python3
+          - image: archlinux:latest
+            prepare: pacman -Syu --noconfirm python
+          - image: opensuse/tumbleweed
+            prepare: zypper --non-interactive install python3
+    container: ${{ matrix.image }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Python
+        run: ${{ matrix.prepare }}
+      - name: Packages through scripts/packages.sh
+        shell: bash
+        run: |
+          . scripts/packages.sh
+          echo "package manager: $(package_manager)"
+          need_packages gtk evdev jeepney
+      - name: Everything imports
+        run: |
+          python3 -c 'import gi; gi.require_version("Gtk", "4.0"); from gi.repository import Gtk; import evdev, jeepney; print("GTK", Gtk.get_major_version(), Gtk.get_minor_version())'
+          python3 -m compileall -q htpc controller launcher

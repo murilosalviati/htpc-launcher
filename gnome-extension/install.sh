@@ -19,6 +19,6 @@ if gnome-extensions info "$UUID" >/dev/null 2>&1; then
 else
     echo
     echo "On Wayland, GNOME only sees new extensions after a new login."
-    echo "1. Log out and back in (with auto-login, 'sudo systemctl restart gdm' does it; it closes every open app)."
+    echo "1. Log out and back in (with auto-login, restarting the computer does it)."
     echo "2. Run: gnome-extensions enable $UUID"
 fi

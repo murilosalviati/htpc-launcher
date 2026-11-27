@@ -28,10 +28,9 @@ put_file() {  # put_file SRC DESTDIR
     mv -f "$2/.$(basename "$1").new" "$2/$(basename "$1")"
 }
 
-if ! python3 -c 'import evdev, jeepney' 2>/dev/null; then
-    echo "Installing python3-evdev and python3-jeepney (asks for the sudo password)..."
-    sudo apt install -y python3-evdev python3-jeepney
-fi
+# shellcheck source=/dev/null  # scripts/packages.sh, checked on its own
+. "$HERE/../scripts/packages.sh"
+need_packages evdev jeepney
 
 mkdir -p "$DATA" "$CONFIG" "$UNITS"
 put_dir "$HERE/../htpc" "$DATA/htpc"

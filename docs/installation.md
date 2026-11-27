@@ -4,8 +4,18 @@
 
 ## Requirements
 
-- **Ubuntu with GNOME on Wayland.** It is tested on GNOME Shell 50, and the extension declares support for 47 to 51.
-- **Python packages:** `python3-evdev`, `python3-jeepney`, `python3-gi` and `gir1.2-gtk-4.0`. The installers add whichever are missing, which asks for your password once.
+- **A Linux distribution with GNOME on Wayland**, GNOME Shell 46 to 51. It is used every day on Ubuntu with GNOME 50. The installer is tested on each release with these distributions' packages:
+
+  | Distribution | Package manager |
+  |---|---|
+  | Ubuntu 24.04 and later, Debian 13 | apt |
+  | Fedora Workstation | dnf |
+  | Arch Linux (with GNOME) | pacman |
+  | openSUSE Tumbleweed (with GNOME) | zypper |
+
+  GNOME 46 (Ubuntu 24.04) should work but hasn't been tried on a real screen yet. Other desktops (KDE Plasma, SteamOS's game mode) are not supported: the launcher relies on its GNOME extension to bring apps forward, close them and draw over them.
+- **Python 3 with GTK 4, python-evdev and jeepney.** The installers add whichever are missing with your distribution's package manager, which asks for your password once.
+  - **Immutable systems** (Fedora Silverblue, Bazzite and the like) can't install packages that way: the installer stops and says what to add with `rpm-ostree install`, then restart and run it again.
 - **The apps you want on the home screen.** The default configuration expects these Flatpaks, and you can change them later from Settings → Apps:
   - `rocks.shy.VacuumTube`: YouTube's TV interface.
   - `org.jellyfin.JellyfinDesktop`
@@ -13,7 +23,7 @@
   - `com.valvesoftware.Steam`
 - **Optional:**
   - A Bluetooth adapter, to pair wireless gamepads from the launcher.
-  - PipeWire (`wpctl`, Ubuntu's default) or PulseAudio (`pactl`), for the volume shortcut.
+  - PipeWire (`wpctl`, the default on current distributions) or PulseAudio (`pactl`), for the volume shortcut.
   - [Home Assistant](home-assistant.md), for TV control.
 
 ## Install

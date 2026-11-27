@@ -40,7 +40,7 @@ The launcher recognizes Xbox drivers by driver or by name. If yours isn't recogn
 
 **Pair a gamepad says there's no adapter.**
 - Check `bluetoothctl list`.
-- A USB adapter may need its firmware. On Ubuntu that's the `linux-firmware` package, which is installed by default.
+- A USB adapter may need its firmware. That's the `linux-firmware` package (named the same on Ubuntu, Debian, Fedora and Arch), usually installed already.
 - Unblock the radio with `rfkill unblock bluetooth`.
 
 **A gamepad won't pair.**

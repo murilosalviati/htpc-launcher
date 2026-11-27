@@ -4,6 +4,10 @@ The project is in beta: every `0.x` version is a pre-release, and the configurat
 
 ## Unreleased
 
+- **Other distributions:** the installers use the distribution's package manager (apt, dnf, pacman or zypper), so Debian, Fedora, Arch and openSUSE with GNOME install the same way as Ubuntu; immutable systems get the `rpm-ostree` command to run. Each release now tests the installer's packages on Ubuntu 24.04, Debian 13, Fedora, Arch and openSUSE Tumbleweed.
+- **GNOME 46** (Ubuntu 24.04 LTS) is in the extension's list. Not tried on a real screen yet.
+- "System (Ubuntu)" is just "System" in Settings → Audio.
+
 ## 0.1.0-beta.13
 
 Update by running `./install.sh` again, or from Settings → Updates; then log out and back in, so GNOME loads version 8 of the extension. Your `apps.json` is kept.

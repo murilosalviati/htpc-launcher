@@ -1,6 +1,6 @@
 # HTPC Launcher documentation
 
-HTPC Launcher turns a PC running Ubuntu with GNOME into a TV box you use from the couch with a gamepad. It has a full-screen home screen with your apps, shortcuts that work inside any app, and optional control of the TV through Home Assistant.
+HTPC Launcher turns a PC running Linux with GNOME (Ubuntu, Debian, Fedora, Arch, openSUSE) into a TV box you use from the couch with a gamepad. It has a full-screen home screen with your apps, shortcuts that work inside any app, and optional control of the TV through Home Assistant.
 
 > [!WARNING]
 > **Beta.** Versions are `0.x` pre-releases, built and tested on one home setup. Back up `~/.config/htpc-launcher/apps.json` before updating.

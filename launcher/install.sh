@@ -27,13 +27,9 @@ put_file() {  # put_file SRC DESTDIR
 }
 CONFIG="$HOME/.config/htpc-launcher"
 
-missing=()
-python3 -c 'import gi; gi.require_version("Gtk", "4.0")' 2>/dev/null || missing+=(python3-gi gir1.2-gtk-4.0)
-python3 -c 'import evdev' 2>/dev/null || missing+=(python3-evdev)
-if [ ${#missing[@]} -gt 0 ]; then
-    echo "Installing ${missing[*]} (asks for the sudo password)..."
-    sudo apt install -y "${missing[@]}"
-fi
+# shellcheck source=/dev/null  # scripts/packages.sh, checked on its own
+. "$HERE/../scripts/packages.sh"
+need_packages gtk evdev
 
 mkdir -p "$DATA" "$CONFIG" "$HOME/.local/share/applications" "$HOME/.config/autostart"
 

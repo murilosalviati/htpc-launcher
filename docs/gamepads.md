@@ -37,7 +37,7 @@ These work everywhere, inside any app, because a background service (`htpc-contr
 - **Step:** each press changes the volume by 5 points, and holding the arrow keeps going.
 - **Range:** it stops at 100%. Raising the volume also unmutes it.
 - **Indicator:** GNOME's own volume indicator shows the level on top of anything, full-screen apps included.
-- **Sound system:** it uses PipeWire (`wpctl`, Ubuntu's default) or PulseAudio (`pactl`) on the default output.
+- **Sound system:** it uses PipeWire (`wpctl`, the default on current distributions) or PulseAudio (`pactl`) on the default output.
 - **In the launcher:** while Start + Select are held, the arrows change the volume and don't move the selection.
 
 ## Changing the shortcuts
@@ -64,7 +64,7 @@ Changes apply right away, in the launcher and in the background service. Setting
 
 ![Pairing a gamepad](pairing.png)
 
-You need a Bluetooth adapter, either built in or a USB one. Ubuntu supports most of them out of the box. The TP-Link UB500, for example, works without any setup.
+You need a Bluetooth adapter, either built in or a USB one. Linux supports most of them out of the box. The TP-Link UB500, for example, works without any setup.
 
 1. Open **Settings → Gamepads → Pair a gamepad, keyboard or mouse**. The launcher turns Bluetooth on and starts searching.
 2. **Put the gamepad in pairing mode:**

@@ -153,7 +153,7 @@ For the fields that aren't in edit mode, such as pause on Home, close commands a
 
 Settings → **Audio** gathers the sound settings:
 
-- **Volume shortcut changes:** what Start + Select + ↑ / ↓ changes, one or the other: **System (Ubuntu)**, the default, or **TV (Home Assistant)**, the TV's own volume. The indicator on screen shows a TV when it's the TV's. The TV needs Home Assistant set up first (see the [Home Assistant guide](home-assistant.md#optional-the-tvs-volume)).
+- **Volume shortcut changes:** what Start + Select + ↑ / ↓ changes, one or the other: **System**, the default, or **TV (Home Assistant)**, the TV's own volume. The indicator on screen shows a TV when it's the TV's. The TV needs Home Assistant set up first (see the [Home Assistant guide](home-assistant.md#optional-the-tvs-volume)).
 - **Sound output:** the outputs, with the one **In use** marked. Select another and all sound goes there, including whatever is already playing.
 
 **Pair Bluetooth headphones or a speaker:**
@@ -162,7 +162,7 @@ Settings → **Audio** gathers the sound settings:
 2. Pick it from the list.
 3. Once it is connected, it shows up as an output. Select it to send the sound there.
 
-It uses PipeWire's own tools (`pw-dump` and `wpctl`, part of Ubuntu), or `pactl` when it is installed.
+It uses PipeWire's own tools (`pw-dump` and `wpctl`, installed with PipeWire), or `pactl` when it is installed.
 
 ### Per-app resolution
 

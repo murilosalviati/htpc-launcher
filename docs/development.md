@@ -113,7 +113,7 @@ The launcher UI, Settings, the configuration and the shortcut rules then work un
 
 ## Tests
 
-Unit tests, with pytest (`sudo apt install python3-pytest`). They need no D-Bus or screen, and a single one runs with `-k`:
+Unit tests, with pytest (`python3-pytest` on Ubuntu, Debian and Fedora, `python-pytest` on Arch). They need no D-Bus or screen, and a single one runs with `-k`:
 
 ```bash
 python3 -m pytest

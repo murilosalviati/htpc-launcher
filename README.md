@@ -3,7 +3,7 @@
 > [!WARNING]
 > **Beta, not a finished product.** Versions are `0.x` pre-releases (`0.1.0-beta.1`, ...). It is built and tested on one home setup, parts of it have only been tested against simulated hardware, and the configuration format or install steps may still change. Back up `~/.config/htpc-launcher/apps.json` before updating.
 
-A gamepad-driven home screen for a living-room PC running Ubuntu with GNOME on Wayland. It works with Xbox, 8BitDo and PlayStation controllers, and looks and behaves like a TV or console home screen.
+A gamepad-driven home screen for a living-room PC running Linux with GNOME on Wayland (Ubuntu, Debian, Fedora, Arch, openSUSE). It works with Xbox, 8BitDo and PlayStation controllers, and looks and behaves like a TV or console home screen.
 
 ![Launcher home screen](docs/preview.png)
 

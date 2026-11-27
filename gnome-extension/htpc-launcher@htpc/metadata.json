@@ -3,6 +3,7 @@
   "name": "HTPC Launcher Bridge",
   "description": "Exposes window control over D-Bus for the HTPC launcher: check whether an app is running, raise its window, put it in full screen, close it, hide the mouse pointer, show notices, the volume level and the gamepad shortcuts over full-screen apps and return to the launcher.",
   "shell-version": [
+    "46",
     "47",
     "48",
     "49",
