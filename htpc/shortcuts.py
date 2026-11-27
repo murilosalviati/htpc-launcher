@@ -110,6 +110,53 @@ def is_launcher(cfg, window):
     return lid in window.ids or window.app_id.lower() == lid
 
 
+class TvVolume:
+    """Sends the TV's volume steps to Home Assistant from a thread of its own.
+    Presses that come while a request is on its way add up, and go together in
+    the next one (at most MAX_PENDING steps either way)."""
+    MAX_PENDING = 20
+
+    def __init__(self, shortcuts):
+        self.shortcuts = shortcuts
+        self.pending = 0
+        self.lock = threading.Lock()
+        self.wanted = threading.Event()
+        self.thread = threading.Thread(target=self._run, name="tv-volume", daemon=True)
+        self.thread.start()
+
+    def add(self, direction):
+        with self.lock:
+            self.pending = max(-self.MAX_PENDING, min(self.MAX_PENDING, self.pending + direction))
+        self.wanted.set()
+
+    def take(self):
+        with self.lock:
+            steps, self.pending = self.pending, 0
+            self.wanted.clear()
+        return steps
+
+    def _run(self):
+        windows = None
+        while True:
+            self.wanted.wait()
+            steps = self.take()
+            if not steps:
+                continue
+            direction = 1 if steps > 0 else -1
+            try:
+                cfg = self.shortcuts.settings()
+                result = home_assistant.change_tv_volume(cfg, direction, steps=abs(steps))
+            except Exception as e:  # noqa: BLE001 - TV unreachable, Home Assistant down...
+                log.warning("TV volume: %s", e)
+                continue
+            try:
+                if windows is None:
+                    windows = self.shortcuts.backend.window_control()   # one per thread
+                self.shortcuts.show_volume(result, direction, True, windows)
+            except Exception as e:  # noqa: BLE001
+                log.debug("volume indicator: %s", e)
+
+
 class Shortcuts:
     def __init__(self, backend):
         self.backend = backend
@@ -118,6 +165,7 @@ class Shortcuts:
         self._windows = None
         self.action = Throttle(MIN_INTERVAL)   # Steam's virtual pad may repeat a combo
         self.first_press = 0.0
+        self.tv_volume = None                   # TvVolume, made on first use
 
     @property
     def windows(self):
@@ -162,17 +210,25 @@ class Shortcuts:
 
     def volume(self, direction):
         """direction +1 or -1: one step, and the level on screen. The computer's
-        volume, or the TV's through Home Assistant (Settings → Home Assistant)."""
+        volume, or the TV's through Home Assistant (Settings → Audio). The TV's
+        goes over the network: a thread of its own sends it, so a slow Home
+        Assistant never holds up the gamepad buttons."""
         cfg = self.settings()
-        to_tv = home_assistant.volume_target(cfg) == "tv"
+        if home_assistant.volume_target(cfg) == "tv":
+            if self.tv_volume is None:
+                self.tv_volume = TvVolume(self)
+            self.tv_volume.add(direction)
+            return
         try:
-            if to_tv:
-                result = home_assistant.change_tv_volume(cfg, direction)
-            else:
-                result = self.system.change_volume(direction * VOLUME_STEP)
-        except Exception as e:  # noqa: BLE001 - no audio server, wpctl failed, TV unreachable...
+            result = self.system.change_volume(direction * VOLUME_STEP)
+        except Exception as e:  # noqa: BLE001 - no audio server, wpctl failed...
             log.warning("volume: %s", e)
             return
+        self.show_volume(result, direction, False, self.windows)
+
+    def show_volume(self, result, direction, to_tv, windows):
+        """The level on GNOME's volume indicator (windows: a WindowControl of the
+        calling thread)."""
         if result is None:
             return
         level, muted = result
@@ -191,7 +247,7 @@ class Shortcuts:
                  round(level * 100),
                  " (muted)" if muted else "")
         try:
-            if not self.windows.show_osd(icon, level):
+            if not windows.show_osd(icon, level) and windows is self._windows:
                 self._windows = None   # older extension: no indicator, the volume changed anyway
         except Exception as e:  # noqa: BLE001
             log.debug("volume indicator: %s", e)

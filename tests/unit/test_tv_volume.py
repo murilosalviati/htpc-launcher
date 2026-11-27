@@ -59,3 +59,33 @@ def test_wake_on_lan_with_a_button_or_a_mac():
                      ("services/script/turn_on", {"entity_id": "script.ligar_pc"})]
     with pytest.raises(ValueError):
         ha.wake_on_lan(CFG, "light.desk", post)
+
+
+def test_tv_volume_goes_from_its_own_thread_and_adds_up_presses(monkeypatch):
+    import threading
+    from types import SimpleNamespace
+    from htpc import shortcuts as sc
+
+    gate, calls, shown = threading.Event(), [], []
+
+    def slow_tv(cfg, direction, steps=1, **kw):
+        gate.wait(2)              # Home Assistant takes its time
+        calls.append(direction * steps)
+        return 0.5, False
+
+    monkeypatch.setattr(sc.home_assistant, "change_tv_volume", slow_tv)
+    osd = SimpleNamespace(show_osd=lambda icon, level: shown.append(icon) or True)
+    s = sc.Shortcuts.__new__(sc.Shortcuts)
+    s.backend = SimpleNamespace(window_control=lambda: osd)
+    s._windows, s.tv_volume = None, None
+    s.settings = lambda: CFG
+    for _ in range(4):
+        s.volume(1)               # returns at once, nothing waits for the TV
+    s.volume(-1)
+    gate.set()
+    for _ in range(100):
+        if sum(calls) == 3 and shown:
+            break
+        threading.Event().wait(0.02)
+    assert sum(calls) == 3 and len(calls) <= 2      # 4 up, 1 down: 3 up, in one or two requests
+    assert shown and shown[-1] == "video-display-symbolic"

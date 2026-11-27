@@ -989,6 +989,7 @@ class Launcher(HomeMixin, EditorMixin, SettingsMixin, ScreensaverMixin):
         if not hasattr(self, "navigator"):
             return   # still being built
         self.navigator.listen(active)
+        self.last_input = time.monotonic()   # the wait for the screensaver starts again
         if active:
             self.refresh_status()
             self.restore_display()

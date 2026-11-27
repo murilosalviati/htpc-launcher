@@ -81,9 +81,21 @@ def run(backend, poll_timeout=2.0):
                 log.warning("%s: %s", job.__qualname__, e)
 
 
+class JournalPriority(logging.Formatter):
+    """Under systemd, starts each line with its syslog priority ("<4>" for a
+    warning), so journalctl -p warning finds the warnings and errors."""
+    PRIORITY = {logging.DEBUG: 7, logging.INFO: 6, logging.WARNING: 4, logging.ERROR: 3, logging.CRITICAL: 2}
+
+    def format(self, record):
+        return f"<{self.PRIORITY.get(record.levelno, 6)}>" + super().format(record)
+
+
 def main():
-    logging.basicConfig(level=os.environ.get("HTPC_LOG", "INFO"),
-                        format="%(levelname)s %(message)s")
+    level = os.environ.get("HTPC_LOG", "INFO")
+    handler = logging.StreamHandler()
+    fmt = "%(levelname)s %(message)s"
+    handler.setFormatter(JournalPriority(fmt) if os.environ.get("JOURNAL_STREAM") else logging.Formatter(fmt))
+    logging.basicConfig(level=level, handlers=[handler])
     if not config.exists():
         log.error("Missing configuration file (apps.json); run the installer first.")
         raise SystemExit(EXIT_NEEDS_SETUP)

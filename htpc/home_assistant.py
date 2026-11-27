@@ -534,25 +534,27 @@ def tv_volume_support(cfg, get=None):
     return bool(features & (VOLUME_SET | VOLUME_STEP))
 
 
-def change_tv_volume(cfg, direction, get=None, post=None):
-    """One step up (+1) or down (-1) on the TV. (level 0..1, muted), or None when
+def change_tv_volume(cfg, direction, get=None, post=None, steps=1):
+    """steps up (+1) or down (-1) on the TV. (level 0..1, muted), or None when
     the TV doesn't say its level. Raises on network errors."""
+    steps = max(1, int(steps))
     entity = cfg["home_assistant"]["tv_entity"]
     data = _api(cfg, "states/" + entity, get)
     attrs = data.get("attributes") or {}
     features = int(attrs.get("supported_features") or 0)
     level, muted = attrs.get("volume_level"), bool(attrs.get("is_volume_muted"))
     if features & VOLUME_SET and level is not None:
-        level = max(0.0, min(1.0, round(float(level) + direction * TV_VOLUME_STEP, 2)))
+        level = max(0.0, min(1.0, round(float(level) + direction * steps * TV_VOLUME_STEP, 2)))
         _post(cfg, "services/media_player/volume_set", {"entity_id": entity, "volume_level": level}, post)
         return level, muted
     if features & VOLUME_STEP:
-        _post(cfg, "services/media_player/" + ("volume_up" if direction > 0 else "volume_down"),
-              {"entity_id": entity}, post)
+        for _ in range(steps):
+            _post(cfg, "services/media_player/" + ("volume_up" if direction > 0 else "volume_down"),
+                  {"entity_id": entity}, post)
         if level is None:
             return None
         # One step is one of the TV's 100 (LG webOS); its state catches up a moment later.
-        return max(0.0, min(1.0, round(float(level) + direction * 0.01, 2))), muted
+        return max(0.0, min(1.0, round(float(level) + direction * steps * 0.01, 2))), muted
     raise ValueError(f"{entity} can't change its volume through Home Assistant")
 
 

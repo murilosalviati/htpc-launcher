@@ -2038,6 +2038,12 @@ def sv1():
     l.last_input = time.monotonic() - 60 * 60
     l._saver_check()
     check("Off: it never shows", l.saver is None)
+    l.cfg["screensaver_minutes"] = 5
+    l.last_input = time.monotonic() - 3 * 60 * 60   # two hours in an app...
+    l._active_changed()                             # ...and back to the launcher
+    l._saver_check()
+    check("back from a long time in an app, the screensaver waits its minutes again", l.saver is None)
+    l.cfg["screensaver_minutes"] = 0
     l.cfg.pop("weather", None)
     l.conditions = None
     l.show_weather()
