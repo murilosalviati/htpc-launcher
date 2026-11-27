@@ -1234,12 +1234,18 @@ class Launcher(HomeMixin, EditorMixin, SettingsMixin, ScreensaverMixin):
                           focus=options[0] if self.tv_off_available() else cancel)
 
     def _run_power(self, action):
+        """Restart or shut down, from a thread: the answer can take a moment, and
+        when the machine won't go down, the reason shows on screen."""
         self.pop_overlay()
         log("power:", action)
-        if action == "restart":
-            self.system.reboot()
-        else:
-            self.system.power_off()
+        job = self.system.reboot if action == "restart" else self.system.power_off
+
+        def done(result):
+            if isinstance(result, Exception):
+                log("power failed:", result)
+                self._message(self.t("power_failed", error=str(result)[:300]))
+
+        in_background(job, done)
 
     # --- navigation ---------------------------------------------------------------------
 

@@ -2067,6 +2067,41 @@ def wol2():
           state["wol"] == [("http://ha:8123/api/services/button/press", {"entity_id": "button.wake_on_lan_pc"})])
 
 
+@step(300)
+def pw1():
+    l = L()
+    while l.overlays:
+        l.pop_overlay()
+
+    def refused():
+        raise RuntimeError("Operation inhibited")
+
+    l.system.reboot = refused
+    l.power_menu()
+    l._run_power("restart")
+
+
+@step(500)
+def pw2():
+    l = L()
+    texts = []
+
+    def walk(w):
+        if isinstance(w, Gtk.Label):
+            texts.append(w.get_label())
+        c = w.get_first_child()
+        while c:
+            walk(c)
+            c = c.get_next_sibling()
+
+    if l.overlays:
+        walk(l.overlays[-1]["backdrop"])
+    check("a restart the system refuses says why on screen",
+          any("Operation inhibited" in t for t in texts))
+    while l.overlays:
+        l.pop_overlay()
+
+
 @step(200)
 def finish():
     L().win.get_application().quit()

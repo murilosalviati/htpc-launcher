@@ -154,11 +154,35 @@ class LinuxSystem(System):
         match = re.search(r"(\d+)%", out)
         return int(match.group(1)) / 100 if match else 0.0
 
+    # Restart and shut down go through GNOME's session manager: gnome-session
+    # holds a logind inhibitor that blocks a plain "systemctl reboot" (the
+    # request is refused, with nothing on screen). RequestReboot / RequestShutdown
+    # end the session the way GNOME's own menu does, without its dialog. Where
+    # there is no GNOME session, systemctl, and its answer is checked.
+    _session = DBusClient()
+    SESSION_MANAGER = DBusAddress("/org/gnome/SessionManager", bus_name="org.gnome.SessionManager",
+                                  interface="org.gnome.SessionManager")
+
     def reboot(self):
-        self.spawn(["systemctl", "reboot"])
+        self._end_session("RequestReboot", ["systemctl", "reboot"])
 
     def power_off(self):
-        self.spawn(["systemctl", "poweroff"])
+        self._end_session("RequestShutdown", ["systemctl", "poweroff"])
+
+    def _end_session(self, method, fallback):
+        """Raises RuntimeError with the reason when the machine won't go down."""
+        try:
+            self._session.call(self.SESSION_MANAGER, method, timeout=10)
+            log.info("power: %s through GNOME's session manager", method)
+            return
+        except Exception as e:  # noqa: BLE001 - no GNOME session, or it said no
+            log.warning("power: %s through GNOME failed (%s); trying %s", method, e, " ".join(fallback))
+        try:
+            result = subprocess.run(fallback, capture_output=True, text=True, timeout=30)
+        except (OSError, subprocess.TimeoutExpired) as e:
+            raise RuntimeError(str(e)) from e
+        if result.returncode != 0:
+            raise RuntimeError((result.stderr or result.stdout).strip() or f"{fallback[0]} failed")
 
     # NetworkManager's PrimaryConnectionType: "802-11-wireless", "802-3-ethernet",
     # "bridge", "bond", "vpn", "gsm"... or "" when there is no connection.
