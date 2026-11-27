@@ -4,6 +4,8 @@ The project is in beta: every `0.x` version is a pre-release, and the configurat
 
 ## Unreleased
 
+- **The shortcuts on screen:** hold Start + Select alone for a moment, in any app, and a panel lists the gamepad shortcuts over whatever is showing, in your language and with your gamepad's button names. Needs the GNOME extension's version 8 (log out and back in after updating).
+
 - **Fixed:** with the volume shortcut on the TV, a slow or unreachable Home Assistant held up every gamepad button (including Home and Close) for up to 10 seconds per step. The TV's volume now goes from a thread of its own, and quick presses add up into one request.
 - **Fixed:** back in the launcher after a long time in an app, the screensaver could come on within seconds; the wait now starts again whenever the launcher comes back.
 - **Fixed:** the controller's warnings and errors reach the journal with their priority, so `journalctl --user -u htpc-controller -p warning` finds them.

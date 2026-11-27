@@ -32,6 +32,8 @@ const NOTICE_MAX_SECONDS = 30;
 const NOTICE_MAX_ON_SCREEN = 4;
 const NOTICE_MAX_TEXT = 200;
 const OBJECT_PATH = '/org/htpc/Launcher';
+const SHORTCUTS_MAX_ROWS = 12;
+const SHORTCUTS_MAX_SECONDS = 30;  // hidden by itself even if the hide never comes
 
 const IFACE_XML = `
 <node>
@@ -75,6 +77,14 @@ const IFACE_XML = `
       <arg type="s" direction="in" name="iconName"/>
       <arg type="d" direction="in" name="level"/>
       <arg type="b" direction="out" name="shown"/>
+    </method>
+    <method name="ShowShortcuts">
+      <arg type="s" direction="in" name="title"/>
+      <arg type="s" direction="in" name="rowsJson"/>
+      <arg type="b" direction="out" name="shown"/>
+    </method>
+    <method name="HideShortcuts">
+      <arg type="b" direction="out" name="hidden"/>
     </method>
     <method name="HidePointer">
       <arg type="b" direction="out" name="hidden"/>
@@ -374,6 +384,83 @@ class LauncherBridge {
         return true;
     }
 
+    // The gamepad shortcuts, in a panel in the middle of the screen, over
+    // whatever is showing (full-screen apps included), while Start + Select are
+    // held. rowsJson: [[buttons, what they do], ...].
+    ShowShortcuts(title, rowsJson) {
+        const monitor = Main.layoutManager.primaryMonitor;
+        if (!monitor)
+            return false;
+        let rows;
+        try {
+            rows = JSON.parse(rowsJson);
+        } catch (e) {
+            return false;
+        }
+        if (!Array.isArray(rows))
+            return false;
+        this.HideShortcuts();
+        const k = Math.max(0.6, monitor.height / 1080);
+        const panel = new St.BoxLayout({
+            vertical: true,
+            opacity: 0,
+            style: `background-color: rgba(12, 17, 28, 0.95); border-radius: ${Math.round(30 * k)}px;
+                    border: ${Math.max(1, Math.round(2 * k))}px solid rgba(124, 183, 255, 0.45);
+                    padding: ${Math.round(34 * k)}px ${Math.round(44 * k)}px;
+                    spacing: ${Math.round(16 * k)}px;
+                    box-shadow: 0 ${Math.round(14 * k)}px ${Math.round(60 * k)}px rgba(0, 0, 0, 0.6);`,
+        });
+        panel.add_child(new St.Label({
+            text: String(title ?? '').slice(0, NOTICE_MAX_TEXT),
+            style: `font-size: ${(24 * k).toFixed(1)}pt; font-weight: bold; color: #ffffff;
+                    margin-bottom: ${Math.round(8 * k)}px;`,
+        }));
+        for (const row of rows.slice(0, SHORTCUTS_MAX_ROWS)) {
+            if (!Array.isArray(row))
+                continue;
+            const line = new St.BoxLayout({style: `spacing: ${Math.round(28 * k)}px;`});
+            line.add_child(new St.Label({
+                text: String(row[0] ?? '').slice(0, 60),
+                y_align: Clutter.ActorAlign.CENTER,
+                style: `min-width: ${Math.round(360 * k)}px; font-size: ${(17 * k).toFixed(1)}pt;
+                        font-weight: bold; color: #7cb7ff;`,
+            }));
+            line.add_child(new St.Label({
+                text: String(row[1] ?? '').slice(0, 80),
+                y_align: Clutter.ActorAlign.CENTER,
+                style: `font-size: ${(17 * k).toFixed(1)}pt; color: #e8eef8;`,
+            }));
+            panel.add_child(line);
+        }
+        Main.layoutManager.uiGroup.add_child(panel);
+        global.compositor?.disable_unredirect?.();
+        const [, width] = panel.get_preferred_width(-1);
+        const [, height] = panel.get_preferred_height(width);
+        panel.set_position(monitor.x + Math.round((monitor.width - width) / 2),
+            monitor.y + Math.round((monitor.height - height) / 2));
+        panel.ease({opacity: 255, duration: 150, mode: Clutter.AnimationMode.EASE_OUT_QUAD});
+        this._shortcuts = panel;
+        this._shortcutsTimer = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, SHORTCUTS_MAX_SECONDS, () => {
+            this._shortcutsTimer = 0;
+            this.HideShortcuts();
+            return GLib.SOURCE_REMOVE;
+        });
+        return true;
+    }
+
+    HideShortcuts() {
+        if (this._shortcutsTimer) {
+            GLib.source_remove(this._shortcutsTimer);
+            this._shortcutsTimer = 0;
+        }
+        if (!this._shortcuts)
+            return false;
+        this._shortcuts.destroy();
+        this._shortcuts = null;
+        global.compositor?.enable_unredirect?.();
+        return true;
+    }
+
     clearOsd() {
         if (this._osdTimer) {
             GLib.source_remove(this._osdTimer);
@@ -461,6 +548,7 @@ export default class HtpcLauncherExtension extends Extension {
         this._impl?.showPointer?.();
         this._impl?.clearToasts?.();
         this._impl?.clearOsd?.();
+        this._impl?.HideShortcuts?.();
         this._impl?.clearTimers?.();
         if (this._createdId) {
             global.display.disconnect(this._createdId);

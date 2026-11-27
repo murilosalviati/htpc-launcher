@@ -147,6 +147,14 @@ class WindowControl(ABC):
         Returns True when shown; None/False when the desktop can't."""
         return None
 
+    def show_shortcuts(self, title, rows):
+        """The gamepad shortcuts in a panel over everything: rows [(buttons, what
+        they do)]. True if shown, None when not supported."""
+        return None
+
+    def hide_shortcuts(self):
+        return None
+
     def hide_pointer(self):
         """Hide the mouse pointer on the whole screen until the mouse moves again.
         True if hidden, None if the OS side cannot do it."""
@@ -202,6 +210,10 @@ class Gamepads(ABC):
         """List[Battery] for the connected gamepads that report one (wireless ones,
         usually; a gamepad on a cable reports nothing)."""
         return []
+
+    def kind_of(self, device):
+        """"xbox", "playstation", "nintendo" or "generic" for an event's device."""
+        return "generic"
 
     def pads(self):
         """List[PadStatus], one per connected gamepad, in connected() order.

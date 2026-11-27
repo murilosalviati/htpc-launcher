@@ -289,6 +289,13 @@ class EvdevGamepads(Gamepads):
             out.append(PadStatus(dev.name, pad_kind(dev.name, vendor), battery))
         return out
 
+    def kind_of(self, path):
+        """"xbox", "playstation"... for the gamepad behind an event's device."""
+        dev = self.devs.get(path)
+        if dev is None:
+            return "generic"
+        return pad_kind(dev.name, getattr(getattr(dev, "info", None), "vendor", None))
+
     def _bluez_battery(self, address, clock=time.monotonic):
         """A Bluetooth gamepad's battery from BlueZ, asked at most every BLUEZ_EVERY s."""
         now = clock()

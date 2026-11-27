@@ -159,6 +159,14 @@ STRINGS = {
         "ha_volume_unsupported": "Home Assistant can't change this TV's volume, so the shortcut stays on the computer's.",
         "settings_screensaver": "Screensaver",
         "saver_after": "After {n} min",
+        "sheet_title": "Gamepad shortcuts",
+        "sheet_home": "Back to the launcher",
+        "sheet_close": "Close the app",
+        "sheet_volume": "Volume (system)",
+        "sheet_volume_tv": "Volume (TV)",
+        "sheet_tabs": "Launcher: switch tabs",
+        "sheet_pages": "Launcher: turn the page",
+        "sheet_hold_a": "Launcher: hold on a light for its settings",
         "forecast_title": "Forecast",
         "forecast_now": "Now",
         "forecast_today": "Today",
@@ -471,6 +479,14 @@ STRINGS = {
         "ha_volume_unsupported": "O Home Assistant não consegue mudar o volume desta TV, então o atalho continua no volume do computador.",
         "settings_screensaver": "Proteção de tela",
         "saver_after": "Depois de {n} min",
+        "sheet_title": "Atalhos do controle",
+        "sheet_home": "Voltar ao launcher",
+        "sheet_close": "Fechar o app",
+        "sheet_volume": "Volume (sistema)",
+        "sheet_volume_tv": "Volume (TV)",
+        "sheet_tabs": "Launcher: trocar de aba",
+        "sheet_pages": "Launcher: mudar de página",
+        "sheet_hold_a": "Launcher: segure numa luz para ajustá-la",
         "forecast_title": "Previsão",
         "forecast_now": "Agora",
         "forecast_today": "Hoje",
@@ -656,6 +672,10 @@ class Translator:
     def __init__(self, language, buttons="xbox"):
         self.strings = {**STRINGS["en"], **STRINGS.get(language, {})}
         self.buttons = buttons      # "playstation": △ ○ ✕ □ in place of Ⓐ Ⓑ Ⓧ Ⓨ
+
+    def translate(self, text):
+        """Button names in a text that isn't one of ours, for this gamepad."""
+        return glyphs(text, self.buttons)
 
     def __call__(self, key, **values):
         text = self.strings[key]

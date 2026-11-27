@@ -97,6 +97,12 @@ After 5 minutes with nobody pressing anything while the launcher is in front, th
 
 Using the gamepad hides the mouse pointer on the whole screen, apps included. Moving the mouse brings it back.
 
+## The shortcuts on screen
+
+Hold **Start + Select** alone for a moment, in any app or in the launcher: a panel in the middle of the screen lists the gamepad shortcuts (back to the launcher, close the app, the volume and the launcher's own buttons), in your language and with your gamepad's button names. Let go and it goes away. Pressing a third button instead (↑, ↓, LB + RB) hides it and does that shortcut as usual.
+
+It needs version 8 of the GNOME extension, which GNOME loads at the next login after the update.
+
 ## Notices
 
 A short notice appears in the top-right corner for a few seconds when:

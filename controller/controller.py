@@ -47,7 +47,7 @@ def run(backend, poll_timeout=2.0):
         log.error("This backend cannot read gamepads here (is python3-evdev installed?). "
                   "Install it and run: systemctl --user restart htpc-controller")
         raise SystemExit(EXIT_NEEDS_SETUP)
-    handler = GamepadShortcuts(Shortcuts(backend))
+    handler = GamepadShortcuts(Shortcuts(backend), kind=gamepads.kind_of)
     notifier = Notifier(backend, gamepads)
     home_assistant = HomeAssistant(gamepads)
     tv = TvGate(home_assistant.settings, home_assistant.wake)

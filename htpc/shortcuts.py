@@ -33,6 +33,8 @@ COMBO_BUTTONS = ("guide", "start", "select", "l1", "r1", "a", "b", "x", "y")
 # Volume: fixed combos. A custom combo can't be just Start + Select (it would fire with these).
 VOLUME_COMBOS = {"up": frozenset({"start", "select", "up"}), "down": frozenset({"start", "select", "down"})}
 VOLUME_STEP = 0.05
+SHEET_COMBO = frozenset({"start", "select"})
+SHEET_DELAY = 0.6       # Start + Select held alone this long: the shortcuts on screen
 REPEAT_DELAY = 0.45     # holding the volume combo: first repeat after this
 REPEAT_EVERY = 0.12     # then this often
 # How they are written on screen, Xbox style (PlayStation: PS, Options, Share,
@@ -252,6 +254,38 @@ class Shortcuts:
         except Exception as e:  # noqa: BLE001
             log.debug("volume indicator: %s", e)
 
+    def shortcut_rows(self, style="xbox"):
+        """(title, [(buttons, what they do)]) for the panel, in the user's language
+        and with the gamepad's button names."""
+        from .i18n import Translator
+        cfg = self.settings()
+        t = Translator(cfg.get("language", "en"), style)
+        try:
+            current = combos(cfg)
+        except Exception:  # noqa: BLE001
+            current = DEFAULT_COMBOS
+        volume = "sheet_volume_tv" if home_assistant.volume_target(cfg) == "tv" else "sheet_volume"
+        rows = [(combo_label(current["home"]), t("sheet_home")),
+                (combo_label(current["close"]), t("sheet_close")),
+                ("Start + Select + ↑ / ↓", t(volume)),
+                ("LT / RT", t("sheet_tabs")),
+                ("LB / RB", t("sheet_pages")),
+                ("Ⓐ", t("sheet_hold_a"))]
+        return t("sheet_title"), [(t.translate(b), what) for b, what in rows]
+
+    def show_shortcuts(self, style="xbox"):
+        title, rows = self.shortcut_rows(style)
+        try:
+            self.windows.show_shortcuts(title, rows)
+        except Exception as e:  # noqa: BLE001
+            log.debug("shortcuts panel: %s", e)
+
+    def hide_shortcuts(self):
+        try:
+            self.windows.hide_shortcuts()
+        except Exception as e:  # noqa: BLE001
+            log.debug("shortcuts panel: %s", e)
+
     def guide(self):
         if not self.action.ready():
             return
@@ -334,10 +368,13 @@ class GamepadShortcuts:
     """Tracks held buttons per gamepad and fires the shortcuts. Using the gamepad
     also hides the mouse pointer (it comes back when the mouse moves)."""
 
-    def __init__(self, shortcuts, settings=None, clock=time.monotonic):
+    def __init__(self, shortcuts, settings=None, clock=time.monotonic, kind=lambda device: "xbox"):
         self.shortcuts = shortcuts
         self.settings = settings or config.load_quietly
         self.clock = clock
+        self.kind = kind    # device -> "xbox", "playstation"...: how its buttons are named
+        self.sheet = None   # (device, when): Start + Select held alone, the panel comes at `when`
+        self.sheet_shown = False
         self.held = {}  # device -> set of button names
         self.repeat = None  # (device, direction, combo, when) while a volume combo is held
         self.pointer = Throttle(POINTER_EVERY)
@@ -356,6 +393,10 @@ class GamepadShortcuts:
         if event.value:
             self._hide_pointer()
             held.add(event.name)
+            if held == SHEET_COMBO:
+                self.sheet = (event.device, self.clock() + SHEET_DELAY)
+            elif self.sheet is not None or self.sheet_shown:
+                self._close_sheet()   # another button: it's a combo, not a look at the shortcuts
             if len(held) < 2:
                 return   # every combo has at least two buttons: no need to read the config
             for name, combo in VOLUME_COMBOS.items():
@@ -375,22 +416,40 @@ class GamepadShortcuts:
                 self.shortcuts.close()
         else:
             held.discard(event.name)
+            if event.name in SHEET_COMBO and (self.sheet is not None or self.sheet_shown):
+                self._close_sheet()
             if self.repeat and self.repeat[0] == event.device and event.name in self.repeat[2]:
                 self.repeat = None
 
+    def _close_sheet(self):
+        self.sheet = None
+        if self.sheet_shown:
+            self.sheet_shown = False
+            self.shortcuts.hide_shortcuts()
+
     def forget(self, device):
         self.held.pop(device, None)
+        if self.sheet is not None and self.sheet[0] == device or self.sheet_shown:
+            self._close_sheet()
         if self.repeat and self.repeat[0] == device:
             self.repeat = None
 
     def timeout(self, idle):
         """How long the caller may wait for events: short while a volume combo repeats."""
-        if self.repeat is None:
+        times = [w for w in (self.repeat and self.repeat[3], self.sheet and self.sheet[1]) if w]
+        if not times:
             return idle
-        return max(0.0, min(idle, self.repeat[3] - self.clock()))
+        return max(0.0, min(idle, min(times) - self.clock()))
 
     def tick(self):
-        """Repeat the volume step while its combo is still held."""
+        """Repeat the volume step while its combo is still held; show the shortcuts
+        once Start + Select have been held alone long enough."""
+        if self.sheet is not None and self.clock() >= self.sheet[1]:
+            device = self.sheet[0]
+            self.sheet = None
+            if self.held.get(device) == SHEET_COMBO:
+                self.sheet_shown = True
+                self.shortcuts.show_shortcuts(self.kind(device))
         if self.repeat is None:
             return
         device, direction, combo, when = self.repeat

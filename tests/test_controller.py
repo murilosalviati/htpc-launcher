@@ -555,6 +555,40 @@ check("the arrow alone does nothing", vol[-1] == -1 and len(vol) == 4)
 check("a custom combo can't be just Start + Select (it would fire on the way to the volume)",
       sc.combo_problem({"start", "select"}, {"guide", "l1", "r1"}) == "volume")
 
+# 9a1e. the shortcuts on screen: Start + Select held alone
+sheet = []
+stub4 = SimpleNamespace(windows=SimpleNamespace(hide_pointer=lambda: None),
+                        show_shortcuts=lambda style: sheet.append(("show", style)),
+                        hide_shortcuts=lambda: sheet.append(("hide",)), volume=lambda d: sheet.append(("vol", d)))
+gs4 = sc.GamepadShortcuts(stub4, settings=lambda: {}, clock=lambda: vclock[0], kind=lambda d: "playstation")
+
+
+def ev4(b, v):
+    gs4.handle(GamepadEvent("p", "button", b, v))
+
+
+ev4("start", 1); ev4("select", 1)
+check("Start + Select: the service wakes up in time to show the shortcuts", gs4.timeout(2.0) <= sc.SHEET_DELAY)
+gs4.tick()
+check("not at once (they may be on the way to a combo)", sheet == [])
+vclock[0] += sc.SHEET_DELAY + 0.01
+gs4.tick()
+check("held alone a moment: the shortcuts show, with that gamepad's button names", sheet == [("show", "playstation")])
+ev4("select", 0)
+check("letting go hides them", sheet[-1] == ("hide",))
+ev4("select", 1)
+vclock[0] += 0.2
+ev4("up", 1); ev4("up", 0)
+vclock[0] += sc.SHEET_DELAY
+gs4.tick()
+check("Start + Select + Up is the volume, and no panel", sheet[-1] == ("vol", 1) and ("show", "playstation") not in sheet[1:])
+ev4("start", 0); ev4("select", 0)
+title, rows = sc.Shortcuts.shortcut_rows(SimpleNamespace(settings=lambda: {"language": "pt-BR"}), "playstation")
+check("the panel lists the shortcuts in the user's language, PlayStation names on a PlayStation pad",
+      title == "Atalhos do controle" and ("Home + L1 + R1", "Voltar ao launcher") in rows
+      and ("Start + Select + L1 + R1", "Fechar o app") in rows and ("L2 / R2", "Launcher: trocar de aba") in rows
+      and ("✕", "Launcher: segure numa luz para ajustá-la") in rows)
+
 # the Linux side: wpctl (a fake one on PATH), unmuted when raising
 fakebin = pathlib.Path(tempfile.mkdtemp())
 volfile = fakebin / "vol"

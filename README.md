@@ -30,7 +30,7 @@ A gamepad-driven home screen for a living-room PC running Ubuntu with GNOME on W
   | Start + Select + LB + RB | Close the app. |
   | Start + Select + ↑ / ↓ | Volume: the system's, or the TV's through Home Assistant (Settings → Audio). |
 
-  The first two can be changed from Settings.
+  The first two can be changed from Settings. Hold Start + Select alone and they all show up on screen, over any app.
 - **Over whatever is playing:** a short notice when a gamepad connects or disconnects, when a battery gets low, or when the internet drops or comes back. They show even over full-screen video and games.
 - **Every gamepad speaks its own language:** with PlayStation controllers, the hints say ✕ ○ □ △ and L1 / R1 / L2 / R2.
 - **Settings from the couch:**

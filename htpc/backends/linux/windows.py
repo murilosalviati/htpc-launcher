@@ -67,6 +67,14 @@ class ExtensionWindowControl(WindowControl):
         # Extension v6 and later.
         return self._call("ShowOsd", "sd", (icon_name, float(level)))
 
+    def show_shortcuts(self, title, rows):
+        # Extension v8 and later: rows [(buttons, what they do), ...].
+        return self._call("ShowShortcuts", "ss", (title, json.dumps([list(r) for r in rows])))
+
+    def hide_shortcuts(self):
+        # Extension v8 and later.
+        return self._call("HideShortcuts")
+
     def hide_pointer(self):
         # Extension v4 and later.
         return self._call("HidePointer")
