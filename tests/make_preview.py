@@ -124,6 +124,13 @@ def jf_get(url, key):
     path, query = parts.path, dict(up.parse_qsl(parts.query))
     if path == "/Users":
         return json.dumps([{"Id": "u1", "Name": "casa", "Policy": {"IsAdministrator": True}}]).encode()
+    if path.endswith("/Items/Resume"):
+        half = []
+        for n, pct in ((2, 62.0), (6, 35.0)):
+            item = dict(ITEMS[n])
+            item["UserData"] = {"PlayedPercentage": pct}
+            half.append(item)
+        return json.dumps({"Items": half}).encode()
     if path.endswith("/Items/Latest"):
         types = query.get("IncludeItemTypes", "")
         if types == "Movie":
@@ -248,6 +255,20 @@ def shot(name):
     print("saved", name, flush=True)
 
 
+SHOTS = os.path.join(OUT, "screenshots")
+os.makedirs(SHOTS, exist_ok=True)
+
+
+def shot_detail(name):
+    """A screenshot for the README's Screenshots section (docs/screenshots/)."""
+    global OUT
+    out, OUT = OUT, SHOTS
+    try:
+        shot(name)
+    finally:
+        OUT = out
+
+
 def s1():
     l = state["l"]
     l.gamepads.pads = lambda: [PadStatus("Xbox Wireless Controller", "xbox", Battery("x", 85)),
@@ -258,28 +279,92 @@ def s1():
     l.refresh_source_button()
     l.tiles[0].grab_focus()
     l.update_media(force=True)
+    l.refresh_resume()
 
 
 def s2():
     l = state["l"]
     l.tiles[0].grab_focus()
-    l._show_media()
+    l.select_tab("explore")
     shot("preview")
+    shot_detail("home")
+    l.tab_buttons["resume"].grab_focus()
+
+
+def s2b():
+    shot_detail("continue-watching")
+    l = state["l"]
+    l.select_tab("explore")
+    l.tiles[0].grab_focus()
+    l.move(0, 1)
 
 
 def s3():
+    shot_detail("lights-by-room")
+    state["l"].move(0, 1)
+
+
+def s3b():
+    shot("preview-house")
+    shot_detail("forecast")
     l = state["l"]
-    l.tiles[0].grab_focus()
-    l.move(0, 1)
-    l.move(0, 1)
+    tile = next(t for t in l.device_tiles if t.device.get("dimmable"))
+    l.open_light(tile)
 
 
 def s4():
-    shot("preview-house")
+    shot_detail("light-settings")
+    l = state["l"]
+    while l.overlays:
+        l.pop_overlay()
+    l.tiles[0].grab_focus()
+    l._scroll_to(0.0)
+    l.power_menu()
+
+
+def s5():
+    shot_detail("power-menu")
+    l = state["l"]
+    while l.overlays:
+        l.pop_overlay()
+    l.open_settings()
+
+
+def s6():
+    shot_detail("settings")
+    from types import SimpleNamespace
+    from htpc.backends.base import AudioOutput
+    l = state["l"]
+    l.audio = SimpleNamespace(outputs=lambda: [AudioOutput("hdmi", "TV (HDMI)", current=True),
+                                               AudioOutput("bt", "Soundbar", bluetooth=True)])
+    l.open_audio()
+
+
+def s7():
+    shot_detail("audio")
+    l = state["l"]
+    while l.overlays:
+        l.pop_overlay()
+    l.gamepads.pads = lambda: [PadStatus("Wireless Controller", "playstation", Battery("p", 80))]
+    l._update_gamepads()
+    l.toggle_edit_mode()
+    l.tiles[1].grab_focus()
+
+
+def s8():
+    shot_detail("edit-mode-playstation")
+    l = state["l"]
+    l.toggle_edit_mode()
+    l.show_screensaver()
+
+
+def s9():
+    shot_detail("screensaver")
     state["l"].win.get_application().quit()
 
 
-steps = [(2500, s1), (2500, s2), (600, s3), (900, s4)]
+steps = [(2500, s1), (2500, s2), (2500, s2b), (700, s3), (700, s3b), (700, s4), (600, s5), (600, s6),
+         (900, s7), (700, s8), (3000, s9)]
 total = 0
 for delay, f in steps:
     total += delay

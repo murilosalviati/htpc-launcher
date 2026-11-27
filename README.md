@@ -62,6 +62,23 @@ The default configuration has VacuumTube (YouTube's TV interface), Jellyfin Desk
   <img src="docs/gamepads.png" width="49%" alt="Settings → Gamepads">
 </p>
 
+## Screenshots
+
+All made up by `tests/make_preview.py`, like the one above.
+
+| | |
+|---|---|
+| ![The home screen: Explore, with the Jellyfin app in focus](docs/screenshots/home.png) | ![Continue watching, with progress bars and the time left](docs/screenshots/continue-watching.png) |
+| **The home screen.** The row above the apps follows the app in focus; LT / RT switch tabs, LB / RB turn the page. | **Continue watching.** What you stopped halfway, with a progress bar and the time left. |
+| ![Lights by room, side by side, under the apps](docs/screenshots/lights-by-room.png) | ![The forecast under the lights](docs/screenshots/forecast.png) |
+| **Lights by room**, side by side under the apps (Home Assistant). | **The forecast:** the next hours, the next days, sunrise and sunset. |
+| ![A light's brightness and white temperature](docs/screenshots/light-settings.png) | ![The power menu](docs/screenshots/power-menu.png) |
+| **Hold Ⓐ on a light** for its brightness, white temperature and colour. | **One power button:** turn off the TV, restart or shut down. |
+| ![Settings](docs/screenshots/settings.png) | ![Settings → Audio](docs/screenshots/audio.png) |
+| **Settings**, all from the gamepad. | **Audio:** what the volume shortcut changes, the sound output, Bluetooth pairing. |
+| ![Edit mode with a PlayStation controller](docs/screenshots/edit-mode-playstation.png) | ![The screensaver](docs/screenshots/screensaver.png) |
+| **Edit mode**, here with a PlayStation controller: the hints say ✕ ○ and L1 R1. | **The screensaver:** your films' pictures with a big clock. |
+
 ## Quick start
 
 1. Download the newest `htpc-launcher-<version>.tar.gz` from the [Releases page](https://github.com/murilosalviati/htpc-launcher/releases).

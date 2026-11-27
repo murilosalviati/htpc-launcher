@@ -7,10 +7,19 @@ HTPC Launcher: a gamepad-driven TV home screen for Ubuntu with GNOME on Wayland.
 
 ![Lights by room, further down the home screen](https://raw.githubusercontent.com/murilosalviati/htpc-launcher/main/docs/preview-house.png)
 
-## What's new in 0.1.0-beta.12
+## What's new in 0.1.0-beta.13
 
-- **Settings → Audio gathers the sound settings.** Its first line, **Volume shortcut changes**, chooses what Start + Select + ↑ / ↓ changes, one or the other: **System (Ubuntu)** or **TV (Home Assistant)**. Below it, the sound output and Bluetooth pairing. The choice moved there from the Home Assistant menu; yours is kept.
-- **The TV's volume shows a TV on the indicator,** so it isn't mistaken for the system's (GNOME's volume indicator looked the same for both).
+- **The shortcuts on screen:** hold **Start + Select** alone for a moment, in any app, and a panel lists the gamepad shortcuts over whatever is showing (full-screen video and games included), in your language and with your gamepad's button names. Let go and it's gone; a third button does its shortcut as usual. **Log out and back in after updating:** GNOME loads the extension's new version (8) at login.
+
+### Fixed
+- With the volume shortcut on the TV, a slow or unreachable Home Assistant held up every gamepad button, Home and Close included, for up to 10 seconds per step. The TV's volume now goes from a thread of its own, and quick presses add up into one request.
+- Back in the launcher after a long time in an app, the screensaver could come on within seconds. Its wait now starts again whenever the launcher comes back.
+- The controller's warnings and errors reach the journal with their priority (`journalctl --user -u htpc-controller -p warning`).
+
+### Also in 0.1.0-beta.12
+- **Settings → Audio** gathers the sound settings: what the volume shortcut changes (System or TV), the output, Bluetooth pairing. The TV's volume shows a TV on the indicator.
+
+New [screenshots](https://github.com/murilosalviati/htpc-launcher#screenshots) of every part, in the README.
 
 ### Also in 0.1.0-beta.11
 
@@ -28,7 +37,7 @@ The full list is in [CHANGELOG.md](https://github.com/murilosalviati/htpc-launch
 
 ## Install or update
 
-1. Download **htpc-launcher-0.1.0-beta.12.tar.gz** below and extract it: `tar xzf htpc-launcher-*.tar.gz`. `SHA256SUMS` lets you check it: `sha256sum -c SHA256SUMS`.
+1. Download **htpc-launcher-0.1.0-beta.13.tar.gz** below and extract it: `tar xzf htpc-launcher-*.tar.gz`. `SHA256SUMS` lets you check it: `sha256sum -c SHA256SUMS`.
 2. Run `./install.sh` inside the extracted folder. An existing `apps.json` is kept.
 3. **Log out and back in** if you are coming from beta.5 or older: GNOME only loads the extension's version 7 at login. On a first install, then run `gnome-extensions enable htpc-launcher@htpc`. The launcher starts by itself at login.
 
