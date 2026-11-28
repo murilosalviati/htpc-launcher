@@ -4,6 +4,10 @@ The project is in beta: every `0.x` version is a pre-release, and the configurat
 
 ## Unreleased
 
+## 0.1.0-beta.14
+
+Update by running `./install.sh` again, or from Settings → Updates. Your `apps.json` is kept.
+
 - **Fixed: Restart and Shut down did nothing.** GNOME's session manager holds a lock that refuses a plain `systemctl reboot`, and the launcher never saw the refusal. Both now go through GNOME (`RequestReboot` / `RequestShutdown`, the way its own menu does), and if the computer still won't go down, the reason shows on screen.
 
 - **Other distributions:** the installers use the distribution's package manager (apt, dnf, pacman or zypper), so Debian, Fedora, Arch and openSUSE with GNOME install the same way as Ubuntu; immutable systems get the `rpm-ostree` command to run. Each release now tests the installer's packages on Ubuntu 24.04, Debian 13, Fedora, Arch and openSUSE Tumbleweed.

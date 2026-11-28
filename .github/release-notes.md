@@ -1,20 +1,21 @@
 > [!WARNING]
 > **Beta, not a finished product.** This is an early version built and tested on one home setup. Expect rough edges: some features have only been tested against simulated hardware, and file formats or install steps may still change between versions. Back up `~/.config/htpc-launcher/apps.json` before updating, and please report problems in [Issues](https://github.com/murilosalviati/htpc-launcher/issues).
 
-HTPC Launcher: a gamepad-driven TV home screen for Ubuntu with GNOME on Wayland.
+HTPC Launcher: a gamepad-driven TV home screen for Linux with GNOME on Wayland (Ubuntu, Debian, Fedora, Arch, openSUSE).
 
 ![Launcher home screen](https://raw.githubusercontent.com/murilosalviati/htpc-launcher/main/docs/preview.png)
 
 ![Lights by room, further down the home screen](https://raw.githubusercontent.com/murilosalviati/htpc-launcher/main/docs/preview-house.png)
 
-## What's new in 0.1.0-beta.13
+## What's new in 0.1.0-beta.14
 
-- **The shortcuts on screen:** hold **Start + Select** alone for a moment, in any app, and a panel lists the gamepad shortcuts over whatever is showing (full-screen video and games included), in your language and with your gamepad's button names. Let go and it's gone; a third button does its shortcut as usual. **Log out and back in after updating:** GNOME loads the extension's new version (8) at login.
+- **Fixed: Restart and Shut down did nothing.** GNOME's session manager holds a lock that refuses a plain `systemctl reboot`, and the launcher never saw the refusal. Both now go through GNOME (the way its own menu does), and if the computer still won't go down, the reason shows on screen.
+- **Other distributions:** the installers use the distribution's package manager (apt, dnf, pacman or zypper), so Debian, Fedora, Arch and openSUSE with GNOME install the same way as Ubuntu. Immutable systems (Fedora Silverblue, Bazzite) get the `rpm-ostree` command to run. Every change is now tested on Ubuntu 24.04, Debian 13, Fedora, Arch and openSUSE Tumbleweed. See [Installation](https://github.com/murilosalviati/htpc-launcher/blob/main/docs/installation.md).
+- **GNOME 46** (Ubuntu 24.04 LTS) is in the extension's list. It hasn't been tried on a real screen yet: reports welcome.
 
-### Fixed
-- With the volume shortcut on the TV, a slow or unreachable Home Assistant held up every gamepad button, Home and Close included, for up to 10 seconds per step. The TV's volume now goes from a thread of its own, and quick presses add up into one request.
-- Back in the launcher after a long time in an app, the screensaver could come on within seconds. Its wait now starts again whenever the launcher comes back.
-- The controller's warnings and errors reach the journal with their priority (`journalctl --user -u htpc-controller -p warning`).
+### Also in 0.1.0-beta.13
+
+- **The shortcuts on screen:** hold **Start + Select** alone for a moment, in any app, and a panel lists the gamepad shortcuts over whatever is showing. Log out and back in after updating from an older version, so GNOME loads the extension's version 8.
 
 ### Also in 0.1.0-beta.12
 - **Settings → Audio** gathers the sound settings: what the volume shortcut changes (System or TV), the output, Bluetooth pairing. The TV's volume shows a TV on the indicator.
@@ -37,7 +38,7 @@ The full list is in [CHANGELOG.md](https://github.com/murilosalviati/htpc-launch
 
 ## Install or update
 
-1. Download **htpc-launcher-0.1.0-beta.13.tar.gz** below and extract it: `tar xzf htpc-launcher-*.tar.gz`. `SHA256SUMS` lets you check it: `sha256sum -c SHA256SUMS`.
+1. Download **htpc-launcher-0.1.0-beta.14.tar.gz** below and extract it: `tar xzf htpc-launcher-*.tar.gz`. `SHA256SUMS` lets you check it: `sha256sum -c SHA256SUMS`.
 2. Run `./install.sh` inside the extracted folder. An existing `apps.json` is kept.
 3. **Log out and back in** if you are coming from beta.5 or older: GNOME only loads the extension's version 7 at login. On a first install, then run `gnome-extensions enable htpc-launcher@htpc`. The launcher starts by itself at login.
 
