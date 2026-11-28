@@ -4,6 +4,7 @@ The project is in beta: every `0.x` version is a pre-release, and the configurat
 
 ## Unreleased
 
+- **HDR stays on** when the launcher switches the screen to an app's resolution and back (it used to turn GNOME's HDR off).
 - **Fixed: the selected tile's glow flickered on 4K screens** with NVIDIA drivers. The glows no longer move (selecting, pressing or opening an app); only the tile's size and the "Opening" text are animated.
 - **Fixed: the gamepad was blocked when the TV renamed its inputs** (for example "PC" became "HDMI 3" after a new graphics card): the launcher thought the TV was on another input. An HTPC input the TV no longer lists is now ignored, and the launcher learns the new name the next time it switches the TV to the other input.
 - **4K TVs look like 1440p ones.** On screens taller than 1440 pixels, the whole launcher is drawn bigger (1.5× on 4K), so the films and series fill the screen as they do at 1440p instead of everything looking small. Text and pictures stay sharp.

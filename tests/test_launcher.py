@@ -1184,6 +1184,15 @@ def disp3():
     l.display_app_until = 0
     l.restore_display()
     check("back in the launcher: the default again", fakes.mutter["current"] == "2560x1440@59.951")
+    fakes.mutter["color_mode"] = 1   # HDR on
+    l.use_display_mode(app["display_mode"])
+    sent = fakes.mutter["applied"][-1][1][0][5][0][2]
+    check("switching modes keeps HDR on (the monitor's color mode is passed along)",
+          sent.get("color-mode") == ("u", 1))
+    l.display_changed = True
+    l.display_app_until = 0
+    l.restore_display()
+    fakes.mutter["color_mode"] = 0
     l.edit_app(0)
     l._display_chosen(None)
     l._save_app()

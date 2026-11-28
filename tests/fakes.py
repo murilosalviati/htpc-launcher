@@ -212,7 +212,7 @@ def _mutter_state():
             props["is-preferred"] = ("b", True)
         modes.append((mode_id, w, h, rate, 1.0, [1.0, 2.0], props))
     spec = ("HDMI-2", "GSM", "LG TV", "0x01")
-    monitors = [(spec, modes, {"display-name": ("s", "LG TV")})]
+    monitors = [(spec, modes, {"display-name": ("s", "LG TV"), "color-mode": ("u", mutter.get("color_mode", 0))})]
     logical = [(0, 0, 1.0, 0, True, [spec], {})]
     return (mutter["serial"], monitors, logical, {})
 

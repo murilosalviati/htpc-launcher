@@ -104,8 +104,11 @@ class MutterDisplay(Display):
     def apply(self, mode):
         serial, monitors, logical = self._state()
         connector = self._main_connector(monitors, logical)
-        current_ids, scales = {}, {}
-        for spec, modes, _props in monitors:
+        current_ids, scales, keep = {}, {}, {}
+        for spec, modes, monitor_props in monitors:
+            # Keep the monitor's color mode (HDR): left out, GNOME turns HDR off.
+            if "color-mode" in monitor_props:
+                keep[spec[0]] = {"color-mode": ("u", int(_plain(monitor_props["color-mode"])))}
             for mode_id, _w, _h, _rate, _pref, supported, props in modes:
                 if _plain(props.get("is-current", False)):
                     current_ids[spec[0]] = mode_id
@@ -118,7 +121,7 @@ class MutterDisplay(Display):
             monitors_out = []
             for spec in specs:
                 mode_id = mode.id if spec[0] == connector else current_ids.get(spec[0])
-                monitors_out.append((spec[0], mode_id, {}))
+                monitors_out.append((spec[0], mode_id, keep.get(spec[0], {})))
             if any(spec[0] == connector for spec in specs):
                 supported = scales[connector]
                 if supported and not any(abs(scale - s) < 0.01 for s in supported):
