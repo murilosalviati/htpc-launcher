@@ -924,7 +924,9 @@ class SettingsMixin:
             self._message(self.t("ha_list_failed", error=self._reason(result)))
             return
         current, sources = result
-        home = self._ha().get("htpc_source") or current
+        home = self._ha().get("htpc_source")
+        if not home or home not in sources:   # never set, or the TV renamed it
+            home = current
         choices = [s for s in sources if s != home]
         if not choices:
             self._message(self.t("quick_source_no_inputs"))
@@ -947,7 +949,7 @@ class SettingsMixin:
     def _ha_source_chosen(self, source, home):
         self.pop_overlay()
         values = {"quick_source": {"source": source, "label": source} if source else None}
-        if source and home and not self._ha().get("htpc_source"):
+        if source and home and self._ha().get("htpc_source") != home:
             values["htpc_source"] = home   # the HTPC's own input, to come back to
         self._ha_set(**values)
 

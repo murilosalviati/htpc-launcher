@@ -261,10 +261,27 @@ def fetch_tv_state(cfg, get=None):
     if state in ("unavailable", "unknown", None):
         return None
     home = cfg["home_assistant"].get("htpc_source")
-    source = (data.get("attributes") or {}).get("source")
+    attributes = data.get("attributes") or {}
+    source = attributes.get("source")
+    sources = attributes.get("source_list")
+    if home and sources and home not in sources:
+        # The TV has no input by that name any more (it renamed it, e.g. "PC" became
+        # "HDMI 3" after a new graphics card): don't lock the gamepad out over it.
+        _warn_once(f"the TV has no input called {home!r} any more (it has {', '.join(map(str, sources))}): "
+                   "it's learned again the next time the TV is switched to the other input from the launcher")
+        return "on"
     if home and source and source != home:
         return "away"
     return "on"
+
+
+_warned = set()
+
+
+def _warn_once(message):
+    if message not in _warned:
+        _warned.add(message)
+        log.warning("%s", message)
 
 
 def media_players(cfg, get=None):

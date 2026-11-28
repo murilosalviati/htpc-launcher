@@ -880,6 +880,14 @@ s_off = hass.fetch_tv_state(tv_cfg, fake_get)
 tv_state[0] = "unavailable"
 check("HA: off/standby is off; unavailable is unknown (never blocks)",
       s_off == "off" and hass.fetch_tv_state(tv_cfg, fake_get) is None)
+def source_get(url, token):
+    return {"state": "on", "attributes": {"source": "HDMI 3", "source_list": ["HDMI 1", "HDMI 3"]}}
+
+
+src_cfg = {"home_assistant": {**tv_cfg["home_assistant"], "htpc_source": "HDMI 1"}}
+gone_cfg = {"home_assistant": {**tv_cfg["home_assistant"], "htpc_source": "PC"}}
+check("HA: another input is 'away', but an HTPC input the TV no longer has never blocks",
+      hass.fetch_tv_state(src_cfg, source_get) == "away" and hass.fetch_tv_state(gone_cfg, source_get) == "on")
 check("HA: the media players listed for the TV picker",
       hass.media_players(tv_cfg, fake_get) == [("media_player.alexa", "media_player.alexa"),
                                                ("media_player.tv", "Sala")])

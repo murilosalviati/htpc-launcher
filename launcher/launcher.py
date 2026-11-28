@@ -642,8 +642,8 @@ class Launcher(HomeMixin, EditorMixin, SettingsMixin, ScreensaverMixin):
 
         def job():
             home = cfg["home_assistant"].get("htpc_source")
-            if not home:
-                current, _ = home_assistant.tv_sources(cfg, get)
+            current, sources = home_assistant.tv_sources(cfg, get)
+            if not home or (sources and home not in sources):   # never set, or the TV renamed it
                 home = current if current and current != source else None
             home_assistant.switch_source(cfg, source, post)
             return home
@@ -653,7 +653,7 @@ class Launcher(HomeMixin, EditorMixin, SettingsMixin, ScreensaverMixin):
                 self._message(self.t("switch_failed", error=self._reason(result)))
                 return
             ha = self.cfg.get("home_assistant") or {}
-            if result and not ha.get("htpc_source"):
+            if result and ha.get("htpc_source") != result:
                 self.cfg["home_assistant"] = {**ha, "htpc_source": result}
                 self.save_config()
             log("tv switched to", source)
