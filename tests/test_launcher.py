@@ -1033,9 +1033,8 @@ def css1():
     provider.load_from_path(os.path.join(ROOT, "launcher", "launcher.css"))
     check("launcher.css has no syntax GTK rejects (it would silently drop the rule)", errors == [])
     css = open(os.path.join(ROOT, "launcher", "launcher.css")).read()
-    check("the selected tile's glow is not an endless animation (it kept the GPU busy while idle)",
-          "tile-glow" in css and "tile-glow 3.2s ease-in-out 3;" in css
-          and "tile-glow 1.6s ease-in-out infinite" not in css)
+    check("the selected tile's glow is not animated (it flickered at 4K; endless, it kept the GPU busy)",
+          "tile-glow" not in css)
 
 
 # ---------------- the launcher stops reading the gamepads behind an app ----------------
