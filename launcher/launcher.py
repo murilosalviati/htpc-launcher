@@ -50,7 +50,8 @@ import gi  # noqa: E402
 gi.require_version("Gtk", "4.0")
 gi.require_version("Gdk", "4.0")
 gi.require_version("Pango", "1.0")
-from gi.repository import Gdk, Gio, Gtk, Pango  # noqa: E402
+gi.require_version("Gsk", "4.0")
+from gi.repository import Gdk, Gio, Gsk, Gtk, Pango  # noqa: E402
 
 try:   # GLib 2.80+ moved the Unix fd watch to GLibUnix (the GLib one warns there)
     gi.require_version("GLibUnix", "2.0")
@@ -97,12 +98,53 @@ EDGE = {
     "pad_top": 44, "pad_side": 72, "pad_bottom": 40,  # px, around the screen
 }
 EDGE_MIN_SCALE, EDGE_MAX_SCALE = 0.6, 3.0
+# The launcher is laid out for screens up to 1440 pixels tall. On taller ones
+# (4K: 2160) all of it is drawn bigger by the same factor (1.5 in 4K), so it
+# fills the screen the way it does at 1440p, with text and pictures still drawn
+# at the screen's own sharpness.
+ZOOM_FROM_HEIGHT = 1440
 WEATHER_EVERY = 30 * 60   # seconds between weather updates
 WEATHER_RETRY = 5 * 60    # ...or after a failed one
 
 
 def log(*args):
     print("[launcher]", *args, file=sys.stderr, flush=True)
+
+
+class ZoomBin(Gtk.Widget):
+    """Shows its one child `zoom` times bigger: the child is laid out in a
+    smaller space and drawn through a scale transform (focus, clicks and
+    scrolling follow it)."""
+    __gtype_name__ = "HtpcZoomBin"
+
+    def __init__(self, child):
+        super().__init__()
+        self.zoom = 1.0
+        self.child = child
+        child.set_parent(self)
+
+    def set_zoom(self, zoom):
+        if abs(zoom - self.zoom) > 0.001:
+            self.zoom = zoom
+            self.queue_resize()
+
+    def do_measure(self, orientation, for_size):
+        z = self.zoom
+        minimum, natural, _b1, _b2 = self.child.measure(orientation, -1 if for_size < 0 else int(for_size / z))
+        return int(minimum * z), int(natural * z), -1, -1
+
+    def do_size_allocate(self, width, height, baseline):
+        z = self.zoom
+        transform = Gsk.Transform.new().scale(z, z)
+        self.child.allocate(int(width / z), int(height / z), -1, transform)
+
+    def do_snapshot(self, snapshot):
+        self.snapshot_child(self.child, snapshot)
+
+    def do_dispose(self):
+        if self.child is not None:
+            self.child.unparent()
+            self.child = None
 
 
 # ---------------------------------------------------------------------------
@@ -442,7 +484,8 @@ class Launcher(HomeMixin, EditorMixin, SettingsMixin, ScreensaverMixin):
         self.win.set_default_size(1920, 1080)
 
         self.overlay = Gtk.Overlay()
-        self.win.set_child(self.overlay)
+        self.zoom_bin = ZoomBin(self.overlay)
+        self.win.set_child(self.zoom_bin)
         self.build_ui()
 
         keys = Gtk.EventControllerKey()
@@ -509,7 +552,12 @@ class Launcher(HomeMixin, EditorMixin, SettingsMixin, ScreensaverMixin):
         w, h = self.win.get_width(), self.win.get_height()
         if w > 0 and h > 0 and (w, h) != self.screen_size:
             self.screen_size = (w, h)
+            zoom = max(1.0, h / ZOOM_FROM_HEIGHT)
+            self.zoom_bin.set_zoom(zoom)
+            w, h = w / zoom, h / zoom   # the space the launcher is laid out in
             self.apply_edge_scale(max(EDGE_MIN_SCALE, min(EDGE_MAX_SCALE, min(w / 1920, h / 1080))))
+            if zoom > 1:
+                log(f"screen {self.screen_size}: everything drawn {zoom:.2f}x, laid out in {w:.0f}x{h:.0f}")
         return True
 
     def apply_edge_scale(self, scale):

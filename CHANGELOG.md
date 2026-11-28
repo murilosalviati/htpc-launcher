@@ -4,6 +4,9 @@ The project is in beta: every `0.x` version is a pre-release, and the configurat
 
 ## Unreleased
 
+- **4K TVs look like 1440p ones.** On screens taller than 1440 pixels, the whole launcher is drawn bigger (1.5× on 4K), so the films and series fill the screen as they do at 1440p instead of everything looking small. Text and pictures stay sharp.
+- **Fixed: a gamepad could be ignored for almost a minute** when Home Assistant wrongly reported the TV as off: each press only tried to wake the TV again. Now, if the TV still shows as off at the next press 8 seconds after a wake, the gamepad works right away.
+
 ## 0.1.0-beta.14
 
 Update by running `./install.sh` again, or from Settings → Updates. Your `apps.json` is kept.

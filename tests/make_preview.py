@@ -233,6 +233,10 @@ orig_init = launcher.Launcher.__init__
 
 def init(self, app):
     Gtk.Settings.get_default().set_property("gtk-enable-animations", False)
+    size = os.environ.get("PREVIEW_SIZE")   # e.g. 3840x2160, to see a 4K TV
+    if size:
+        launcher.Gtk.Window.set_default_size = (
+            lambda win, w, h, _f=Gtk.Window.set_default_size: _f(win, *map(int, size.split("x"))))
     self.weather_fetch = weather_fetch
     self.jellyfin_get, self.tmdb_get, self.ha_get, self.ha_api_post = jf_get, tmdb_get, ha_get, ha_post
     orig_init(self, app)
@@ -250,6 +254,9 @@ def shot(name):
     snap = Gtk.Snapshot()
     p.snapshot(snap, win.get_width(), win.get_height())
     node = snap.to_node()
+    if node is None:   # GTK had no frame to give yet; happens now and then under Xvfb
+        print("skipped", name, flush=True)
+        return
     tex = win.get_native().get_renderer().render_texture(node, None)
     tex.save_to_png(os.path.join(OUT, f"{name}.png"))
     print("saved", name, flush=True)

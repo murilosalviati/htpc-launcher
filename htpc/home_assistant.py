@@ -221,7 +221,10 @@ class HomeAssistant:
 STATE_EVERY = 3.0     # seconds between state checks
 WAKE_RETRY = 8.0      # a press this long after the last wake asks again
 GATE_FRESH = 10.0     # the launcher ignores a gate file older than this
-GIVE_UP_WAKES = 3     # this many wakes without the TV turning on...
+# One wake that doesn't turn the TV "on" for Home Assistant, then another press
+# WAKE_RETRY later: the TV is most likely on already and Home Assistant wrong
+# about it (seen after a GPU swap), so the gamepad is not held up any longer.
+GIVE_UP_WAKES = 1     # this many wakes without the TV turning on...
 GIVE_UP_WINDOW = 60.0 # ...within this many seconds: Home Assistant's "off" is not trusted
 DISTRUST_FOR = 600.0  # for this long (or until it reports the TV on): nothing is blocked
 OFF_STATES = {"off", "standby"}
@@ -380,8 +383,9 @@ class TvGate:
                     # Woken several times and still "off": Home Assistant has lost the
                     # TV (a new IP address, the integration down...). Don't lock the
                     # gamepad out because of that.
-                    log.warning("tv still off for Home Assistant after %d wakes: not blocking the "
-                                "gamepad for %d minutes", GIVE_UP_WAKES, DISTRUST_FOR // 60)
+                    log.warning("tv still off for Home Assistant after %d wake(s) and the gamepad is "
+                                "still in use: not blocking it for %d minutes", GIVE_UP_WAKES,
+                                DISTRUST_FOR // 60)
                     self.distrust_until = now + DISTRUST_FOR
                     self.wakes = []
                     wake = False
